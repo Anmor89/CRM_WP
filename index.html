@@ -3915,8 +3915,10 @@ function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
   const incomingByName = new Map(newClients.map(c => [c.name.toLowerCase(), c]));
 
   if (mode === 'replace') {
-    // Удаляем тестовые (без from1c) ДО построения карты, иначе мы будем «обновлять» удалённые объекты
-    state.clients = state.clients.filter(c => c.from1c);
+    // Полная очистка перед импортом: удаляем и тестовые, и старые from1c-клиенты,
+    // включая старые «филиалы» (sub_partners) которые после объединения по головному
+    // предприятию больше не существуют как отдельные клиенты.
+    state.clients = [];
   }
   const localByName = new Map(state.clients.map(c => [(c.name||'').toLowerCase(), c]));
 
