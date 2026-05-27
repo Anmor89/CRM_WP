@@ -577,6 +577,21 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 }
 .client-flag span:first-child { font-size: 14px; }
 
+/* Поля, значения которых приходят из 1С — read-only, чуть серым */
+.field-from-1c {
+  background: #F3F4F6 !important;
+  color: var(--text-muted) !important;
+  cursor: not-allowed;
+  border-style: dashed !important;
+}
+.field-from-1c:focus { box-shadow: none !important; outline: none !important; }
+.from-1c-badge {
+  display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  background: #DBEAFE; color: #1E40AF;
+  padding: 1px 5px; border-radius: 4px; margin-left: 4px;
+  vertical-align: middle;
+}
+
 /* Status block: stage + category side by side */
 .status-block {
   display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
@@ -1881,24 +1896,98 @@ function renderDashboard() {
     </details>
     ` : ''}
 
-    ${w.topClients !== false ? `
     <div class="card mb-4">
-      <div class="card-header"><div class="card-title">Топ клиенты по выручке</div><span class="text-sm text-muted">${new Date().getFullYear()}</span></div>
-      ${topClients.length ? topClients.map(c => `
-        <div class="card-row" data-cid="${c.id}" style="cursor:pointer">
-          <div style="flex:1; min-width:0;">
-            <div class="fw-600 text-sm">${escapeHtml(c.name)}</div>
-            <div class="text-sm text-muted">${escapeHtml(c.manager)}</div>
+      <div class="card-header">
+        <div class="card-title">📜 Лента событий</div>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <select id="feed-kind-filter" class="text-sm" style="padding:5px 10px; border:1px solid var(--border); border-radius:8px; font-size:12px;">
+            <option value="all">Все типы</option>
+            <option value="call">📞 Звонки</option>
+            <option value="meeting">🤝 Встречи</option>
+            <option value="contract">📝 Договоры</option>
+            <option value="followup">✅ Контроль</option>
+            <option value="note">📝 Заметки</option>
+            <option value="comment">💬 Комментарии</option>
+          </select>
+          <select id="feed-period-filter" class="text-sm" style="padding:5px 10px; border:1px solid var(--border); border-radius:8px; font-size:12px;">
+            <option value="7">7 дней</option>
+            <option value="30" selected>30 дней</option>
+            <option value="90">90 дней</option>
+            <option value="all">Всё</option>
+          </select>
+        </div>
+      </div>
+      <div id="dash-feed-list" style="max-height: 420px; overflow-y: auto;"></div>
+    </div>
+  `;
+}
+
+function renderDashFeed() {
+  const wrap = document.getElementById('dash-feed-list');
+  if (!wrap) return;
+  const kindFilter = document.getElementById('feed-kind-filter')?.value || 'all';
+  const periodFilter = document.getElementById('feed-period-filter')?.value || '30';
+
+  const visibleCl = visibleClients();
+  const clientById = new Map(visibleCl.map(c => [c.id, c]));
+  const allowedIds = new Set(visibleCl.map(c => c.id));
+
+  // Собираем события + комментарии в одну ленту
+  let items = [];
+  visibleEvents().filter(e => allowedIds.has(e.clientId)).forEach(e => items.push({
+    source: 'event', id: e.id, kind: e.kind, date: e.date, clientId: e.clientId,
+    author: e.author, title: e.title || '', text: '', completed: !!e.completed
+  }));
+  state.comments.filter(c => allowedIds.has(c.clientId)).forEach(c => items.push({
+    source: 'comment', id: c.id, kind: c.kind || 'note', date: c.date, clientId: c.clientId,
+    author: c.author, title: '', text: c.text || '', completed: null
+  }));
+
+  // Фильтры
+  if (kindFilter !== 'all') {
+    items = items.filter(i => kindFilter === 'comment' ? i.source === 'comment' : (i.source === 'event' && i.kind === kindFilter));
+  }
+  if (periodFilter !== 'all') {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - parseInt(periodFilter));
+    items = items.filter(i => new Date(i.date) >= cutoff);
+  }
+  items.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  if (!items.length) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:30px;"><div class="empty-state-icon">📭</div>Событий за выбранный период нет</div>';
+    return;
+  }
+
+  const iconFor = { call:'📞', meeting:'🤝', contract:'📝', followup:'✅', note:'📝', email:'✉️', other:'•' };
+  const kindLabel = { call:'Звонок', meeting:'Встреча', contract:'Договор', followup:'Контроль', note:'Заметка', email:'Письмо', other:'Другое' };
+  wrap.innerHTML = items.slice(0, 100).map(i => {
+    const cl = clientById.get(i.clientId);
+    const icon = iconFor[i.kind] || '•';
+    const label = kindLabel[i.kind] || i.kind;
+    const future = new Date(i.date) > new Date();
+    return `
+      <div class="card-row" data-cid="${i.clientId}" style="cursor:pointer; padding:10px 16px;">
+        <div style="font-size:16px; width:28px; text-align:center; flex-shrink:0;">${icon}</div>
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+            <span class="fw-600 text-sm">${escapeHtml(i.title || i.text.substring(0, 80) || label)}</span>
+            ${i.source === 'event' && i.completed ? '<span class="chip chip-success" style="font-size:10px; padding:1px 6px;">Готово</span>' : ''}
+            ${future && !i.completed ? '<span class="chip chip-info" style="font-size:10px; padding:1px 6px;">Запланировано</span>' : ''}
           </div>
-          <div class="text-right">
-            <div class="fw-700 text-sm">${fmt.rub(c.revenue)}</div>
-            ${c.overdue ? `<div class="text-sm" style="color:var(--danger)">долг: ${fmt.rub(c.overdue)}</div>` : ''}
+          <div class="text-sm text-muted" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${escapeHtml(cl ? cl.name : '—')}
+            <span style="color:var(--text-soft);"> · ${fmt.dateLong(i.date)} · ${escapeHtml(i.author || '—')}</span>
           </div>
         </div>
-      `).join('') : '<div class="empty-state" style="padding:20px;">Нет данных</div>'}
-    </div>
-    ` : ''}
-  `;
+        <span class="chip chip-default" style="flex-shrink:0; font-size:11px;">${label}</span>
+      </div>
+    `;
+  }).join('') + (items.length > 100 ? `<div class="text-sm text-muted" style="text-align:center; padding:10px;">Показано 100 из ${items.length}</div>` : '');
+
+  // Клик по строке открывает клиента
+  wrap.querySelectorAll('[data-cid]').forEach(el => {
+    el.addEventListener('click', () => openClientModal(el.dataset.cid));
+  });
 }
 
 function afterDashboard() {
@@ -1986,6 +2075,10 @@ function afterDashboard() {
   if (mgrDetails) {
     mgrDetails.addEventListener('toggle', () => { state.dashboardMgrOpen = mgrDetails.open; });
   }
+  // Лента событий
+  renderDashFeed();
+  document.getElementById('feed-kind-filter')?.addEventListener('change', renderDashFeed);
+  document.getElementById('feed-period-filter')?.addEventListener('change', renderDashFeed);
 }
 
 function stageChip(stageId) {
@@ -3851,12 +3944,15 @@ function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
       if (from1c.activity && !local.activityManual) local.activity = from1c.activity;
       if (from1c.inn) local.inn = from1c.inn;
       if (from1c.reg_date) local.reg_date = from1c.reg_date;
-      if (from1c.city) local.city = local.cityManual || from1c.city;
+      // Город НЕ перезаписываем из 1С (ниже подставится только если пусто)
       if (from1c.address_full) local.address = local.addressManual || from1c.address_full;
       // Финансы — всегда из 1С (это факт)
       local.revenue = from1c.sales ? from1c.sales.total : (local.revenue || 0);
       local.debt = from1c.debt ? from1c.debt.total : 0;
       local.overdue = from1c.debt ? from1c.debt.overdue : 0;
+      // Город — НЕ перезаписываем из 1С, это ручное поле в CRM
+      // (если в CRM пусто и в 1С есть — можно подставить как подсказку, но не override)
+      if (!local.city && from1c.city) local.city = from1c.city;
       // Договор — копируем актуальный из 1С в плоские поля (для совместимости с renderContracts)
       if (primary) {
         if (!local.contract_noManual) local.contract_no = primary.no || '';
@@ -3875,7 +3971,7 @@ function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
         activity: from1c.activity || 'Другое',
         inn: from1c.inn || '',
         reg_date: from1c.reg_date || new Date().toISOString().slice(0,10),
-        city: from1c.city || '',
+        city: '',
         address: from1c.address_full || '',
         revenue: from1c.sales ? from1c.sales.total : 0,
         debt: from1c.debt ? from1c.debt.total : 0,
@@ -4451,7 +4547,6 @@ function openClientModal(clientId) {
     if (val('ci-activity') !== null) updates.activity = val('ci-activity');
     if (val('ci-reg') !== null) updates.reg_date = val('ci-reg');
     if (val('ci-price') !== null) updates.price_type = val('ci-price');
-    if (val('ci-region') !== null) updates.region = val('ci-region');
     if (val('ci-city') !== null) updates.city = val('ci-city');
     if (val('ci-addr') !== null) updates.address = val('ci-addr');
     if (val('ci-comment') !== null) updates.comment = val('ci-comment');
@@ -4498,21 +4593,21 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
         <div class="client-block">
           <div class="client-block-title">🏢 Клиент</div>
           <div class="info-grid-2col">
-            <label class="field-row"><span>Название</span><input id="ci-name" value="${escapeHtml(c.name||'')}" placeholder="ООО «Компания»"></label>
-            <label class="field-row"><span>ИНН</span><input id="ci-inn" value="${escapeHtml(c.inn||'')}" placeholder="10 или 12 цифр"></label>
-            <label class="field-row"><span>Вид деятельности</span>
-              <select id="ci-activity">
+            <label class="field-row"><span>Название ${f1c.name ? '<span class="from-1c-badge" title="Из 1С — не редактируется">1С</span>' : ''}</span><input id="ci-name" value="${escapeHtml(c.name||'')}" placeholder="ООО «Компания»" class="${f1c.name ? 'field-from-1c' : ''}" ${f1c.name ? 'readonly' : ''}></label>
+            <label class="field-row"><span>ИНН ${f1c.inn ? '<span class="from-1c-badge" title="Из 1С — не редактируется">1С</span>' : ''}</span><input id="ci-inn" value="${escapeHtml(c.inn||'')}" placeholder="10 или 12 цифр" class="${f1c.inn ? 'field-from-1c' : ''}" ${f1c.inn ? 'readonly' : ''}></label>
+            <label class="field-row"><span>Вид деятельности ${f1c.activity ? '<span class="from-1c-badge" title="Из 1С — не редактируется">1С</span>' : ''}</span>
+              ${f1c.activity ? `<input value="${escapeHtml(f1c.activity)}" readonly class="field-from-1c">` : `<select id="ci-activity">
                 ${acts.map(a => `<option ${c.activity===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
                 ${!acts.includes(c.activity) && c.activity ? `<option selected>${escapeHtml(c.activity)}</option>` : ''}
-              </select>
+              </select>`}
             </label>
-            <label class="field-row"><span>Дата регистрации</span><input type="date" id="ci-reg" value="${c.reg_date||''}"></label>
-            <label class="field-row"><span>Вид цен</span>
-              <select id="ci-price">${priceOptions}</select>
+            <label class="field-row"><span>Дата регистрации <span class="from-1c-badge" title="Из 1С — не редактируется">1С</span></span><input type="date" id="ci-reg" value="${c.reg_date||''}" class="${c.from1c?.reg_date ? 'field-from-1c' : ''}" ${c.from1c?.reg_date ? 'readonly' : ''}></label>
+            <label class="field-row"><span>Вид цен ${f1c.price_type ? '<span class="from-1c-badge" title="Из 1С — не редактируется">1С</span>' : ''}</span>
+              ${f1c.price_type ? `<input value="${escapeHtml(f1c.price_type)}" readonly class="field-from-1c">` : `<select id="ci-price">${priceOptions}</select>`}
             </label>
-            <label class="field-row"><span>${f1c.head_company ? 'Группа компаний' : 'Регион'}</span>${f1c.head_company ? `<input value="${escapeHtml(f1c.head_company)}" readonly style="background:#F9FAFB; color:var(--text-muted);">` : `<input id="ci-region" value="${escapeHtml(c.region||f1c.region||'')}" placeholder="регион">`}</label>
-            <label class="field-row"><span>Город</span><input id="ci-city" value="${escapeHtml(c.city||f1c.city||'')}" placeholder="Москва"></label>
-            <label class="field-row" style="grid-column: 1 / -1;"><span>Адрес</span><input id="ci-addr" value="${escapeHtml(c.address||f1c.address_full||'')}" placeholder="ул. ..., офис ..."></label>
+            ${f1c.head_company ? `<label class="field-row"><span>Группа компаний <span class="from-1c-badge">1С</span></span><input value="${escapeHtml(f1c.head_company)}" readonly class="field-from-1c"></label>` : ''}
+            <label class="field-row"><span>Город</span><input id="ci-city" value="${escapeHtml(c.city||'')}" placeholder="Москва"></label>
+            <label class="field-row" style="grid-column: 1 / -1;"><span>Адрес ${f1c.address_full ? '<span class="from-1c-badge" title="Из 1С — не редактируется">1С</span>' : ''}</span><input id="ci-addr" value="${escapeHtml(c.address||f1c.address_full||'')}" placeholder="ул. ..., офис ..." class="${f1c.address_full ? 'field-from-1c' : ''}" ${f1c.address_full ? 'readonly' : ''}></label>
           </div>
 
           <!-- Описание клиента — внутри блока Клиент, свёрнуто по умолчанию если пусто -->
@@ -6206,41 +6301,9 @@ function openVisitModal(visitId) {
 
 // =================== EXPORT PAGE ===================
 function renderExport() {
-  const lastImp = state.lastImportedAt ? new Date(state.lastImportedAt) : null;
-  const lastImpText = lastImp ? `${lastImp.toLocaleDateString('ru-RU')} ${lastImp.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}` : 'ещё не выполнялся';
-  const importStats = state.from1cImportStats;
   return `
-    <div class="card mb-4" style="border-left:4px solid #2563EB;">
-      <div class="card-header">
-        <div class="card-title">📥 Импорт из 1С</div>
-        <span class="text-sm text-muted">основной источник данных</span>
-      </div>
-      <div style="padding:16px 24px;">
-        <p class="text-sm" style="margin-bottom:14px; color:var(--text);">
-          Загружает данные о клиентах из 8 файлов выгрузки 1С: реквизиты, договоры, отсрочки, задолженность, заказы, продажи.
-          Файлы должны лежать в папке <code style="background:#F3F4F6; padding:1px 6px; border-radius:4px;">Claude Cowork/Claude code/Данные 1С/</code>.
-        </p>
-        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
-          <button class="btn btn-primary" id="onec-run">📥 Импорт из 1С (выбрать 8 файлов)</button>
-          <span class="text-sm text-muted">Последний импорт: <b style="color:var(--text);">${lastImpText}</b></span>
-        </div>
-        ${importStats ? `
-          <div style="display:flex; gap:16px; font-size:13px; color:var(--text-muted); padding:10px 14px; background:#F9FAFB; border-radius:8px;">
-            <span>+${importStats.added} новых</span>
-            <span>${importStats.updated} обновлено</span>
-            <span>${importStats.archived} в архив</span>
-          </div>
-        ` : ''}
-        <details style="margin-top:14px;">
-          <summary style="cursor:pointer; font-size:12px; color:var(--text-muted);">Какие файлы нужны и как они связаны?</summary>
-          <div style="font-size:12px; color:var(--text-muted); margin-top:10px; line-height:1.7;">
-            ${ONEC_FILE_TYPES.map(t => `<div>• <b>${escapeHtml(t.label)}</b>${t.required ? ' <span style="color:var(--danger);">(обязательный)</span>' : ''}</div>`).join('')}
-            <div style="margin-top:8px; padding:10px; background:#F0F9FF; border-radius:6px; color:#1E40AF;">
-              ℹ Данные не отправляются в интернет — импорт работает локально в браузере. Контакты и комментарии менеджеров не перезаписываются. Полная архитектура слияния — см. документацию.
-            </div>
-          </div>
-        </details>
-      </div>
+    <div class="info-banner" style="background:#F0F9FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#1E40AF;">
+      ℹ <b>Импорт из 1С — в шапке CRM</b>. Кнопка «🔄 Обновить» (рядом с «+ Новый клиент») сама копирует свежие файлы из Яндекс.Диска и обновляет данные. Раздел запускайте через <code>start_crm.ps1</code>.
     </div>
 
     <div class="grid grid-2 mb-4" style="grid-template-columns:1fr 1fr;">
@@ -6274,7 +6337,6 @@ function renderExport() {
   `;
 }
 function afterExport() {
-  document.getElementById('onec-run')?.addEventListener('click', onec_runImport);
   document.getElementById('exp-clients').onclick = exportClientsXlsx;
   document.getElementById('exp-tp').onclick = exportTpXlsx;
   const fi = document.getElementById('imp-plans');
