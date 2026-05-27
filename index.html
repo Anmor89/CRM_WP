@@ -3686,47 +3686,125 @@ const ONEC_PARSERS = {
 };
 
 // Собирает данные из 8 источников в единые объекты клиентов.
-// Если allowedManagers передан — фильтрует партнёров по primary_manager.
-// Возвращает { clients, skipReport: { byUnknownManager: {mgr → count}, totalSkipped } }
+// Партнёры с одинаковым «Головное предприятие» объединяются в одного клиента
+// (это филиалы одной компании). Финансовые показатели агрегируются.
 function onec_buildClients(parsed, allowedManagers /* Set | null */) {
   if (!parsed.partners) throw new Error('Не загружен главный файл «Справочник партнёров B2B»');
-  const out = [];
   const skipReport = { byUnknownManager: {}, totalSkipped: 0, noManager: 0 };
+
+  // Шаг 1: фильтруем партнёров и группируем по head_company (если есть)
+  const groups = new Map(); // groupKey → [{partner_data, _name}, ...]
   parsed.partners.forEach((p, name) => {
-    // Фильтр по менеджерам из CRM
     if (allowedManagers) {
       const mgr = (p.primary_manager || '').trim();
-      if (!mgr) {
-        // партнёр без менеджера — пропускаем
-        skipReport.noManager++;
-        skipReport.totalSkipped++;
-        return;
-      }
+      if (!mgr) { skipReport.noManager++; skipReport.totalSkipped++; return; }
       if (!allowedManagers.has(mgr)) {
         skipReport.byUnknownManager[mgr] = (skipReport.byUnknownManager[mgr] || 0) + 1;
         skipReport.totalSkipped++;
         return;
       }
     }
-    const inn  = parsed.inn        ? parsed.inn.get(name)        : null;
-    const addr = parsed.address    ? parsed.address.get(name)    : null;
-    const con  = parsed.contracts  ? parsed.contracts.get(name)  : null;
-    const agr  = parsed.agreements ? parsed.agreements.get(name) : null;
-    const debt = parsed.debt       ? parsed.debt.get(name)       : null;
-    const ord  = parsed.orders     ? parsed.orders.get(name)     : null;
-    const sal  = parsed.sales      ? parsed.sales.get(name)      : null;
+    const head = (p.head_company || '').trim();
+    const groupKey = (head && head !== name) ? head : name;
+    if (!groups.has(groupKey)) groups.set(groupKey, []);
+    groups.get(groupKey).push({ ...p, _name: name });
+  });
+
+  // Шаг 2: для каждой группы собираем агрегаты из всех файлов
+  const out = [];
+  groups.forEach((partners, groupKey) => {
+    // Primary partner: тот, у кого head_company пустой или совпадает с groupKey
+    let primary = partners.find(x => !x.head_company || x.head_company === groupKey || x._name === groupKey);
+    if (!primary) primary = partners[0];
+
+    // Соберём ИНН/КПП/адреса/договоры/отсрочки/долги/заказы/продажи по ВСЕМ партнёрам группы
+    const innList = [];
+    const addressList = [];
+    let allContracts = [];
+    let bestAgreement = null;
+    let aggDebt = null;
+    let aggOrders = null;
+    let aggSales = null;
+
+    for (const p of partners) {
+      const pName = p._name;
+      const i = parsed.inn        ? parsed.inn.get(pName)        : null;
+      const a = parsed.address    ? parsed.address.get(pName)    : null;
+      const con = parsed.contracts ? parsed.contracts.get(pName) : null;
+      const agr = parsed.agreements ? parsed.agreements.get(pName) : null;
+      const d = parsed.debt       ? parsed.debt.get(pName)       : null;
+      const o = parsed.orders     ? parsed.orders.get(pName)     : null;
+      const s = parsed.sales      ? parsed.sales.get(pName)      : null;
+
+      if (i) innList.push({ ...i, _partner: pName });
+      if (a) addressList.push({ ...a, _partner: pName });
+      if (con && con.length) allContracts = allContracts.concat(con.map(x => ({...x, _partner: pName})));
+      if (agr) {
+        if (!bestAgreement || (agr.days || 0) > (bestAgreement.days || 0)) bestAgreement = { ...agr, _partner: pName };
+      }
+      if (d) {
+        if (!aggDebt) {
+          aggDebt = { total: 0, overdue: 0, our_debt: 0, max_overdue_days: 0, docs_count: 0,
+                       aging: { not_overdue:0, d1_2:0, d3_14:0, d15_29:0, d30_44:0, d45_59:0, d60_179:0, d180plus:0 } };
+        }
+        aggDebt.total += d.total;
+        aggDebt.overdue += d.overdue;
+        aggDebt.our_debt += d.our_debt;
+        aggDebt.max_overdue_days = Math.max(aggDebt.max_overdue_days, d.max_overdue_days);
+        aggDebt.docs_count += d.docs_count;
+        for (const k of Object.keys(aggDebt.aging)) aggDebt.aging[k] += d.aging[k] || 0;
+      }
+      if (o) {
+        if (!aggOrders) aggOrders = { count: 0, total: 0, closed: 0, open: 0, last_date: null };
+        aggOrders.count += o.count;
+        aggOrders.total += o.total;
+        aggOrders.closed += o.closed;
+        aggOrders.open += o.open;
+        if (o.last_date && (!aggOrders.last_date || o.last_date > aggOrders.last_date)) aggOrders.last_date = o.last_date;
+      }
+      if (s) {
+        if (!aggSales) aggSales = { total: 0, total_cost: 0, by_year: {}, by_month: {}, last_date: null, txn_count: 0, transactions: [] };
+        aggSales.total += s.total;
+        aggSales.total_cost += s.total_cost;
+        aggSales.txn_count += s.txn_count;
+        for (const k of Object.keys(s.by_year)) aggSales.by_year[k] = (aggSales.by_year[k] || 0) + s.by_year[k];
+        for (const k of Object.keys(s.by_month)) aggSales.by_month[k] = (aggSales.by_month[k] || 0) + s.by_month[k];
+        if (s.transactions && s.transactions.length) aggSales.transactions = aggSales.transactions.concat(s.transactions);
+        if (s.last_date && (!aggSales.last_date || s.last_date > aggSales.last_date)) aggSales.last_date = s.last_date;
+      }
+    }
+    // После слияния — отсортировать транзакции по дате desc
+    if (aggSales && aggSales.transactions.length) {
+      aggSales.transactions.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    }
+
+    const primaryInn = innList[0] || {};
+    const primaryAddr = addressList[0] || {};
+    const subPartners = partners.map(p => p._name);
+
     out.push({
-      name,
+      name: groupKey,
       from1c: {
         last_synced: new Date().toISOString(),
-        ...p,
-        ...(inn || {}),
-        ...(addr || {}),
-        contracts: con || [],
-        agreement: agr || null,
-        debt: debt || null,
-        orders: ord || null,
-        sales: sal || null
+        ...primary,
+        // переопределяем имя на groupKey
+        name: groupKey,
+        partner: groupKey,
+        // ИНН/КПП — из первого найденного, плюс список всех
+        ...primaryInn,
+        inn_list: innList,
+        // адрес — из первого, плюс полный список
+        ...primaryAddr,
+        addresses: addressList,
+        // объединённые данные
+        contracts: allContracts,
+        agreement: bestAgreement,
+        debt: aggDebt,
+        orders: aggOrders,
+        sales: aggSales,
+        // метаинформация про филиалы
+        sub_partners: subPartners,
+        is_group: subPartners.length > 1
       }
     });
   });
