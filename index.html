@@ -196,7 +196,24 @@ a { color: inherit; text-decoration: none; }
   width: 16px; height: 16px;
   background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>") no-repeat;
 }
-.topbar-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.topbar-actions { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+
+.topbar-context {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text); font-weight: 600;
+  white-space: nowrap;
+}
+.topbar-context-icon { color: var(--text-muted); font-size: 14px; }
+.topbar-context-name { color: var(--text); font-weight: 600; }
+.topbar-context select {
+  border: none; background: transparent; font-size: 13px; font-weight: 600;
+  color: var(--text); padding: 4px 18px 4px 0; outline: none; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='3'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+}
+.topbar-context select:hover { color: var(--wp-yellow-dark); }
 
 .view-container { flex: 1; overflow-y: auto; padding: 24px 28px 40px; }
 
@@ -238,9 +255,14 @@ a { color: inherit; text-decoration: none; }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
 .grid-5 { grid-template-columns: repeat(5, 1fr); }
+.grid-6 { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 1400px) {
+  .grid-6 { grid-template-columns: repeat(3, 1fr); }
+}
 @media (max-width: 1200px) {
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .grid-5 { grid-template-columns: repeat(3, 1fr); }
+  .grid-6 { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ========== KPI CARDS ========== */
@@ -321,10 +343,11 @@ table.data tbody tr.row-ev-stale:hover, table.data tbody tr.row-ev-none:hover { 
 }
 .funnel-col-head {
   padding: 14px 14px 10px; border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .funnel-col-title { font-weight: 600; font-size: 13px; flex: 1; }
 .funnel-col-count { background: var(--surface); border: 1px solid var(--border); padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.funnel-col-sum { width: 100%; font-size: 11px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.02em; padding-top: 2px; }
 .funnel-col-bar { height: 3px; }
 .funnel-col-body { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 .funnel-card {
@@ -380,6 +403,62 @@ table.data tbody tr.row-ev-stale:hover, table.data tbody tr.row-ev-none:hover { 
 .funnel-stage-count { font-weight: 700; font-size: 14px; min-width: 50px; text-align: right; font-variant-numeric: tabular-nums; }
 .funnel-stage-clickable { cursor: pointer; transition: all 0.15s; }
 .funnel-stage-clickable:hover { border-color: var(--wp-yellow); background: #FFFDF5; transform: translateX(2px); }
+
+/* Conversion strip (cumulative funnel coverage %) */
+.conv-strip {
+  display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+  border-top: 1px solid var(--border); background: #FAFBFC;
+  flex-wrap: wrap; cursor: pointer; transition: background 0.12s;
+}
+.conv-strip:hover { background: #F3F4F6; }
+.conv-strip-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-soft); margin-right: 4px; }
+.conv-cell { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); }
+.conv-cell b { font-weight: 700; }
+.conv-pct { font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+.conv-pct.conv-good { background: #DCFCE7; color: #166534; }
+.conv-pct.conv-mid { background: #FEF3C7; color: #92400E; }
+.conv-pct.conv-low { background: #FEE2E2; color: #991B1B; }
+.conv-divider { color: var(--text-soft); font-size: 13px; padding: 0 2px; }
+.conv-strip-link { margin-left: auto; font-size: 11px; color: var(--text-soft);
+  display: inline-flex; align-items: center; gap: 2px; }
+.conv-strip:hover .conv-strip-link { color: var(--wp-yellow-dark); }
+
+/* Sales period tabs (chart range selector) */
+.sales-period-tabs { display: inline-flex; gap: 2px; background: #F3F4F6; padding: 3px; border-radius: 8px; }
+.sales-period-tabs button {
+  background: transparent; border: none; padding: 4px 10px;
+  font-size: 12px; font-weight: 500; color: var(--text-muted);
+  border-radius: 6px; cursor: pointer; transition: all 0.12s;
+}
+.sales-period-tabs button:hover { color: var(--text); }
+.sales-period-tabs button.active { background: white; color: var(--wp-black); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+
+/* My Day tabs */
+.myday-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+.myday-tab {
+  background: transparent; border: none; padding: 6px 10px;
+  font-size: 12px; font-weight: 500; color: var(--text-muted);
+  border-radius: 8px; cursor: pointer; display: inline-flex;
+  align-items: center; gap: 5px; transition: all 0.12s;
+}
+.myday-tab:hover:not(:disabled) { background: #F3F4F6; color: var(--text); }
+.myday-tab.active { background: var(--wp-yellow-soft); color: var(--wp-black); font-weight: 600; }
+.myday-tab.myday-tab-danger { color: var(--danger); }
+.myday-tab.myday-tab-danger.active { background: #FEE2E2; color: #991B1B; }
+.myday-tab:disabled { opacity: 0.35; cursor: not-allowed; }
+.myday-tab-count {
+  background: rgba(0,0,0,0.08); color: inherit;
+  padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700;
+}
+.myday-tab.active .myday-tab-count { background: rgba(0,0,0,0.15); }
+.myday-tab.myday-tab-danger .myday-tab-count { background: rgba(220,38,38,0.18); color: var(--danger); }
+.myday-tab.myday-tab-danger.active .myday-tab-count { background: rgba(220,38,38,0.25); }
+.myday-tab-dot {
+  display: inline-block; width: 7px; height: 7px;
+  background: var(--danger); border-radius: 50%;
+}
 .funnel-stage-clickable.is-selected { border-color: var(--wp-yellow); background: var(--wp-yellow-soft); box-shadow: inset 3px 0 0 var(--wp-yellow); }
 
 /* Manager distribution strips on the dashboard */
@@ -419,7 +498,7 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
   background: var(--surface); border-radius: 14px; width: 100%; max-width: 880px;
   box-shadow: var(--shadow-lg); overflow: hidden;
 }
-.modal.modal-wide { max-width: 1180px; }
+.modal.modal-wide { max-width: 1400px; }
 
 /* Section headings within client card */
 .card-section-h {
@@ -459,6 +538,44 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 /* Wider modal body with comfortable padding */
 .modal.modal-wide .modal-body { padding: 24px 32px; }
 .client-card-grid { display: flex; flex-direction: column; gap: 14px; }
+
+/* Client overview — 2-column layout (левая шире/правая просторнее для событий) */
+.client-overview-grid {
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px;
+  align-items: start;
+}
+@media (max-width: 1200px) {
+  .client-overview-grid { grid-template-columns: 1fr; }
+}
+.client-overview-left { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.client-overview-right { min-width: 0; }
+.client-block {
+  background: #FAFBFC; border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px;
+}
+.client-block-title {
+  font-weight: 700; font-size: 13px; margin: 0 0 12px;
+  color: var(--text); letter-spacing: -0.01em;
+  display: flex; align-items: center; gap: 6px;
+}
+.client-block-events {
+  position: sticky; top: 12px;
+}
+.client-block-events .embedded-activity {
+  background: white; border: 1px solid var(--border);
+}
+.client-block-events .comment-form-row {
+  flex-wrap: wrap;
+}
+.client-flags-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px;
+  font-size: 13px;
+}
+.client-flag {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 0; color: var(--text);
+}
+.client-flag span:first-child { font-size: 14px; }
 
 /* Status block: stage + category side by side */
 .status-block {
@@ -515,7 +632,7 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 .modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; background: #FAFBFC; }
 
 /* ========== CLIENT CARD (modal) ========== */
-.client-tabs { display: flex; gap: 2px; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--surface); margin: -20px -24px 20px; }
+.client-tabs { display: flex; gap: 2px; padding: 0 32px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .client-tab { padding: 12px 16px; border: none; background: transparent; color: var(--text-muted); font-weight: 500; border-bottom: 2px solid transparent; transition: all 0.15s; }
 .client-tab:hover { color: var(--text); }
 .client-tab.active { color: var(--wp-black); border-bottom-color: var(--wp-yellow); font-weight: 600; }
@@ -555,15 +672,16 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 .menu-order-grip { color: var(--text-soft); font-size: 16px; cursor: grab; }
 
 .client-header {
-  display: flex; align-items: flex-start; gap: 16px; padding: 18px 24px;
-  background: linear-gradient(135deg, var(--wp-black) 0%, var(--wp-black-2) 100%);
-  color: white; margin: -20px -24px 0;
+  display: flex; align-items: flex-start; gap: 18px; padding: 24px 32px;
+  background: linear-gradient(135deg, #64748B 0%, #475569 100%);
+  color: white;
 }
 .client-header-avatar {
   width: 56px; height: 56px; border-radius: 12px;
-  background: var(--wp-yellow); color: var(--wp-black);
+  background: var(--wp-yellow); color: #1F2937;
   display: flex; align-items: center; justify-content: center;
   font-weight: 800; font-size: 22px; flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 .client-header-info { flex: 1; min-width: 0; }
 .client-header-name { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
@@ -751,11 +869,9 @@ mark { background: var(--wp-yellow-soft); padding: 0 2px; border-radius: 2px; co
   <main class="main">
     <header class="topbar">
       <div class="topbar-title" id="view-title">Дашборд</div>
-      <div class="topbar-search">
-        <input id="global-search" placeholder="Поиск клиента по названию, ИНН или менеджеру..." autocomplete="off">
-        <div id="search-results" class="search-results hidden"></div>
-      </div>
       <div class="topbar-actions">
+        <div class="topbar-context" id="topbar-context"></div>
+        <button class="btn" id="onec-refresh-btn" title="Перечитать данные из локальной папки _data/ (нужен запуск через start_crm.ps1)" style="display:none;">🔄 Обновить</button>
         <button class="btn btn-primary" id="quick-add-client">+ Новый клиент</button>
       </div>
     </header>
@@ -830,14 +946,38 @@ const state = {
 // Storage helpers (key-scoped)
 const LS_KEY = 'wp_crm_v1';
 function persist() {
+  const snap = {
+    clients: state.clients, comments: state.comments, events: state.events, users: state.users,
+    tpClients: state.tpClients, tpVisits: state.tpVisits,
+    extraManagers: state.extraManagers, settings: state.settings
+  };
   try {
-    const snap = {
-      clients: state.clients, comments: state.comments, events: state.events, users: state.users,
-      tpClients: state.tpClients, tpVisits: state.tpVisits,
-      extraManagers: state.extraManagers, settings: state.settings
-    };
     localStorage.setItem(LS_KEY, JSON.stringify(snap));
-  } catch (e) { /* ignore */ }
+    state._persistTruncated = false;
+  } catch (e) {
+    // Если переполнение — обрезаем транзакции до 200 на клиента и пробуем снова
+    if (e && (e.name === 'QuotaExceededError' || e.code === 22 || /quota/i.test(e.message||''))) {
+      let truncatedAny = false;
+      state.clients.forEach(c => {
+        const txns = c.from1c && c.from1c.sales && c.from1c.sales.transactions;
+        if (txns && txns.length > 200) {
+          c.from1c.sales.transactions = txns.slice(0, 200);
+          c.from1c.sales._truncated_at = 200;
+          truncatedAny = true;
+        }
+      });
+      if (truncatedAny) {
+        try { localStorage.setItem(LS_KEY, JSON.stringify(snap)); state._persistTruncated = true; }
+        catch (e2) {
+          // Совсем не лезет — выбрасываем транзакции
+          state.clients.forEach(c => {
+            if (c.from1c && c.from1c.sales) { c.from1c.sales.transactions = []; c.from1c.sales._truncated_at = 0; }
+          });
+          try { localStorage.setItem(LS_KEY, JSON.stringify(snap)); state._persistTruncated = true; } catch(e3){}
+        }
+      }
+    }
+  }
 }
 function loadPersisted() {
   try {
@@ -852,6 +992,10 @@ function applySettings() {
     STAGES = state.settings.stages.map(s => {
       const def = DEFAULT_STAGES.find(d => d.id === s.id) || {};
       return { ...def, ...s };
+    });
+    // One-time migration: rename legacy "Первая сделка" → "Первый заказ"
+    STAGES.forEach(s => {
+      if (s.id === 'firstorder' && s.name === 'Первая сделка') s.name = 'Первый заказ';
     });
   } else {
     STAGES = JSON.parse(JSON.stringify(DEFAULT_STAGES));
@@ -969,7 +1113,7 @@ const DEFAULT_STAGES = [
   { id: 'contact',     name: 'Лид',                color: '#6366F1', soft: '#E0E7FF',  desc: 'Новый клиент, контакт ЛПР зафиксирован' },
   { id: 'talks',       name: 'Квалификация',       color: '#2563EB', soft: '#DBEAFE',  desc: 'Обсуждаем ассортимент, цены, условия' },
   { id: 'contract',    name: 'На подписи',         color: '#F59E0B', soft: '#FEF3C7',  desc: 'Договор согласовывается / подписывается' },
-  { id: 'firstorder',  name: 'Первая сделка',      color: '#14B8A6', soft: '#CCFBF1',  desc: 'Получен первый заказ — клиент стартовал' },
+  { id: 'firstorder',  name: 'Первый заказ',       color: '#14B8A6', soft: '#CCFBF1',  desc: 'Получен первый заказ — клиент стартовал' },
   { id: 'active',      name: 'Постоянный клиент',  color: '#16A34A', soft: '#DCFCE7',  desc: 'Заказывает регулярно, хотя бы раз в месяц' },
   { id: 'reject',      name: 'Архив',              color: '#DC2626', soft: '#FEE2E2',  desc: 'Клиент закрыт / отказ от работы' },
 ];
@@ -990,11 +1134,17 @@ function computeAutoStage(c) {
   const comment = (c.comment || '').toLowerCase();
   const contract = !!c.contract_signed;
 
-  // Manual stage override always wins
+  // Priority 1: Ручной override всегда побеждает
   if (c.stageManual && STAGE_IDS.includes(c.stageManual)) {
     return { stage: c.stageManual, reasons: ['Установлено вручную'] };
   }
 
+  // Priority 2: Этап из 1С (если клиент импортирован)
+  if (c.from1c && c.from1c.stage && STAGE_IDS.includes(c.from1c.stage)) {
+    return { stage: c.from1c.stage, reasons: ['Этап взаимоотношений из 1С'] };
+  }
+
+  // Priority 3: Авто-определение по локальным флагам
   if (c.stages_flags && c.stages_flags[5]) {
     return { stage: 'reject', reasons: ['Помечен флагом «Отказ в работе»'] };
   }
@@ -1029,9 +1179,11 @@ function clientStage(c) { return computeAutoStage(c).stage; }
 // B — заказывает 1 раз в месяц или реже (хотя бы 1 месяц)
 // C — не отгружается (нет выручки совсем)
 function computeAutoCategory(c) {
-  const reasons = [];
   if (c.categoryManual && ['A','B','C'].includes(c.categoryManual)) {
     return { category: c.categoryManual, reasons: ['Установлено вручную'] };
+  }
+  if (c.from1c && c.from1c.category && ['A','B','C'].includes(c.from1c.category)) {
+    return { category: c.from1c.category, reasons: ['Категория из 1С'] };
   }
   const months = c.months || {};
   const monthsActive = Object.values(months).filter(v => v && v > 0).length;
@@ -1152,6 +1304,12 @@ document.getElementById('login-form').addEventListener('submit', (e) => {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   renderApp();
+  // Авто-импорт из локальной папки _data/ (доступна только через локальный сервер)
+  onec_dataFolderAvailable().then(ok => {
+    const btn = document.getElementById('onec-refresh-btn');
+    if (btn) btn.style.display = ok ? '' : 'none';
+    if (ok) onec_autoImport({ silent: true });
+  });
 });
 
 document.getElementById('logout-btn').addEventListener('click', () => {
@@ -1202,7 +1360,7 @@ function renderNav() {
     }
     if (item.id === 'calendar') {
       const today = new Date(); today.setHours(0,0,0,0);
-      const upcoming = state.events.filter(e => new Date(e.date) >= today && !e.completed).length;
+      const upcoming = visibleEvents().filter(e => new Date(e.date) >= today && !e.completed).length;
       badge = upcoming ? `<span class="nav-badge">${upcoming}</span>` : '';
     }
     html += `<a data-view="${item.id}" class="${state.currentView===item.id?'active':''}">${navIcon(item.icon)}${item.label}${badge}</a>`;
@@ -1242,8 +1400,43 @@ function visibleClients() {
   let list = state.clients;
   if (state.user && state.user.role !== 'admin' && state.user.manager) {
     list = list.filter(c => c.manager === state.user.manager);
+  } else if (state.user && state.user.role === 'admin' && state.adminViewMgr && state.adminViewMgr !== 'all') {
+    list = list.filter(c => c.manager === state.adminViewMgr);
   }
   return list;
+}
+
+function renderTopbarContext() {
+  const el = document.getElementById('topbar-context');
+  if (!el || !state.user) { if (el) el.innerHTML = ''; return; }
+  if (state.user.role === 'admin') {
+    const mgrs = [...new Set(state.clients.map(c => c.manager).filter(Boolean))].sort();
+    const cur = state.adminViewMgr || 'all';
+    el.innerHTML = `
+      <span class="topbar-context-icon">👤</span>
+      <select id="topbar-mgr-filter" title="Просмотр данных конкретного менеджера">
+        <option value="all" ${cur==='all'?'selected':''}>Все менеджеры</option>
+        ${mgrs.map(m => `<option value="${escapeHtml(m)}" ${cur===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
+      </select>`;
+    const sel = document.getElementById('topbar-mgr-filter');
+    if (sel) sel.addEventListener('change', (e) => {
+      state.adminViewMgr = e.target.value;
+      renderNav();
+      renderView();
+    });
+  } else {
+    el.innerHTML = `<span class="topbar-context-icon">👤</span><span class="topbar-context-name">${escapeHtml(state.user.manager || state.user.name)}</span>`;
+  }
+}
+
+function visibleEvents() {
+  // Admin without manager filter — sees all events
+  if (state.user && state.user.role === 'admin' && (!state.adminViewMgr || state.adminViewMgr === 'all')) {
+    return state.events;
+  }
+  // Manager — or admin filtered to specific manager — sees only events on visible clients
+  const allowed = new Set(visibleClients().map(c => c.id));
+  return state.events.filter(e => allowed.has(e.clientId));
 }
 
 function applyFilters(list) {
@@ -1295,6 +1488,7 @@ function getEvents(clientId, all=false) {
 (function() {
   const input = document.getElementById('global-search');
   const box = document.getElementById('search-results');
+  if (!input || !box) return; // search bar removed from topbar — skip binding
   function hide() { box.classList.add('hidden'); box.innerHTML = ''; }
   function runSearch() {
     const q = input.value.trim().toLowerCase();
@@ -1355,11 +1549,33 @@ function getEvents(clientId, all=false) {
 })();
 
 document.getElementById('quick-add-client').addEventListener('click', () => openClientModal(null));
+document.getElementById('onec-refresh-btn')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  // Шаг 1: server-side sync (копируем свежие файлы из Yandex Disk → _data/)
+  btn.textContent = '⏳ Копирую файлы 1С…';
+  let synced = null;
+  try {
+    const r = await fetch('/api/sync', { method: 'POST' });
+    if (r.ok) synced = await r.json();
+  } catch (_) {}
+  if (synced && synced.ok) {
+    onec_toast(`📁 Скопировано ${synced.count} файлов из Яндекс.Диска`, 'info', 2000);
+  } else if (synced && !synced.ok) {
+    onec_toast(`⚠ Sync пропущен: ${synced.error || 'ошибка сервера'}`, 'error', 4000);
+  }
+  // Шаг 2: импорт в CRM
+  btn.textContent = '⏳ Импорт…';
+  await onec_autoImport({ silent: false });
+  btn.disabled = false;
+  btn.innerHTML = '🔄 Обновить';
+});
 
 // =================== VIEW DISPATCH ===================
 function renderView() {
   const c = document.getElementById('view-container');
   c.scrollTop = 0;
+  renderTopbarContext();
   switch (state.currentView) {
     case 'dashboard': c.innerHTML = renderDashboard(); afterDashboard(); break;
     case 'funnel': c.innerHTML = renderFunnel(); afterFunnel(); break;
@@ -1379,6 +1595,8 @@ function renderView() {
 }
 
 // =================== DASHBOARD ===================
+const STAGE_PROB = { contact: 0.05, talks: 0.20, contract: 0.60, firstorder: 0.90, active: 0, reject: 0 };
+
 function renderDashboard() {
   const all = visibleClients();
   const totalClients = all.length;
@@ -1392,60 +1610,164 @@ function renderDashboard() {
   STAGES.forEach(s => stageCounts[s.id] = 0);
   all.forEach(c => stageCounts[clientStage(c)]++);
 
+  // Forecast (weighted pipeline)
+  const closedWithRev = all.filter(c => clientStage(c) === 'active' && (c.revenue || 0) > 0);
+  const avgDeal = closedWithRev.length ? closedWithRev.reduce((s,c) => s + (c.revenue||0), 0) / closedWithRev.length : 0;
+  const forecastTotal = all.reduce((s, c) => {
+    const prob = STAGE_PROB[clientStage(c)] || 0;
+    if (!prob) return s;
+    const value = (c.revenue && c.revenue > 0) ? c.revenue : avgDeal;
+    return s + value * prob;
+  }, 0);
+
+  // Win rate
+  const won = all.filter(c => { const st = clientStage(c); return st === 'active' || st === 'firstorder'; }).length;
+  const lost = all.filter(c => clientStage(c) === 'reject').length;
+  const winRate = (won + lost) ? Math.round(won / (won + lost) * 100) : 0;
+
   const recentClients = all.filter(c => c.reg_date)
     .sort((a, b) => new Date(b.reg_date) - new Date(a.reg_date)).slice(0, 6);
   const topClients = [...all].sort((a,b) => (b.revenue||0) - (a.revenue||0)).slice(0, 8);
-  const upcomingEvents = state.events
-    .filter(e => !e.completed && new Date(e.date) >= new Date(new Date().toDateString()))
-    .sort((a,b) => new Date(a.date) - new Date(b.date)).slice(0, 6);
+
+  // "My Day" — events split into 4 baskets: overdue, today, tomorrow, week
+  const _todayStart = new Date(new Date().toDateString());
+  const _todayEnd = new Date(_todayStart); _todayEnd.setDate(_todayEnd.getDate() + 1);
+  const _tomorrowEnd = new Date(_todayEnd); _tomorrowEnd.setDate(_tomorrowEnd.getDate() + 1);
+  const _weekEnd = new Date(_todayStart); _weekEnd.setDate(_weekEnd.getDate() + 8);
+  const openEvents = visibleEvents().filter(e => !e.completed).sort((a,b) => new Date(a.date) - new Date(b.date));
+  const evOverdue = openEvents.filter(e => new Date(e.date) < _todayStart);
+  const evToday = openEvents.filter(e => { const d = new Date(e.date); return d >= _todayStart && d < _todayEnd; });
+  const evTomorrow = openEvents.filter(e => { const d = new Date(e.date); return d >= _todayEnd && d < _tomorrowEnd; });
+  const evWeek = openEvents.filter(e => { const d = new Date(e.date); return d >= _tomorrowEnd && d < _weekEnd; });
+  const overdueCnt = evOverdue.length;
+  const todayCnt = evToday.length;
+  // Default tab: Просроченные если есть, иначе Сегодня
+  let myDayTab = state.myDayTab;
+  if (!myDayTab) myDayTab = overdueCnt ? 'overdue' : 'today';
+  const tabListAll = myDayTab === 'overdue' ? evOverdue : myDayTab === 'today' ? evToday : myDayTab === 'tomorrow' ? evTomorrow : evWeek;
+  const myDayExpanded = !!state.myDayExpanded;
+  const myDayDefaultLimit = 4;
+  const tabList = myDayExpanded ? tabListAll : tabListAll.slice(0, myDayDefaultLimit);
 
   const inFunnel = totalClients - activeCount - all.filter(c => clientStage(c) === 'reject').length;
   const w = state.settings.dashboardWidgets;
+  const isAdmin = state.user && state.user.role === 'admin';
 
-  // Per-manager distribution
+  // Per-manager distribution (admin only)
   const managers = [...new Set(all.map(c => c.manager).filter(Boolean))].sort();
   const mgrData = managers.map(m => {
     const mClients = all.filter(c => c.manager === m);
-    const counts = {};
-    STAGES.forEach(s => counts[s.id] = 0);
-    mClients.forEach(c => counts[clientStage(c)]++);
-    const active = counts['active'] || 0;
-    const archive = counts['reject'] || 0;
-    return { manager: m, total: mClients.length, counts,
-             active, archive, inFunnel: mClients.length - active - archive };
+    const active = mClients.filter(c => clientStage(c) === 'active').length;
+    const archive = mClients.filter(c => clientStage(c) === 'reject').length;
+    return { manager: m, total: mClients.length, active, archive, inFunnel: mClients.length - active - archive };
   }).sort((a, b) => b.total - a.total);
 
+  // helper: render a single task row
+  const renderTaskRow = (ev) => {
+    const cl = getClient(ev.clientId);
+    const evDate = new Date(ev.date);
+    const isOverdue = evDate < _todayStart;
+    const isFuture = evDate >= _todayEnd;
+    const time = evDate.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+    const dateLabel = (isOverdue || isFuture) ? evDate.toLocaleDateString('ru-RU',{day:'2-digit',month:'short'}) : time;
+    const icon = isOverdue ? '⚠️' : (isFuture ? '📅' : '🕐');
+    const kindCls = ev.kind==='call'?'info':ev.kind==='contract'?'yellow':ev.kind==='meeting'?'default':'success';
+    return `
+      <div class="myday-row" style="display:flex; align-items:center; gap:10px; padding:8px 16px; border-bottom:1px solid var(--border); ${isOverdue ? 'background:rgba(220,38,38,0.04);' : ''}">
+        <div data-cid="${ev.clientId}" style="flex:1; display:flex; gap:10px; align-items:center; min-width:0; cursor:pointer;">
+          <div style="min-width:42px; text-align:center; flex-shrink:0;">
+            <div style="font-size:14px; line-height:1;">${icon}</div>
+            <div style="font-size:11px; color:${isOverdue ? 'var(--danger)' : 'var(--text-soft)'}; margin-top:2px;">${dateLabel}</div>
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(ev.title || eventKindLabel(ev.kind))}</div>
+            <div class="text-sm text-muted" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(cl ? cl.name : '—')}${isAdmin && cl ? ` <span style="color:var(--text-soft);">· ${escapeHtml(cl.manager||'')}</span>` : ''}</div>
+          </div>
+          <span class="chip chip-${kindCls}" style="flex-shrink:0;">${eventKindLabel(ev.kind)}</span>
+        </div>
+        <button class="btn btn-sm" data-todo-done="${ev.id}" title="Отметить выполненным" style="margin-left:6px; padding:4px 10px; background:var(--success); color:white; border:none; font-size:12px;">✓</button>
+      </div>
+    `;
+  };
+
   return `
-    ${w.kpis ? `
-    <div class="grid grid-5 mb-4">
+    ${w.kpis !== false ? `
+    <div class="grid grid-6 mb-4">
       <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Клиентов в базе</div><div class="kpi-value">${fmt.int(totalClients)}</div><div class="kpi-sub">+${newThisYear} в этом году</div></div>
       <div class="kpi"><div class="kpi-accent" style="background: var(--info)"></div><div class="kpi-label">В работе</div><div class="kpi-value">${fmt.int(inFunnel)}</div><div class="kpi-sub">в воронке</div></div>
       <div class="kpi"><div class="kpi-accent" style="background: var(--success)"></div><div class="kpi-label">Активно работают</div><div class="kpi-value">${fmt.int(activeCount)}</div><div class="kpi-sub">${totalClients?Math.round(activeCount/totalClients*100):0}% от базы</div></div>
       <div class="kpi"><div class="kpi-accent" style="background: var(--wp-yellow)"></div><div class="kpi-label">Выручка ${new Date().getFullYear()}</div><div class="kpi-value">${fmt.rub(revenueTotal)}</div><div class="kpi-sub">за период</div></div>
       <div class="kpi"><div class="kpi-accent" style="background: ${overdueTotal>0?'var(--danger)':'var(--text-soft)'}"></div><div class="kpi-label">Долг / Просрочено</div><div class="kpi-value">${fmt.rub(debtTotal)}</div><div class="kpi-sub" style="color: ${overdueTotal>0?'var(--danger)':'var(--text-muted)'}">просрочено: ${fmt.rub(overdueTotal)}</div></div>
+      <div class="kpi" title="Σ выручки клиентов в воронке × вероятность сделки на этапе"><div class="kpi-accent" style="background: #8B5CF6"></div><div class="kpi-label">Прогноз воронки</div><div class="kpi-value">${fmt.rub(forecastTotal)}</div><div class="kpi-sub">взвешенный pipeline</div></div>
     </div>
     ` : ''}
 
-    ${(w.funnel || w.upcoming) ? `
-    <div class="grid grid-2 mb-4" style="grid-template-columns: ${w.funnel && w.upcoming ? '2fr 1fr' : '1fr'};">
-      ${w.funnel ? `
+    ${(w.myday !== false) ? `
+    <div class="grid grid-2 mb-4" style="grid-template-columns: 1.6fr 1fr; align-items: stretch;">
+      <div class="card" style="border-left:4px solid ${overdueCnt ? 'var(--danger)' : (todayCnt ? 'var(--wp-yellow)' : 'var(--success)')};">
+        <div class="card-header" style="padding-bottom: 8px;">
+          <div style="display:flex; align-items:center; gap:10px; flex:1; flex-wrap:wrap;">
+            <div class="card-title">📋 Что сделать</div>
+            <div class="myday-tabs" role="tablist">
+              <button class="myday-tab ${myDayTab==='overdue'?'active':''} ${overdueCnt?'myday-tab-danger':''}" data-myday-tab="overdue" ${!overdueCnt?'disabled':''}>⚠️ Просрочено${overdueCnt?` <span class="myday-tab-count">${overdueCnt}</span>`:''}</button>
+              <button class="myday-tab ${myDayTab==='today'?'active':''}" data-myday-tab="today">Сегодня${evToday.length?` <span class="myday-tab-count">${evToday.length}</span>`:''}</button>
+              <button class="myday-tab ${myDayTab==='tomorrow'?'active':''}" data-myday-tab="tomorrow">Завтра${evTomorrow.length?` <span class="myday-tab-count">${evTomorrow.length}</span>`:''}</button>
+              <button class="myday-tab ${myDayTab==='week'?'active':''}" data-myday-tab="week">На неделе${evWeek.length?` <span class="myday-tab-count">${evWeek.length}</span>`:''}</button>
+            </div>
+          </div>
+          <a class="btn btn-ghost btn-sm" id="dash-go-cal-myday">Календарь →</a>
+        </div>
+        <div>
+          ${tabListAll.length ? tabList.map(renderTaskRow).join('') : `
+            <div class="empty-state" style="padding:18px;">
+              <div class="empty-state-icon" style="font-size:28px;">${myDayTab==='overdue'?'✨':myDayTab==='today'?'🎉':'📭'}</div>
+              <div class="fw-600">${myDayTab==='overdue'?'Просроченных задач нет':myDayTab==='today'?'Дел на сегодня нет':myDayTab==='tomorrow'?'На завтра ничего не запланировано':'На неделе пусто'}</div>
+              <div class="text-sm text-muted">${myDayTab==='overdue'?'Отлично, всё под контролем!':'Запланируйте звонок или встречу — откройте клиента и добавьте событие'}</div>
+            </div>
+          `}
+          ${tabListAll.length > myDayDefaultLimit ? `<div style="padding:10px 16px; text-align:center; border-top:1px solid var(--border);">${myDayExpanded ? `<a class="btn btn-ghost btn-sm" id="dash-myday-collapse">Свернуть ↑</a>` : `<a class="btn btn-ghost btn-sm" id="dash-myday-expand">Показать ещё ${tabListAll.length - myDayDefaultLimit} ↓</a>`}</div>` : ''}
+        </div>
+      </div>
+
+      ${w.recent !== false ? `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Новые клиенты</div>
+          <span class="text-sm text-muted">за последнее время</span>
+        </div>
+        ${recentClients.length ? recentClients.slice(0, 5).map(c => `
+          <div class="card-row" data-cid="${c.id}" style="cursor:pointer; padding:10px 16px;">
+            <div class="user-avatar" style="background:var(--wp-yellow-soft); color:#5C4914; width:32px; height:32px; font-size:12px;">${fmt.initials(c.name)}</div>
+            <div style="flex:1; min-width:0;">
+              <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(c.name)}</div>
+              <div class="text-sm text-muted" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${isAdmin?escapeHtml(c.manager || '—') + ' • ':''}${fmt.daysAgo(c.reg_date)}</div>
+            </div>
+            ${stageChip(clientStage(c))}
+          </div>
+        `).join('') : '<div class="empty-state" style="padding:18px;">Нет новых клиентов</div>'}
+      </div>
+      ` : ''}
+    </div>
+    ` : ''}
+
+    ${(w.funnel !== false) ? `
+    <div class="grid grid-2 mb-4" style="grid-template-columns: 1.6fr 1fr; align-items: stretch;">
       <div class="card">
         <div class="card-header">
           <div class="card-title">Воронка по клиентам</div>
-          <a class="btn btn-ghost btn-sm" id="dash-go-funnel">Открыть Сделки →</a>
+          <a class="btn btn-ghost btn-sm" id="dash-go-funnel">Открыть воронку →</a>
         </div>
         <div class="funnel-viz">
           ${STAGES.map(s => {
             const cnt = stageCounts[s.id] || 0;
             const pct = totalClients ? (cnt / totalClients * 100) : 0;
-            const isSelected = state.dashboardStage === s.id;
             return `
-              <div class="funnel-stage funnel-stage-clickable ${isSelected?'is-selected':''}" data-stage="${s.id}" title="Кликните, чтобы увидеть клиентов этого этапа">
+              <div class="funnel-stage funnel-stage-clickable" data-stage="${s.id}" title="Открыть «${escapeHtml(s.name)}» в Воронке">
                 <span class="chip" style="background:${s.soft}; color:${s.color}">
                   <span class="chip-dot" style="background:${s.color}"></span>${escapeHtml(s.name)}
                 </span>
                 <div class="funnel-stage-bar">
-                  <div class="funnel-stage-bar-fill" style="background:${s.color}; width:${Math.max(pct, 1)}%"></div>
+                  <div class="funnel-stage-bar-fill" style="background:#D1D5DB; width:${Math.max(pct, 1)}%"></div>
                 </div>
                 <div class="funnel-stage-count">${cnt}</div>
                 <div class="funnel-stage-pct">${pct.toFixed(0)}%</div>
@@ -1453,46 +1775,72 @@ function renderDashboard() {
             `;
           }).join('')}
         </div>
+        <div class="conv-strip" id="dash-conv-strip" title="Сколько % клиентов в работе дошли до этого этапа или прошли его. Чем правее этап — тем уже воронка. Клик — открыть подробную аналитику.">
+          <span class="conv-strip-label">Охват воронки</span>
+          ${(() => {
+            const flowStages = STAGES.filter(s => s.id !== 'reject');
+            const totalInFlow = flowStages.reduce((sum, s) => sum + (stageCounts[s.id]||0), 0);
+            let running = totalInFlow;
+            return flowStages.map((s, idx) => {
+              const cum = totalInFlow ? Math.round(running / totalInFlow * 100) : 0;
+              running -= (stageCounts[s.id] || 0);
+              const cls = cum >= 60 ? 'conv-good' : cum >= 30 ? 'conv-mid' : 'conv-low';
+              const shortName = s.name.length > 14 ? s.name.slice(0,12) + '…' : s.name;
+              const cell = `<span class="conv-cell" title="${escapeHtml(s.name)}: ${cum}% клиентов в работе дошли до этого этапа или прошли его"><span class="chip-dot" style="background:${s.color}"></span><span class="conv-pct ${cls}">${cum}%</span> <span class="text-muted" style="font-size:11px;">${escapeHtml(shortName)}</span></span>`;
+              if (idx === flowStages.length - 1) return cell;
+              return cell + `<span class="conv-divider">→</span>`;
+            }).join('');
+          })()}
+          <span class="conv-strip-link">подробнее в Аналитике →</span>
+        </div>
+        <div style="padding:10px 16px; display:flex; align-items:center; gap:24px; border-top:1px solid var(--border); background:#FAFBFC; flex-wrap:wrap;">
+          <div><span class="text-muted text-sm">Всего в работе:</span> <span class="fw-700">${fmt.int(inFunnel)}</span> <span class="text-sm text-muted">клиентов</span></div>
+          <div title="Сколько % обработанных лидов дошли до постоянного клиента (или хотя бы первого заказа) из всех завершённых (постоянные + первый заказ + архив)"><span class="text-muted text-sm">Конверсия в клиента:</span> <span class="fw-700" style="color:${winRate>=60?'var(--success)':winRate>=30?'var(--text)':'var(--danger)'}">${winRate}%</span> <span class="text-sm text-muted">(${won} стали клиентами из ${won+lost} обработанных)</span></div>
+          <div style="margin-left:auto;"><span class="text-muted text-sm">Прогноз выручки:</span> <span class="fw-700" style="color:#8B5CF6;">${fmt.rub(forecastTotal)}</span></div>
+        </div>
       </div>
-      ` : ''}
-
-      ${w.upcoming ? `
       <div class="card">
         <div class="card-header">
-          <div class="card-title">Ближайшие события</div>
-          <a class="btn btn-ghost btn-sm" id="dash-go-calendar">Календарь →</a>
+          <div class="card-title">Виды деятельности</div>
+          <span class="text-sm text-muted">структура базы</span>
         </div>
-        <div>
-          ${upcomingEvents.length ? upcomingEvents.map(ev => {
-            const cl = getClient(ev.clientId);
-            const isToday = new Date(ev.date).toDateString() === new Date().toDateString();
-            return `
-              <div class="card-row" data-cid="${ev.clientId}" style="cursor:pointer">
-                <div style="width:42px; text-align:center;">
-                  <div class="text-sm fw-700" style="color:${isToday?'var(--wp-yellow-dark)':'var(--text)'}">${new Date(ev.date).getDate()}</div>
-                  <div class="text-sm text-muted">${new Date(ev.date).toLocaleDateString('ru-RU',{month:'short'})}</div>
+        ${(() => {
+          const actCounts = {};
+          all.forEach(c => { const a = c.activity || 'Не указан'; actCounts[a] = (actCounts[a]||0) + 1; });
+          const actSorted = Object.entries(actCounts).sort((a,b) => b[1] - a[1]);
+          const actMax = actSorted[0] ? actSorted[0][1] : 1;
+          const palette = ['#F59E0B', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#06B6D4', '#EC4899', '#84CC16', '#F97316', '#6B7280'];
+          if (!actSorted.length) return '<div class="empty-state" style="padding:20px;">Нет данных</div>';
+          return `<div style="padding: 14px 16px; display:flex; flex-direction:column; gap:12px;">
+            ${actSorted.map(([name, cnt], i) => {
+              const pct = totalClients ? (cnt / totalClients * 100) : 0;
+              const barW = actMax ? (cnt / actMax * 100) : 0;
+              const color = palette[i % palette.length];
+              return `
+                <div>
+                  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; gap:8px;">
+                    <span class="fw-600" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${escapeHtml(name)}</span>
+                    <span style="font-size:12px; color:var(--text-muted); white-space:nowrap;"><b style="color:var(--text);">${cnt}</b> · ${pct.toFixed(0)}%</span>
+                  </div>
+                  <div style="height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden;">
+                    <div style="height:100%; width:${barW}%; background:${color}; border-radius:3px; transition:width 0.4s;"></div>
+                  </div>
                 </div>
-                <div style="flex:1; min-width:0;">
-                  <div class="fw-600 text-sm">${escapeHtml(ev.title)}</div>
-                  <div class="text-sm text-muted">${escapeHtml(cl?cl.name:'')}</div>
-                  <div class="text-sm" style="color:var(--text-soft)">👤 ${escapeHtml(ev.author || (cl?cl.manager:'') || '—')}</div>
-                </div>
-                <span class="chip chip-${ev.kind==='call'?'info':ev.kind==='contract'?'yellow':ev.kind==='meeting'?'default':'success'}">${eventKindLabel(ev.kind)}</span>
-              </div>
-            `;
-          }).join('') : '<div class="empty-state"><div class="empty-state-icon">📅</div>Нет запланированных событий</div>'}
-        </div>
+              `;
+            }).join('')}
+          </div>`;
+        })()}
       </div>
-      ` : ''}
     </div>
     ` : ''}
 
-    ${(w.managers !== false && mgrData.length) ? `
-    <div class="card mb-4">
-      <div class="card-header">
-        <div class="card-title">Клиенты по менеджерам</div>
-        <span class="text-sm text-muted">кликните на менеджера — фильтр таблицы ниже</span>
-      </div>
+    ${(isAdmin && w.managers !== false && mgrData.length) ? `
+    <details class="card card-collapsible mb-4" ${state.dashboardMgrOpen?'open':''}>
+      <summary style="display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none; border-bottom:1px solid var(--border);">
+        <div class="card-title" style="margin:0; flex:1;">Клиенты по менеджерам <span class="text-sm text-muted" style="font-weight:400;">— только для администратора</span></div>
+        <span class="text-sm text-muted">${mgrData.length} ${mgrData.length===1?'менеджер':'менеджеров'}</span>
+        <span class="text-sm text-muted" style="font-size:12px;">▼</span>
+      </summary>
       <table class="data mgr-table">
         <thead><tr>
           <th>Менеджер</th>
@@ -1508,8 +1856,8 @@ function renderDashboard() {
             const fp = md.total ? md.inFunnel/md.total*100 : 0;
             const rp = md.total ? md.archive/md.total*100 : 0;
             return `
-            <tr class="mgr-row ${state.dashboardManager===md.manager?'is-selected':''}" data-manager="${escapeHtml(md.manager)}">
-              <td><div style="display:flex;align-items:center;gap:9px;"><div class="user-avatar" style="width:26px;height:26px;font-size:10px;">${fmt.initials(md.manager)}</div><span class="fw-600">${escapeHtml(md.manager)}</span></div></td>
+            <tr class="mgr-row" data-manager="${escapeHtml(md.manager)}" title="Кликните, чтобы посмотреть данные этого менеджера">
+              <td><div style="display:flex;align-items:center;gap:9px;"><div class="user-avatar" style="width:24px;height:24px;font-size:9px;">${fmt.initials(md.manager)}</div><span class="fw-600">${escapeHtml(md.manager)}</span></div></td>
               <td class="num fw-700">${md.total}</td>
               <td class="num" style="color:#3F7F5B;">${md.active}</td>
               <td class="num">${md.inFunnel}</td>
@@ -1525,144 +1873,119 @@ function renderDashboard() {
           }).join('')}
         </tbody>
       </table>
-      <div class="mgr-legend" style="padding: 10px 16px;">
+      <div class="mgr-legend" style="padding: 8px 16px;">
         <span class="mgr-legend-item"><span class="chip-dot" style="background:#9CC9AE"></span>Активные</span>
         <span class="mgr-legend-item"><span class="chip-dot" style="background:#F2D77E"></span>В воронке</span>
         <span class="mgr-legend-item"><span class="chip-dot" style="background:#D7DADE"></span>Архив</span>
       </div>
-    </div>
+    </details>
     ` : ''}
 
-    ${(w.recent || w.topClients) ? `
-    <div class="grid grid-2 mb-4" style="grid-template-columns: ${w.recent && w.topClients ? '1fr 1fr' : '1fr'};">
-      ${w.recent ? `
-      <div class="card">
-        <div class="card-header"><div class="card-title">Новые клиенты</div><span class="text-sm text-muted">за последнее время</span></div>
-        ${recentClients.length ? recentClients.map(c => `
-          <div class="card-row" data-cid="${c.id}" style="cursor:pointer">
-            <div class="user-avatar" style="background:var(--wp-yellow-soft); color:#5C4914;">${fmt.initials(c.name)}</div>
-            <div style="flex:1; min-width:0;">
-              <div class="fw-600 text-sm">${escapeHtml(c.name)}</div>
-              <div class="text-sm text-muted">${escapeHtml(c.manager || '—')} • ${fmt.daysAgo(c.reg_date)}</div>
-            </div>
-            ${stageChip(clientStage(c))}
+    ${w.topClients !== false ? `
+    <div class="card mb-4">
+      <div class="card-header"><div class="card-title">Топ клиенты по выручке</div><span class="text-sm text-muted">${new Date().getFullYear()}</span></div>
+      ${topClients.length ? topClients.map(c => `
+        <div class="card-row" data-cid="${c.id}" style="cursor:pointer">
+          <div style="flex:1; min-width:0;">
+            <div class="fw-600 text-sm">${escapeHtml(c.name)}</div>
+            <div class="text-sm text-muted">${escapeHtml(c.manager)}</div>
           </div>
-        `).join('') : '<div class="empty-state">Нет данных</div>'}
-      </div>
-      ` : ''}
-
-      ${w.topClients ? `
-      <div class="card">
-        <div class="card-header"><div class="card-title">Топ клиенты по выручке</div><span class="text-sm text-muted">2026</span></div>
-        ${topClients.map(c => `
-          <div class="card-row" data-cid="${c.id}" style="cursor:pointer">
-            <div style="flex:1; min-width:0;">
-              <div class="fw-600 text-sm">${escapeHtml(c.name)}</div>
-              <div class="text-sm text-muted">${escapeHtml(c.manager)}</div>
-            </div>
-            <div class="text-right">
-              <div class="fw-700 text-sm">${fmt.rub(c.revenue)}</div>
-              ${c.overdue ? `<div class="text-sm" style="color:var(--danger)">долг: ${fmt.rub(c.overdue)}</div>` : ''}
-            </div>
+          <div class="text-right">
+            <div class="fw-700 text-sm">${fmt.rub(c.revenue)}</div>
+            ${c.overdue ? `<div class="text-sm" style="color:var(--danger)">долг: ${fmt.rub(c.overdue)}</div>` : ''}
           </div>
-        `).join('')}
-      </div>
-      ` : ''}
+        </div>
+      `).join('') : '<div class="empty-state" style="padding:20px;">Нет данных</div>'}
     </div>
     ` : ''}
-
-    <div id="dash-stage-drill" class="card mt-4 ${(state.dashboardStage||state.dashboardManager)?'':'hidden'}"></div>
   `;
-}
-
-function renderStageDrillSection() {
-  const stageId = state.dashboardStage;
-  const mgr = state.dashboardManager;
-  const wrap = document.getElementById('dash-stage-drill');
-  if (!wrap) return;
-  if (!stageId && !mgr) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
-  let list = visibleClients();
-  if (stageId) list = list.filter(c => clientStage(c) === stageId);
-  if (mgr) list = list.filter(c => c.manager === mgr);
-  const sorted = [...list].sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
-  wrap.classList.remove('hidden');
-  const titleParts = [];
-  if (stageId) titleParts.push(`этап «${escapeHtml(stageById(stageId).name)}»`);
-  if (mgr) titleParts.push(`менеджер ${escapeHtml(mgr)}`);
-  wrap.innerHTML = `
-    <div class="card-header">
-      <div class="card-title" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        ${stageId ? stageChip(stageId) : ''}
-        <span>Клиенты: ${titleParts.join(', ')}</span>
-        <span class="text-sm text-muted" style="font-weight:400;">— ${list.length} ${list.length===1?'клиент':list.length>=2&&list.length<=4?'клиента':'клиентов'}</span>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button class="btn btn-sm" id="dash-stage-open-funnel">Открыть в Сделках →</button>
-        <button class="btn btn-ghost btn-sm" id="dash-stage-clear">Свернуть ✕</button>
-      </div>
-    </div>
-    <table class="data">
-      <thead>
-        <tr>
-          <th>Клиент</th><th>Менеджер</th><th>Вид деятельности</th><th>Этап</th>
-          <th>Категория</th><th class="num">Выручка</th><th class="num">Долг</th><th>Зарегистрирован</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${sorted.length ? sorted.slice(0, 200).map(c => `
-          <tr data-cid="${c.id}">
-            <td><div class="fw-600">${escapeHtml(c.name)}</div>${c.inn?`<div class="text-sm text-muted">ИНН ${escapeHtml(c.inn)}</div>`:''}</td>
-            <td>${escapeHtml(c.manager || '—')}</td>
-            <td>${c.activity ? `<span class="chip chip-activity">${escapeHtml(c.activity)}</span>` : '<span class="text-muted">—</span>'}</td>
-            <td>${stageChip(clientStage(c))}</td>
-            <td><span class="chip chip-cat-${clientCategory(c)}">${clientCategory(c)}</span></td>
-            <td class="num">${c.revenue ? fmt.rub(c.revenue) : '<span class="text-muted">—</span>'}</td>
-            <td class="num" style="${c.overdue?'color:var(--danger);font-weight:600;':''}">${c.debt ? fmt.rub(c.debt) : '<span class="text-muted">—</span>'}</td>
-            <td>${fmt.date(c.reg_date)}</td>
-          </tr>
-        `).join('') : `<tr><td colspan="8"><div class="empty-state">Клиентов нет</div></td></tr>`}
-        ${sorted.length > 200 ? `<tr><td colspan="8" class="muted text-sm" style="text-align:center;padding:12px;">Показано 200 из ${sorted.length}</td></tr>` : ''}
-      </tbody>
-    </table>
-  `;
-  wrap.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
-  document.getElementById('dash-stage-clear').onclick = () => { state.dashboardStage = null; state.dashboardManager = null; renderView(); };
-  document.getElementById('dash-stage-open-funnel').onclick = () => {
-    if (stageId) state.filters.stage = stageId;
-    if (mgr) state.filters.manager = mgr;
-    setView('funnel');
-  };
-  attachTableSort(wrap.querySelector('table.data'));
-  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function afterDashboard() {
+  // Open client when clicking on rows that have a client id (events, recent, top)
   document.querySelectorAll('[data-cid]').forEach(el => {
     el.addEventListener('click', () => openClientModal(el.dataset.cid));
   });
+  // "Готово" button: first click — enter confirm mode (✓ Подтвердить + ✕ Отмена); second — actually complete
+  document.querySelectorAll('[data-todo-done]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const evId = btn.dataset.todoDone;
+      if (btn.dataset.confirm === '1') {
+        const ev = state.events.find(x => x.id === evId);
+        if (ev) {
+          ev.completed = true;
+          ev.completedAt = new Date().toISOString();
+          persist();
+          renderView();
+        }
+        return;
+      }
+      // Enter confirm mode: morph this button + add a cancel sibling
+      btn.dataset.confirm = '1';
+      btn.innerHTML = '✓ Подтвердить';
+      btn.style.padding = '4px 10px';
+      btn.style.fontSize = '12px';
+      const cancel = document.createElement('button');
+      cancel.className = 'btn btn-sm myday-cancel-btn';
+      cancel.innerHTML = '✕';
+      cancel.title = 'Отменить';
+      cancel.style.cssText = 'margin-left:4px; padding:4px 8px; background:#F3F4F6; color:#374151; border:1px solid var(--border); font-size:12px;';
+      cancel.addEventListener('click', (cev) => {
+        cev.stopPropagation();
+        cancel.remove();
+        delete btn.dataset.confirm;
+        btn.innerHTML = '✓';
+        btn.style.padding = '4px 10px';
+        btn.style.fontSize = '12px';
+      });
+      btn.parentElement.appendChild(cancel);
+      // Auto-revert after 5 seconds if not confirmed
+      setTimeout(() => { if (btn.dataset.confirm === '1' && document.body.contains(cancel)) cancel.click(); }, 5000);
+    });
+  });
+  // Tabs on My Day widget
+  document.querySelectorAll('[data-myday-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      state.myDayTab = btn.dataset.mydayTab;
+      state.myDayExpanded = false; // reset expand when switching tabs
+      renderView();
+    });
+  });
+  // Inline expand / collapse of My Day
+  document.getElementById('dash-myday-expand')?.addEventListener('click', () => {
+    state.myDayExpanded = true; renderView();
+  });
+  document.getElementById('dash-myday-collapse')?.addEventListener('click', () => {
+    state.myDayExpanded = false; renderView();
+  });
   document.getElementById('dash-go-funnel')?.addEventListener('click', () => setView('funnel'));
-  document.getElementById('dash-go-calendar')?.addEventListener('click', () => setView('calendar'));
+  document.getElementById('dash-go-cal-myday')?.addEventListener('click', () => setView('calendar'));
+  document.getElementById('dash-conv-strip')?.addEventListener('click', (e) => {
+    if (e.target.closest('.funnel-stage-clickable')) return;
+    setView('analytics');
+  });
+  // Stage click → go to Funnel with stage filter applied
   document.querySelectorAll('.funnel-stage-clickable').forEach(el => {
     el.addEventListener('click', () => {
-      const id = el.dataset.stage;
-      state.dashboardStage = (state.dashboardStage === id) ? null : id;
-      document.querySelectorAll('.funnel-stage-clickable').forEach(x => {
-        x.classList.toggle('is-selected', x.dataset.stage === state.dashboardStage);
-      });
-      renderStageDrillSection();
+      state.filters.stage = el.dataset.stage;
+      setView('funnel');
     });
   });
+  // Manager row in admin table → set adminViewMgr, re-render dashboard
   document.querySelectorAll('.mgr-row').forEach(el => {
     el.addEventListener('click', () => {
-      const m = el.dataset.manager;
-      state.dashboardManager = (state.dashboardManager === m) ? null : m;
-      document.querySelectorAll('.mgr-row').forEach(x => {
-        x.classList.toggle('is-selected', x.dataset.manager === state.dashboardManager);
-      });
-      renderStageDrillSection();
+      state.adminViewMgr = el.dataset.manager;
+      renderNav();
+      renderView();
     });
   });
-  renderStageDrillSection();
+  // Remember managers panel open/closed state
+  const mgrDetails = document.querySelector('details.card-collapsible');
+  if (mgrDetails) {
+    mgrDetails.addEventListener('toggle', () => { state.dashboardMgrOpen = mgrDetails.open; });
+  }
 }
 
 function stageChip(stageId) {
@@ -1707,10 +2030,11 @@ function drawDealsTab() {
         </div>
       </div>
       <div class="filter-bar">
+        ${state.user && state.user.role === 'admin' ? `
         <select id="f-manager">
           <option value="all">Все менеджеры</option>
           ${managers.map(m => `<option value="${escapeHtml(m)}" ${state.filters.manager===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
-        </select>
+        </select>` : ''}
         <select id="f-activity">
           <option value="all">Все виды деятельности</option>
           ${activities.map(a => `<option value="${escapeHtml(a)}" ${state.filters.activity===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
@@ -1756,19 +2080,23 @@ function drawFunnelBoard() {
   STAGES.forEach(s => buckets[s.id] = []);
   list.forEach(c => buckets[clientStage(c)].push(c));
 
-  document.getElementById('funnel-board').innerHTML = STAGES.map(s => `
+  document.getElementById('funnel-board').innerHTML = STAGES.map(s => {
+    const items = buckets[s.id];
+    const sumRevenue = items.reduce((acc, c) => acc + (c.revenue || 0), 0);
+    return `
     <div class="funnel-col" data-stage="${s.id}">
       <div class="funnel-col-head">
         <span class="funnel-col-title" style="color:${s.color}">${escapeHtml(s.name)}</span>
-        <span class="funnel-col-count">${buckets[s.id].length}</span>
+        <span class="funnel-col-count">${items.length}</span>
+        <span class="funnel-col-sum" title="Суммарная выручка клиентов на этом этапе">${sumRevenue > 0 ? '💰 ' + fmt.rub(sumRevenue) : '— нет выручки'}</span>
       </div>
       <div class="funnel-col-bar" style="background:${s.color}"></div>
       <div class="funnel-col-body" data-drop="${s.id}">
-        ${buckets[s.id].slice(0,40).map(c => funnelCard(c)).join('')}
-        ${buckets[s.id].length > 40 ? `<div class="text-sm text-muted" style="text-align:center; padding:6px;">+ ещё ${buckets[s.id].length-40}</div>` : ''}
+        ${items.slice(0,40).map(c => funnelCard(c)).join('')}
+        ${items.length > 40 ? `<div class="text-sm text-muted" style="text-align:center; padding:6px;">+ ещё ${items.length-40}</div>` : ''}
       </div>
     </div>
-  `).join('');
+  `;}).join('');
 
   document.querySelectorAll('.funnel-card').forEach(el => {
     el.addEventListener('click', () => openClientModal(el.dataset.cid));
@@ -3037,6 +3365,757 @@ function importPlansXlsx(file) {
   reader.readAsArrayBuffer(file);
 }
 
+// =================== 1С IMPORT ===================
+// Источник: 8 xlsx-выгрузок из 1С. Парсер строит 2-слойную модель: from1c.* в каждом клиенте.
+// CRM-only поля (events, comments, контакты, описание) защищены от перезаписи.
+
+const ONEC_FILE_TYPES = [
+  { key: 'partners',   re: /B2B\s*продаж/i,                label: 'Справочник партнёров (B2B)', required: true },
+  { key: 'inn',        re: /\(\s*ИНН\s*\)/i,                label: 'Справочник ИНН' },
+  { key: 'address',    re: /факт\.?\s*адрес/i,              label: 'Факт. адреса' },
+  { key: 'contracts',  re: /Договоры/i,                     label: 'Договоры (лимиты)' },
+  { key: 'agreements', re: /Соглашения/i,                   label: 'Соглашения (отсрочки)' },
+  { key: 'debt',       re: /Задолженност/i,                 label: 'Задолженность' },
+  { key: 'orders',     re: /Расшифровка\s*заказ/i,          label: 'Расшифровка заказов' },
+  { key: 'sales',      re: /Продаж[иь]\s*по\s*дн/i,         label: 'Продажи по дням' }
+];
+
+const ONEC_STAGE_MAP = {
+  '1) Контакт': 'contact',
+  '2) Переговоры': 'talks',
+  '3) Договор': 'contract',
+  '4) Первый заказ': 'firstorder',
+  '5) Активно работает': 'active',
+  '6) Отказ в работе': 'reject'
+};
+
+function onec_detect(filename) {
+  for (const t of ONEC_FILE_TYPES) if (t.re.test(filename)) return t.key;
+  return null;
+}
+
+function onec_readXlsx(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try { resolve(XLSX.read(e.target.result, { type: 'array', cellDates: true })); }
+      catch (err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function onec_rows(wb) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: null });
+}
+
+function onec_parseDate(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  const s = String(v).trim();
+  const m = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  return null;
+}
+
+function onec_num(v) {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).replace(/\s/g, '').trim();
+  if (!s) return 0;
+  // Формат "1,234.56" (US, запятые — разделители тысяч) vs "1234,56" (RU, запятая — десятичная)
+  if (s.indexOf('.') >= 0 && s.indexOf(',') >= 0) {
+    s = s.replace(/,/g, '');
+  } else if (s.indexOf(',') >= 0 && s.indexOf('.') < 0) {
+    s = s.replace(',', '.');
+  }
+  const n = Number(s);
+  return isFinite(n) ? n : 0;
+}
+
+// --- 8 parsers, каждый возвращает Map<partnerName, data> или массив ---
+
+function onec_parsePartners(rows) {
+  // Файл: «Справочник партнеров (B2B продажи)». Header row index 7 (двойной заголовок 7+8).
+  // Данные начинаются с r9. Фильтр: Клиент='Да' AND Поставщик!='Да'.
+  const map = new Map();
+  for (let i = 9; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const name = (r[3] || '').toString().trim();
+    if (!name) continue;
+    const isClient = (r[7] || '').toString().trim() === 'Да';
+    const isSupplier = (r[10] || '').toString().trim() === 'Да';
+    if (!isClient || isSupplier) continue;
+    const stage1c = ONEC_STAGE_MAP[(r[27] || '').toString().trim()] || null;
+    map.set(name, {
+      name,
+      reg_date: onec_parseDate(r[0]),
+      partner: name,
+      head_company: (r[5] || '').toString().trim() || null,
+      public_name: (r[6] || '').toString().trim() || null,
+      code: (r[8] || '').toString().trim() || null,
+      note1c: (r[9] || '').toString().trim() || null,           // «Комментарий» из 1С
+      primary_manager: (r[11] || '').toString().trim() || null,
+      entity_type: (r[12] || '').toString().trim() || null,     // Юр/Физлицо
+      price_type: (r[13] || '').toString().trim() || null,
+      activity: (r[15] || '').toString().trim() || (r[14] || '').toString().trim() || null,
+      cashback: (r[16] || '').toString().trim() || null,
+      main_competitor: (r[17] || '').toString().trim() || null,
+      wpart_connected: (r[18] || '').toString().trim() === 'Да',
+      otkh: (r[19] || '').toString().trim() === 'Да',
+      retro_bonus: (r[20] || '').toString().trim() === 'Да',
+      tested_product: (r[21] || '').toString().trim() === 'Да',
+      brand_competitor: (r[22] || '').toString().trim() || null,
+      price_competition: (r[23] || '').toString().trim() || null,
+      solvency: (r[24] || '').toString().trim() || null,
+      category: (r[25] || '').toString().trim() || null,
+      from_seller: (r[26] || '').toString().trim() === 'Да',
+      stage: stage1c
+    });
+  }
+  return map;
+}
+
+function onec_parseInn(rows) {
+  // Файл: «Справочник партнёров (ИНН)». Header row 6, данные с 8 (r7 «Наше предприятие»).
+  const map = new Map();
+  for (let i = 8; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const partner = (r[8] || '').toString().trim();
+    if (!partner || partner === 'Наше предприятие') continue;
+    if (!map.has(partner)) {
+      map.set(partner, {
+        short_name: (r[4] || '').toString().trim() || null,
+        head_contractor: (r[5] || '').toString().trim() || null,
+        inn: (r[6] || '').toString().trim() || null,
+        kpp: (r[7] || '').toString().trim() || null
+      });
+    }
+  }
+  return map;
+}
+
+function onec_parseAddress(rows) {
+  // Файл: «Справочник клиентов - факт.адрес». Header row 0, данные с 1.
+  const map = new Map();
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const partner = (r[0] || '').toString().trim();
+    if (!partner) continue;
+    map.set(partner, {
+      address_full: (r[1] || '').toString().trim() || null,
+      country: (r[2] || '').toString().trim() || null,
+      region: (r[3] || '').toString().trim() || null,
+      city: (r[4] || '').toString().trim() || null
+    });
+  }
+  return map;
+}
+
+function onec_parseContracts(rows) {
+  // Файл: «Договоры с клиентами (лимиты)». Header row 7, данные с 8.
+  // Колонки: 0=№док, 3=валюта, 5=№(краткий), 6=Контрагент(=Партнёр), 7=Статус, 9=Подписан, 10=НДС
+  // 11=№док полный, 13=Дата, 14=Тип(Закупка/Реализация), 17=Менеджер, 21=Лимит
+  const map = new Map();
+  for (let i = 8; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const partner = (r[6] || '').toString().trim();
+    if (!partner) continue;
+    const type = (r[14] || '').toString().trim();
+    // Для CRM нам важны только договоры Реализации (с клиентами, не закупки у поставщиков)
+    if (type && type !== 'Реализация') continue;
+    const contract = {
+      no: (r[5] || r[0] || '').toString().trim() || null,
+      date: onec_parseDate(r[13]),
+      currency: (r[3] || '').toString().trim() || 'RUB',
+      status: (r[7] || '').toString().trim() || null,
+      vat: (r[10] || '').toString().trim() || null,
+      manager: (r[17] || '').toString().trim() || null,
+      limit: onec_num(r[21])
+    };
+    const arr = map.get(partner) || [];
+    arr.push(contract);
+    map.set(partner, arr);
+  }
+  return map;
+}
+
+function onec_parseAgreements(rows) {
+  // Файл: «Соглашения с клиентами (отсрочка)». Header row 8, данные с 9.
+  // Колонки (на основе скана): 0=Спецификация, 3=Оплата, 4=База даты, 6=Партнёр, 7=%, 8=Дней
+  const map = new Map();
+  for (let i = 9; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const partner = (r[6] || '').toString().trim();
+    if (!partner) continue;
+    const existing = map.get(partner);
+    const newDays = onec_num(r[8]);
+    // Если несколько соглашений — берём с максимальной отсрочкой
+    if (!existing || newDays > existing.days) {
+      map.set(partner, {
+        spec: (r[0] || '').toString().trim() || null,
+        payment_rule: (r[3] || '').toString().trim() || null,
+        date_base: (r[4] || '').toString().trim() || null,
+        percent: onec_num(r[7]),
+        days: newDays
+      });
+    }
+  }
+  return map;
+}
+
+function onec_parseDebt(rows) {
+  // Файл: «Задолженность клиентов по срокам». Header row 9 (с подзаголовками 10-11), данные с 12.
+  // Колонки: 1=Клиент, 7=Менеджер, 9=Долг всего, 10=Доля%, 11=Просрочено, 12=%просрочки, 13=Дней
+  // 14=Наш долг (мы должны), 16-23 = aging buckets (Не просрочено / 1-2 / 3-14 / 15-29 / 30-44 / 45-59 / 60-179 / >180)
+  const map = new Map();
+  for (let i = 12; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const partner = (r[1] || '').toString().trim();
+    if (!partner) continue;
+    const entry = map.get(partner) || {
+      total: 0, overdue: 0, our_debt: 0,
+      aging: { not_overdue: 0, d1_2: 0, d3_14: 0, d15_29: 0, d30_44: 0, d45_59: 0, d60_179: 0, d180plus: 0 },
+      max_overdue_days: 0,
+      docs_count: 0
+    };
+    entry.total += onec_num(r[9]);
+    entry.overdue += onec_num(r[11]);
+    entry.our_debt += onec_num(r[14]);
+    entry.aging.not_overdue += onec_num(r[16]);
+    entry.aging.d1_2     += onec_num(r[17]);
+    entry.aging.d3_14    += onec_num(r[18]);
+    entry.aging.d15_29   += onec_num(r[19]);
+    entry.aging.d30_44   += onec_num(r[20]);
+    entry.aging.d45_59   += onec_num(r[21]);
+    entry.aging.d60_179  += onec_num(r[22]);
+    entry.aging.d180plus += onec_num(r[23]);
+    entry.max_overdue_days = Math.max(entry.max_overdue_days, onec_num(r[13]));
+    entry.docs_count++;
+    map.set(partner, entry);
+  }
+  return map;
+}
+
+function onec_parseOrders(rows) {
+  // Файл: «Расшифровка заказов клиентов». Header row 2, данные с 3.
+  // Колонки: 0=№заказа+дата, 1=Клиент(Партнёр), 2=Валюта, 3=Тип, 4=Статус(Закрыт/Открыт),
+  // 5=Условия(Самовывоз), 6=Менеджер, 7=Головное, 8=Сумма
+  const map = new Map();
+  for (let i = 3; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const partner = (r[1] || '').toString().trim();
+    if (!partner) continue;
+    const orderStr = (r[0] || '').toString();
+    // Извлекаем дату из строки вида "Заказ клиента 00ЦБ-000004 от 18.01.2024..."
+    const dm = orderStr.match(/от\s+(\d{1,2}\.\d{1,2}\.\d{4})/);
+    const date = dm ? onec_parseDate(dm[1]) : null;
+    const amount = onec_num(r[8]);
+    const entry = map.get(partner) || { count: 0, total: 0, closed: 0, open: 0, last_date: null };
+    entry.count++;
+    entry.total += amount;
+    const status = (r[4] || '').toString().trim();
+    if (status === 'Закрыт') entry.closed++; else entry.open++;
+    if (date && (!entry.last_date || date > entry.last_date)) entry.last_date = date;
+    map.set(partner, entry);
+  }
+  return map;
+}
+
+function onec_parseSales(rows) {
+  // Файл: «Продажи по дням». Header row 2, данные с 3. Колонки:
+  // 0=Дата (только в верхней строке группы), 3=Артикул, 4=Номенклатура, 5=Бренд,
+  // 6=Покупатель(Партнёр), 7=Головное, 8=Заказ, 9=Категория, 10=Менеджер,
+  // 12=Кол-во, 13=Сумма, 14=Себест.
+  const map = new Map();
+  let currentDate = null;
+  for (let i = 3; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const dateCell = onec_parseDate(r[0]);
+    if (dateCell) currentDate = dateCell;
+    const partner = (r[6] || '').toString().trim();
+    if (!partner || !currentDate) continue;
+    const amount = onec_num(r[13]);
+    const cost = onec_num(r[14]);
+    const qty = onec_num(r[12]);
+    const year = currentDate.slice(0, 4);
+    const month = currentDate.slice(0, 7);     // YYYY-MM
+    const entry = map.get(partner) || {
+      total: 0, total_cost: 0, by_year: {}, by_month: {},
+      last_date: null, txn_count: 0, transactions: []
+    };
+    entry.total += amount;
+    entry.total_cost += cost;
+    entry.by_year[year] = (entry.by_year[year] || 0) + amount;
+    entry.by_month[month] = (entry.by_month[month] || 0) + amount;
+    if (!entry.last_date || currentDate > entry.last_date) entry.last_date = currentDate;
+    // Пропускаем строки с нулевой суммой (служебные / не отгружено / сторно с 0)
+    if (amount === 0) continue;
+    entry.txn_count++;
+    entry.transactions.push({
+      date: currentDate,
+      article: (r[3] || '').toString().trim(),
+      nomenclature: (r[4] || '').toString().trim(),
+      brand: (r[5] || '').toString().trim(),
+      qty,
+      amount,
+      price: qty ? amount / qty : amount
+    });
+    map.set(partner, entry);
+  }
+  // Финал: сортируем по дате desc. Лимит не применяем — все транзакции.
+  // Если localStorage переполнится — persist() сам обрежет и пометит _truncated.
+  map.forEach((entry) => {
+    entry.transactions.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  });
+  return map;
+}
+
+const ONEC_PARSERS = {
+  partners: onec_parsePartners,
+  inn: onec_parseInn,
+  address: onec_parseAddress,
+  contracts: onec_parseContracts,
+  agreements: onec_parseAgreements,
+  debt: onec_parseDebt,
+  orders: onec_parseOrders,
+  sales: onec_parseSales
+};
+
+// Собирает данные из 8 источников в единые объекты клиентов.
+// Если allowedManagers передан — фильтрует партнёров по primary_manager.
+// Возвращает { clients, skipReport: { byUnknownManager: {mgr → count}, totalSkipped } }
+function onec_buildClients(parsed, allowedManagers /* Set | null */) {
+  if (!parsed.partners) throw new Error('Не загружен главный файл «Справочник партнёров B2B»');
+  const out = [];
+  const skipReport = { byUnknownManager: {}, totalSkipped: 0, noManager: 0 };
+  parsed.partners.forEach((p, name) => {
+    // Фильтр по менеджерам из CRM
+    if (allowedManagers) {
+      const mgr = (p.primary_manager || '').trim();
+      if (!mgr) {
+        // партнёр без менеджера — пропускаем
+        skipReport.noManager++;
+        skipReport.totalSkipped++;
+        return;
+      }
+      if (!allowedManagers.has(mgr)) {
+        skipReport.byUnknownManager[mgr] = (skipReport.byUnknownManager[mgr] || 0) + 1;
+        skipReport.totalSkipped++;
+        return;
+      }
+    }
+    const inn  = parsed.inn        ? parsed.inn.get(name)        : null;
+    const addr = parsed.address    ? parsed.address.get(name)    : null;
+    const con  = parsed.contracts  ? parsed.contracts.get(name)  : null;
+    const agr  = parsed.agreements ? parsed.agreements.get(name) : null;
+    const debt = parsed.debt       ? parsed.debt.get(name)       : null;
+    const ord  = parsed.orders     ? parsed.orders.get(name)     : null;
+    const sal  = parsed.sales      ? parsed.sales.get(name)      : null;
+    out.push({
+      name,
+      from1c: {
+        last_synced: new Date().toISOString(),
+        ...p,
+        ...(inn || {}),
+        ...(addr || {}),
+        contracts: con || [],
+        agreement: agr || null,
+        debt: debt || null,
+        orders: ord || null,
+        sales: sal || null
+      }
+    });
+  });
+  return { clients: out, skipReport };
+}
+
+// Получает Set имён менеджеров из state.users
+function onec_crmManagers() {
+  return new Set((state.users || []).filter(u => u.manager).map(u => u.manager));
+}
+
+// Merge: сохраняет CRM-only поля, обновляет 1С-слой
+function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
+  const stats = { added: 0, updated: 0, archived: 0, total_incoming: newClients.length };
+  const incomingByName = new Map(newClients.map(c => [c.name.toLowerCase(), c]));
+
+  if (mode === 'replace') {
+    // Удаляем тестовые (без from1c) ДО построения карты, иначе мы будем «обновлять» удалённые объекты
+    state.clients = state.clients.filter(c => c.from1c);
+  }
+  const localByName = new Map(state.clients.map(c => [(c.name||'').toLowerCase(), c]));
+
+  // Выбирает «основной» договор для отображения в плоских полях карточки/раздела «Договоры»
+  function pickPrimaryContract(contracts) {
+    if (!contracts || !contracts.length) return null;
+    const active = contracts.filter(x => x.status === 'Действует');
+    const pool = active.length ? active : contracts;
+    // Сортируем по дате (новейший первый)
+    const sorted = [...pool].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return sorted[0];
+  }
+
+  // Обновить существующих или добавить новых
+  newClients.forEach(nc => {
+    const key = nc.name.toLowerCase();
+    const local = localByName.get(key);
+    const from1c = nc.from1c;
+    const primary = pickPrimaryContract(from1c.contracts);
+    if (local) {
+      // Слияние: from1c полностью обновляется, плоские поля — выборочно
+      local.from1c = from1c;
+      // Перебиваем (1С — источник истины)
+      if (from1c.primary_manager) local.manager = from1c.primary_manager;
+      if (from1c.activity && !local.activityManual) local.activity = from1c.activity;
+      if (from1c.inn) local.inn = from1c.inn;
+      if (from1c.reg_date) local.reg_date = from1c.reg_date;
+      if (from1c.city) local.city = local.cityManual || from1c.city;
+      if (from1c.address_full) local.address = local.addressManual || from1c.address_full;
+      // Финансы — всегда из 1С (это факт)
+      local.revenue = from1c.sales ? from1c.sales.total : (local.revenue || 0);
+      local.debt = from1c.debt ? from1c.debt.total : 0;
+      local.overdue = from1c.debt ? from1c.debt.overdue : 0;
+      // Договор — копируем актуальный из 1С в плоские поля (для совместимости с renderContracts)
+      if (primary) {
+        if (!local.contract_noManual) local.contract_no = primary.no || '';
+        if (!local.contract_dateManual) local.contract_date = primary.date || '';
+        local.contract_signed = primary.status === 'Действует';
+      }
+      // Снимаем флаг архив-исчезновения, если клиент снова в выгрузке
+      delete local.from1c_archived;
+      stats.updated++;
+    } else {
+      // Новый клиент
+      const newClient = {
+        id: 'c_p_' + (from1c.code || uid()),
+        name: nc.name,
+        manager: from1c.primary_manager || '',
+        activity: from1c.activity || 'Другое',
+        inn: from1c.inn || '',
+        reg_date: from1c.reg_date || new Date().toISOString().slice(0,10),
+        city: from1c.city || '',
+        address: from1c.address_full || '',
+        revenue: from1c.sales ? from1c.sales.total : 0,
+        debt: from1c.debt ? from1c.debt.total : 0,
+        overdue: from1c.debt ? from1c.debt.overdue : 0,
+        contract_no: primary ? (primary.no || '') : '',
+        contract_date: primary ? (primary.date || '') : '',
+        contract_signed: primary ? primary.status === 'Действует' : false,
+        from1c
+      };
+      state.clients.push(newClient);
+      stats.added++;
+    }
+  });
+
+  // Помечаем «исчезнувших» (были в from1c, теперь нет)
+  state.clients.forEach(c => {
+    if (!c.from1c) return; // тестовые не трогаем
+    if (!incomingByName.has((c.name||'').toLowerCase())) {
+      if (!c.from1c_archived) {
+        c.from1c_archived = true;
+        c.stageManual = 'reject';
+        stats.archived++;
+      }
+    }
+  });
+
+  state.lastImportedAt = new Date().toISOString();
+  state.from1cImportStats = stats;
+  persist();
+  return stats;
+}
+
+// =================== 1С: АВТО-ИМПОРТ из локальной папки _data/ ===================
+// Сценарий: пользователь запустил start_crm.ps1 → скрипт скопировал xlsx в _data/ →
+// сервер стартанул, CRM открыта на http://localhost — проверяем папку и тихо импортируем.
+
+const ONEC_AUTOLOAD_FILES = [
+  'Справочник партнеров (B2B продажи) XLSX.xlsx',
+  'Справочник партнеров (ИНН) XLSX.xlsx',
+  'Справочник клиентов - факт.адрес.xlsx',
+  'Договоры с клиентами (лимиты) XLSX.xlsx',
+  'Соглашения с клиентами (отсрочка) XLSX.xlsx',
+  'Задолженность клиентов по срокам - для Power BI (факт данные) XLSX.xlsx',
+  'Расшифровка заказов клиентов.xlsx',
+  'Продажи по дням (для анализа) XLSX.xlsx'
+];
+
+async function onec_dataFolderAvailable() {
+  // file:// не умеет fetch к относительным путям → авто-импорт невозможен
+  if (location.protocol === 'file:') return false;
+  try {
+    const r = await fetch('./_data/' + encodeURIComponent(ONEC_AUTOLOAD_FILES[0]), { method: 'HEAD' });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+function onec_toast(msg, type='info', durationMs=4000) {
+  let t = document.getElementById('onec-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'onec-toast';
+    t.style.cssText = 'position:fixed; right:20px; bottom:20px; padding:12px 16px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.15); font-size:13px; font-weight:600; z-index:9999; transition:opacity 0.25s, transform 0.25s; max-width:380px;';
+    document.body.appendChild(t);
+  }
+  const color = type === 'success' ? '#16A34A' : type === 'error' ? '#DC2626' : '#3B82F6';
+  t.style.background = 'white';
+  t.style.border = `1px solid ${color}`;
+  t.style.color = color;
+  t.innerHTML = msg;
+  t.style.opacity = '1';
+  t.style.transform = 'translateY(0)';
+  clearTimeout(onec_toast._t);
+  if (durationMs) onec_toast._t = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(8px)'; }, durationMs);
+}
+
+async function onec_autoImport(opts = {}) {
+  const silent = opts.silent !== false;
+  if (!await onec_dataFolderAvailable()) return false;
+  if (!silent) onec_toast('🔄 Загрузка свежих данных из 1С…', 'info', 0);
+
+  const parsed = {};
+  const errors = [];
+  for (const fn of ONEC_AUTOLOAD_FILES) {
+    try {
+      const r = await fetch('./_data/' + encodeURIComponent(fn));
+      if (!r.ok) { errors.push(`${fn}: ${r.status}`); continue; }
+      const ab = await r.arrayBuffer();
+      const key = onec_detect(fn);
+      if (!key) continue;
+      parsed[key] = ONEC_PARSERS[key](onec_rows(XLSX.read(ab, { type: 'array', cellDates: true })));
+    } catch (e) { errors.push(`${fn}: ${e.message}`); }
+  }
+  if (!parsed.partners) {
+    onec_toast('⚠ Не удалось распарсить файлы 1С', 'error');
+    return false;
+  }
+
+  const allowed = onec_crmManagers();
+  const built = onec_buildClients(parsed, allowed.size ? allowed : null);
+  const stats = onec_mergeClients(built.clients, 'replace');
+  state.lastAutoImportAt = new Date().toISOString();
+  persist();
+  renderNav();
+  renderView();
+
+  let msg = `✓ <b>Импорт завершён:</b><br>+${stats.added} новых, ${stats.updated} обновлено`;
+  if (stats.archived) msg += `, ${stats.archived} в архив`;
+  if (built.skipReport.totalSkipped) msg += `<br><span style="font-weight:400; color:#92400E;">⚠ Пропущено ${built.skipReport.totalSkipped} — менеджеров нет в CRM</span>`;
+  onec_toast(msg, 'success', 6000);
+  return true;
+}
+
+// UI: основной воркфлоу импорта
+async function onec_runImport() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.accept = '.xlsx,.xls';
+  input.onchange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    onec_processFiles(files);
+  };
+  input.click();
+}
+
+async function onec_processFiles(files) {
+  // Показать прогресс
+  const layer = document.getElementById('modal-layer');
+  const modal = document.getElementById('modal-content');
+  modal.className = 'modal modal-wide';
+  modal.innerHTML = `
+    <div style="padding:32px; text-align:center;">
+      <div style="font-size:32px; margin-bottom:12px;">📥</div>
+      <h3 style="margin:0 0 16px;">Парсинг файлов 1С…</h3>
+      <div id="onec-progress" style="font-size:13px; color:var(--text-muted);">Обработано: 0 из ${files.length}</div>
+    </div>`;
+  layer.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+
+  // Распознать и разобрать
+  const matched = {};
+  const errors = [];
+  const fileReport = [];
+  let processed = 0;
+  for (const f of files) {
+    const key = onec_detect(f.name);
+    if (!key) {
+      errors.push(`Не опознан: ${f.name}`);
+      fileReport.push({ file: f.name, key: null, ok: false, error: 'не опознан' });
+      processed++;
+      continue;
+    }
+    if (matched[key]) {
+      errors.push(`Дубликат типа «${key}»: ${f.name}`);
+      processed++;
+      continue;
+    }
+    try {
+      const wb = await onec_readXlsx(f);
+      const rows = onec_rows(wb);
+      const data = ONEC_PARSERS[key](rows);
+      matched[key] = data;
+      fileReport.push({ file: f.name, key, ok: true, rows: rows.length, items: data.size || data.length || 0 });
+    } catch (err) {
+      errors.push(`${f.name}: ${err.message}`);
+      fileReport.push({ file: f.name, key, ok: false, error: err.message });
+    }
+    processed++;
+    const pg = document.getElementById('onec-progress');
+    if (pg) pg.textContent = `Обработано: ${processed} из ${files.length}`;
+  }
+
+  if (!matched.partners) {
+    onec_showError('Главный файл «Справочник партнёров B2B» не найден. Обязателен для импорта.', errors, fileReport);
+    return;
+  }
+
+  // Собираем единый список клиентов с фильтром по менеджерам из CRM
+  const allowedManagers = onec_crmManagers();
+  let buildResult;
+  try { buildResult = onec_buildClients(matched, allowedManagers.size ? allowedManagers : null); }
+  catch (err) { onec_showError(err.message, errors, fileReport); return; }
+
+  // Превью
+  onec_showPreview(buildResult.clients, matched, errors, fileReport, buildResult.skipReport);
+}
+
+function onec_showError(msg, errors, fileReport) {
+  document.getElementById('modal-content').innerHTML = `
+    <div style="padding:24px;">
+      <h3 style="margin:0 0 12px; color:var(--danger);">⚠ ${escapeHtml(msg)}</h3>
+      ${errors.length ? `<div style="background:#FEE2E2; padding:12px; border-radius:8px; font-size:13px;">${errors.map(e => `• ${escapeHtml(e)}`).join('<br>')}</div>` : ''}
+      ${fileReport.length ? `<div style="margin-top:12px; font-size:12px;"><b>Файлы:</b><br>${fileReport.map(f => `${f.ok?'✓':'✗'} ${escapeHtml(f.file)} ${f.key?`(${f.key})`:''} ${f.error?'— '+escapeHtml(f.error):''}`).join('<br>')}</div>` : ''}
+      <div style="margin-top:16px; text-align:right;"><button class="btn" onclick="closeModal()">Закрыть</button></div>
+    </div>`;
+}
+
+function onec_showPreview(newClients, matched, errors, fileReport, skipReport) {
+  // Сравнить с локальной базой
+  const incomingNames = new Set(newClients.map(c => c.name.toLowerCase()));
+  const localFrom1c = state.clients.filter(c => c.from1c);
+  const willBeAdded = newClients.filter(c => !state.clients.find(lc => (lc.name||'').toLowerCase() === c.name.toLowerCase())).length;
+  const willBeUpdated = newClients.length - willBeAdded;
+  const willBeArchived = localFrom1c.filter(c => !incomingNames.has((c.name||'').toLowerCase()) && !c.from1c_archived).length;
+  const testClientsCount = state.clients.filter(c => !c.from1c).length;
+
+  const totalRevenue = newClients.reduce((s, c) => s + (c.from1c.sales ? c.from1c.sales.total : 0), 0);
+  const totalDebt = newClients.reduce((s, c) => s + (c.from1c.debt ? c.from1c.debt.total : 0), 0);
+  const totalOverdue = newClients.reduce((s, c) => s + (c.from1c.debt ? c.from1c.debt.overdue : 0), 0);
+
+  // Skip report — пропущенные по фильтру менеджера
+  const sr = skipReport || { byUnknownManager: {}, totalSkipped: 0, noManager: 0 };
+  const unknownMgrs = Object.entries(sr.byUnknownManager || {}).sort((a,b) => b[1]-a[1]);
+
+  document.getElementById('modal-content').innerHTML = `
+    <div style="padding:0;">
+      <div style="background:linear-gradient(135deg, #64748B 0%, #475569 100%); color:white; padding:24px 32px;">
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div style="font-size:36px;">📥</div>
+          <div>
+            <h3 style="margin:0 0 4px; font-size:22px;">Импорт из 1С</h3>
+            <div style="font-size:13px; opacity:.85;">Найдено клиентов: <b>${newClients.length}</b> • Загружено файлов: ${Object.keys(matched).length} из 8</div>
+          </div>
+          <button class="modal-close" onclick="closeModal()" style="margin-left:auto; color:white;">✕</button>
+        </div>
+      </div>
+
+      <div style="padding:24px 32px;">
+        <div class="grid grid-3" style="margin-bottom:20px;">
+          <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">Будет добавлено</div><div class="kpi-value">+${willBeAdded}</div><div class="kpi-sub">новых клиентов</div></div>
+          <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Будет обновлено</div><div class="kpi-value">${willBeUpdated}</div><div class="kpi-sub">существующих</div></div>
+          <div class="kpi"><div class="kpi-accent" style="background:var(--warning)"></div><div class="kpi-label">В архив</div><div class="kpi-value">${willBeArchived}</div><div class="kpi-sub">исчезли из 1С</div></div>
+        </div>
+
+        <div class="grid grid-3" style="margin-bottom:20px;">
+          <div class="kpi"><div class="kpi-accent" style="background:var(--wp-yellow)"></div><div class="kpi-label">Σ выручка</div><div class="kpi-value">${fmt.rub(totalRevenue)}</div><div class="kpi-sub">за период данных</div></div>
+          <div class="kpi"><div class="kpi-accent" style="background:#8B5CF6"></div><div class="kpi-label">Σ долг</div><div class="kpi-value">${fmt.rub(totalDebt)}</div><div class="kpi-sub">по 1С</div></div>
+          <div class="kpi"><div class="kpi-accent" style="background:var(--danger)"></div><div class="kpi-label">Σ просрочено</div><div class="kpi-value">${fmt.rub(totalOverdue)}</div><div class="kpi-sub">${totalDebt? Math.round(totalOverdue/totalDebt*100) : 0}% от долга</div></div>
+        </div>
+
+        <div style="background:#F9FAFB; border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:16px;">
+          <div style="font-weight:600; font-size:13px; margin-bottom:8px;">Файлы:</div>
+          <div style="font-size:12px; line-height:1.7;">
+            ${ONEC_FILE_TYPES.map(t => {
+              const r = fileReport.find(f => f.key === t.key);
+              if (!r) return `<div style="color:var(--text-soft);">○ ${escapeHtml(t.label)} <span style="color:var(--text-soft);">— не загружен${t.required?' (обязательный)':''}</span></div>`;
+              if (!r.ok) return `<div style="color:var(--danger);">✗ ${escapeHtml(t.label)} — ${escapeHtml(r.error||'')}</div>`;
+              return `<div style="color:#166534;">✓ ${escapeHtml(t.label)} <span style="color:var(--text-muted);">— ${r.items} записей</span></div>`;
+            }).join('')}
+          </div>
+          ${errors.length ? `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border); color:var(--danger); font-size:12px;">${errors.map(e => `⚠ ${escapeHtml(e)}`).join('<br>')}</div>` : ''}
+        </div>
+
+        ${sr.totalSkipped > 0 ? `
+        <details class="card" style="background:#FEF3C7; border:1px solid #F59E0B; padding:0; margin-bottom:16px;" open>
+          <summary style="cursor:pointer; padding:12px 14px; font-size:13px; font-weight:600; color:#92400E; list-style:none; display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">⚠</span>
+            Пропущено ${sr.totalSkipped} клиентов — их менеджеры не заведены в CRM
+            <span style="margin-left:auto; font-size:11px; color:#92400E; font-weight:400;">кликните, чтобы свернуть</span>
+          </summary>
+          <div style="padding:0 14px 14px; font-size:12px; color:#78350F;">
+            <div style="margin-bottom:10px;">Эти клиенты в 1С привязаны к менеджерам, которых нет в <b>Настройки → Доступы</b>. Чтобы импортировать их — заведите менеджера и повторите импорт.</div>
+            ${unknownMgrs.length ? `
+              <div style="background:white; border-radius:6px; padding:8px 12px;">
+                <div style="font-weight:600; margin-bottom:6px;">Кого добавить в CRM:</div>
+                ${unknownMgrs.slice(0, 12).map(([m, n]) => `<div style="padding:3px 0;">• <b>${escapeHtml(m)}</b> — ${n} ${n===1?'клиент':n<5?'клиента':'клиентов'}</div>`).join('')}
+                ${unknownMgrs.length > 12 ? `<div style="padding-top:6px; color:var(--text-muted);">... и ещё ${unknownMgrs.length - 12} менеджер(ов)</div>` : ''}
+              </div>
+            ` : ''}
+            ${sr.noManager ? `<div style="margin-top:8px;">+ <b>${sr.noManager}</b> партнёров вообще без менеджера в 1С — тоже пропущены.</div>` : ''}
+          </div>
+        </details>
+        ` : ''}
+
+        ${testClientsCount > 0 ? `
+        <div style="background:#FEF3C7; border-left:3px solid var(--wp-yellow); padding:12px 14px; border-radius:6px; margin-bottom:16px; font-size:13px;">
+          <b>В CRM есть ${testClientsCount} тестовых клиентов</b> (без привязки к 1С). При импорте они <b>будут удалены</b> (выбран режим «полная замена»).
+        </div>
+        ` : ''}
+
+        <div style="background:#F0F9FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px 14px; margin-bottom:20px; font-size:12px; color:#1E40AF;">
+          ℹ <b>Что защищено от перезаписи:</b> комментарии и события (timeline), длинное описание клиента, телефоны / email / WhatsApp / Telegram, контактное лицо, загруженные файлы, ручные override-этапы.
+          <br>📍 <b>База «Полевые продажи» (ТП) — отдельная.</b> Импорт из 1С её не трогает: клиенты, собранные торговыми представителями, и план визитов остаются как есть.
+        </div>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+          <button class="btn" onclick="closeModal()">Отмена</button>
+          <button class="btn btn-primary" id="onec-apply">Импортировать ${newClients.length} клиентов</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('onec-apply').onclick = () => {
+    const btn = document.getElementById('onec-apply');
+    btn.disabled = true; btn.textContent = 'Применяю…';
+    setTimeout(() => {
+      const stats = onec_mergeClients(newClients, 'replace');
+      onec_showSuccess(stats);
+    }, 50);
+  };
+}
+
+function onec_showSuccess(stats) {
+  document.getElementById('modal-content').innerHTML = `
+    <div style="padding:32px; text-align:center;">
+      <div style="font-size:48px; margin-bottom:12px;">🎉</div>
+      <h3 style="margin:0 0 16px;">Импорт завершён</h3>
+      <div class="grid grid-3" style="margin-bottom:20px;">
+        <div><div style="font-size:26px; font-weight:700; color:var(--success);">+${stats.added}</div><div style="font-size:12px; color:var(--text-muted);">добавлено</div></div>
+        <div><div style="font-size:26px; font-weight:700; color:var(--info);">${stats.updated}</div><div style="font-size:12px; color:var(--text-muted);">обновлено</div></div>
+        <div><div style="font-size:26px; font-weight:700; color:var(--text-muted);">${stats.archived}</div><div style="font-size:12px; color:var(--text-muted);">в архив</div></div>
+      </div>
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Всего клиентов из 1С в базе: <b>${stats.total_incoming}</b>. Данные сохранены в браузере.</div>
+      <button class="btn btn-primary" onclick="closeModal(); renderView();">Открыть CRM</button>
+    </div>`;
+}
+
 function renderAdmin() {
   if (state.user.role !== 'admin') {
     return '<div class="empty-state">Раздел доступен только администратору</div>';
@@ -3175,6 +4254,36 @@ function openClientModal(clientId) {
   const managers = uniqueManagers();
   const acts = uniqueActivities();
 
+  const waRaw = (c.wa || c.phone || '').trim();
+  const waDigits = waRaw.replace(/\D/g, '');
+  const waLink = waDigits ? (waRaw.startsWith('http') ? waRaw : `https://wa.me/${waDigits}`) : '';
+  const tgRaw = (c.tg || '').trim();
+  const tgHandle = tgRaw.replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '');
+  const tgLink = tgRaw ? (tgRaw.startsWith('http') ? tgRaw : `https://t.me/${tgHandle}`) : '';
+  const contactBtnBase = 'display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; color:white; text-decoration:none; font-size:16px; transition:transform 0.12s, filter 0.12s;';
+  const contactBtns = (tgLink || waLink || c.email) ? `
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          ${tgLink ? `<a href="${escapeHtml(tgLink)}" target="_blank" rel="noopener noreferrer" title="Telegram: ${escapeHtml(c.tg)}" style="${contactBtnBase} background:#2AABEE;" onmouseover="this.style.filter='brightness(1.1)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.filter=''; this.style.transform=''">✈️</a>` : ''}
+          ${waLink ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener noreferrer" title="WhatsApp: ${escapeHtml(c.wa || c.phone)}" style="${contactBtnBase} background:#25D366;" onmouseover="this.style.filter='brightness(1.1)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.filter=''; this.style.transform=''">💬</a>` : ''}
+          ${c.email ? `<a href="mailto:${escapeHtml(c.email)}" title="Написать: ${escapeHtml(c.email)}" style="${contactBtnBase} background:rgba(255,255,255,0.18);" onmouseover="this.style.background='rgba(255,255,255,0.32)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(255,255,255,0.18)'; this.style.transform=''">✉️</a>` : ''}
+        </div>` : '';
+
+  // KPI-чипы в шапке (показываем только при наличии 1С-данных или ненулевых значений)
+  const revenue = c.revenue || 0;
+  const debt = c.debt || 0;
+  const overdue = c.overdue || 0;
+  const overduePct = debt ? Math.round(overdue/debt*100) : 0;
+  const deferralDays = c.from1c && c.from1c.agreement ? c.from1c.agreement.days : 0;
+  const limit = c.from1c && c.from1c.contracts && c.from1c.contracts.length ? (c.from1c.contracts.find(x => x.status === 'Действует') || c.from1c.contracts[0]).limit : 0;
+  const hdrKpiStyle = (bg) => `display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:${bg}; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap;`;
+  const headerKpis = (revenue || debt || deferralDays || limit) ? `
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          ${revenue ? `<span style="${hdrKpiStyle('rgba(255,199,44,0.18)')}; color:#FCD34D;">💰 Выручка <b style="color:white;">${fmt.rub(revenue)}</b></span>` : ''}
+          ${debt ? `<span style="${hdrKpiStyle('rgba(220,38,38,0.18)')}; color:#FCA5A5;">🔴 Долг <b style="color:white;">${fmt.rub(debt)}</b>${overduePct ? ` <span style="opacity:.8;">(${overduePct}% просрочено)</span>` : ''}</span>` : ''}
+          ${deferralDays ? `<span style="${hdrKpiStyle('rgba(59,130,246,0.18)')}; color:#93C5FD;">⏱ Отсрочка <b style="color:white;">${deferralDays} дн</b></span>` : ''}
+          ${limit ? `<span style="${hdrKpiStyle('rgba(139,92,246,0.2)')}; color:#C4B5FD;">💳 Лимит <b style="color:white;">${fmt.rub(limit)}</b></span>` : ''}
+        </div>` : '';
+
   openModal(`
     <div class="client-header">
       <div class="client-header-avatar">${fmt.initials(c.name) || '?'}</div>
@@ -3185,20 +4294,27 @@ function openClientModal(clientId) {
           <span>📅 в базе с ${fmt.dateLong(c.reg_date)}</span>
           <span>⏱ ${fmt.daysAgo(c.reg_date)}</span>
           ${c.inn ? `<span>🔢 ИНН ${escapeHtml(c.inn)}</span>` : ''}
+          ${c.from1c && c.from1c.city ? `<span>📍 ${escapeHtml(c.from1c.city)}${c.from1c.region ? ', ' + escapeHtml(c.from1c.region) : ''}</span>` : ''}
         </div>
         <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
           ${stageChip(sgInfo.stage)}
-          <span class="chip chip-cat-${catInfo.category}">Категория ${catInfo.category}</span>
+          <span class="chip chip-cat-${catInfo.category}" title="Категория клиента">Категория ${catInfo.category}</span>
           ${c.activity ? `<span class="chip chip-activity">${escapeHtml(c.activity)}</span>` : ''}
           ${c.contract_signed ? '<span class="chip chip-success">Договор подписан</span>' : ''}
+          ${c.from1c_archived ? '<span class="chip chip-danger" title="Клиент исчез из последней выгрузки 1С">⚠ Архив (нет в 1С)</span>' : ''}
         </div>
+        ${headerKpis}
+        ${contactBtns}
       </div>
       <button class="modal-close" id="m-close" style="color:white;">✕</button>
     </div>
     <div class="client-tabs">
       <button class="client-tab active" data-tab="overview">Карточка</button>
       <button class="client-tab" data-tab="sales">Продажи</button>
+      <button class="client-tab" data-tab="debt">💰 ПДЗ${(c.overdue > 0) ? ` <span class="myday-tab-count" style="margin-left:2px; background:rgba(220,38,38,0.18); color:var(--danger);">!</span>` : ''}</button>
       <button class="client-tab" data-tab="contract">Договор</button>
+      <button class="client-tab" data-tab="files">📁 Файлы${(c.files && c.files.length) ? ` <span class="myday-tab-count" style="margin-left:2px;">${c.files.length}</span>` : ''}</button>
+      <button class="client-tab" data-tab="settings">⚙ Настройки</button>
     </div>
     <div class="modal-body" id="cm-body"></div>
     <div class="modal-footer">
@@ -3212,13 +4328,21 @@ function openClientModal(clientId) {
     const body = document.getElementById('cm-body');
     if (activeTab === 'overview') {
       body.innerHTML = renderClientOverview(c, sgInfo, catInfo, managers, acts);
-      // Wire activity sub-section
       bindEmbeddedTimeline(c);
+      bindClientFiles(c);
     } else if (activeTab === 'sales') {
       body.innerHTML = renderSalesTab(c);
       setTimeout(() => initSalesChart(c), 0);
     } else if (activeTab === 'contract') {
       body.innerHTML = renderContractTab(c);
+    } else if (activeTab === 'debt') {
+      body.innerHTML = renderClientDebtTab(c);
+    } else if (activeTab === 'files') {
+      body.innerHTML = renderClientFilesTab(c);
+      bindClientFiles(c);
+    } else if (activeTab === 'settings') {
+      body.innerHTML = renderClientSettings(c, sgInfo, catInfo, managers);
+      bindClientSettings(c);
     }
   }
   renderTab();
@@ -3241,27 +4365,32 @@ function openClientModal(clientId) {
     };
   }
   document.getElementById('cm-save').onclick = () => {
-    // Read overview fields IF they exist (when on overview tab)
     function val(id) { const el = document.getElementById(id); return el ? el.value : null; }
     const updates = {};
+    // Block "Клиент"
     if (val('ci-name') !== null) updates.name = val('ci-name').trim();
-    if (val('ci-name1c') !== null) updates.name_1c = val('ci-name1c').trim();
     if (val('ci-inn') !== null) updates.inn = val('ci-inn').trim();
-    if (val('ci-manager') !== null) updates.manager = val('ci-manager');
     if (val('ci-activity') !== null) updates.activity = val('ci-activity');
-    if (val('ci-cat-manual') !== null) updates.categoryManual = val('ci-cat-manual') || null;
-    if (val('ci-solv') !== null) updates.solvency = val('ci-solv') || null;
     if (val('ci-reg') !== null) updates.reg_date = val('ci-reg');
+    if (val('ci-price') !== null) updates.price_type = val('ci-price');
+    if (val('ci-region') !== null) updates.region = val('ci-region');
+    if (val('ci-city') !== null) updates.city = val('ci-city');
+    if (val('ci-addr') !== null) updates.address = val('ci-addr');
+    if (val('ci-comment') !== null) updates.comment = val('ci-comment');
+    // Block "Контакты"
     if (val('ci-contact-name') !== null) updates.contact_name = val('ci-contact-name');
+    if (val('ci-position') !== null) updates.position = val('ci-position');
     if (val('ci-phone') !== null) updates.phone = val('ci-phone');
     if (val('ci-email') !== null) updates.email = val('ci-email');
-    if (val('ci-addr') !== null) updates.address = val('ci-addr');
-    if (val('ci-city') !== null) updates.city = val('ci-city');
+    if (val('ci-wa') !== null) updates.wa = val('ci-wa');
+    if (val('ci-tg') !== null) updates.tg = val('ci-tg');
+    // Block "Флаги работы"
     if (val('ci-comp') !== null) updates.competitor = val('ci-comp');
-    if (val('ci-price') !== null) updates.price_type = val('ci-price');
+    // Settings tab — override-ы
     if (val('ci-stage-manual') !== null) updates.stageManual = val('ci-stage-manual') || null;
-    if (val('ci-comment') !== null) updates.comment = val('ci-comment');
-    // contract tab
+    if (val('ci-cat-manual') !== null) updates.categoryManual = val('ci-cat-manual') || null;
+    if (val('ci-manager') !== null) updates.manager = val('ci-manager');
+    // Contract tab
     if (val('cc-no') !== null) updates.contract_no = val('cc-no');
     if (val('cc-date') !== null) updates.contract_date = val('cc-date');
     if (val('cc-signed') !== null) updates.contract_signed = val('cc-signed') === '1';
@@ -3277,94 +4406,353 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
   const priceOptions = ['', ...PRICE_TYPES].map(p =>
     `<option value="${escapeHtml(p)}" ${(c.price_type||'')===p?'selected':''}>${p ? escapeHtml(p) : '— не выбрано —'}</option>`
   ).join('');
-  return `
-    <div class="client-card-grid">
 
-      <!-- KEY FIELDS — always visible -->
-      <div class="info-grid-2col" style="margin-bottom: 4px;">
-        <label class="field-row"><span>Название клиента</span><input id="ci-name" value="${escapeHtml(c.name||'')}" placeholder="ООО «Компания»"></label>
-        <label class="field-row"><span>ИНН</span><input id="ci-inn" value="${escapeHtml(c.inn||'')}" placeholder="10 или 12 цифр"></label>
+  // Флаги работы (из 1С + ручные)
+  const f1c = c.from1c || {};
+  const flagYes = (v) => v === true || v === 'Да' ? '✅' : '➖';
+
+  return `
+    <div class="client-overview-grid">
+      <!-- LEFT COLUMN — 55% -->
+      <div class="client-overview-left">
+
+        <!-- BLOCK: Клиент (включает описание) -->
+        <div class="client-block">
+          <div class="client-block-title">🏢 Клиент</div>
+          <div class="info-grid-2col">
+            <label class="field-row"><span>Название</span><input id="ci-name" value="${escapeHtml(c.name||'')}" placeholder="ООО «Компания»"></label>
+            <label class="field-row"><span>ИНН</span><input id="ci-inn" value="${escapeHtml(c.inn||'')}" placeholder="10 или 12 цифр"></label>
+            <label class="field-row"><span>Вид деятельности</span>
+              <select id="ci-activity">
+                ${acts.map(a => `<option ${c.activity===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+                ${!acts.includes(c.activity) && c.activity ? `<option selected>${escapeHtml(c.activity)}</option>` : ''}
+              </select>
+            </label>
+            <label class="field-row"><span>Дата регистрации</span><input type="date" id="ci-reg" value="${c.reg_date||''}"></label>
+            <label class="field-row"><span>Вид цен</span>
+              <select id="ci-price">${priceOptions}</select>
+            </label>
+            <label class="field-row"><span>${f1c.head_company ? 'Группа компаний' : 'Регион'}</span>${f1c.head_company ? `<input value="${escapeHtml(f1c.head_company)}" readonly style="background:#F9FAFB; color:var(--text-muted);">` : `<input id="ci-region" value="${escapeHtml(c.region||f1c.region||'')}" placeholder="регион">`}</label>
+            <label class="field-row"><span>Город</span><input id="ci-city" value="${escapeHtml(c.city||f1c.city||'')}" placeholder="Москва"></label>
+            <label class="field-row" style="grid-column: 1 / -1;"><span>Адрес</span><input id="ci-addr" value="${escapeHtml(c.address||f1c.address_full||'')}" placeholder="ул. ..., офис ..."></label>
+          </div>
+
+          <!-- Описание клиента — внутри блока Клиент, свёрнуто по умолчанию если пусто -->
+          <details style="margin-top:14px;" ${(c.comment || f1c.note1c) ? 'open' : ''}>
+            <summary style="cursor:pointer; font-weight:600; font-size:12px; color:var(--text-muted); user-select:none;">📝 Описание клиента ${c.comment ? `<span style="color:var(--text-soft); font-weight:400; font-size:11px;">— ${escapeHtml(c.comment.substring(0, 50))}${c.comment.length > 50 ? '…' : ''}</span>` : ''}</summary>
+            <div style="margin-top:8px;">
+              <textarea id="ci-comment" class="big-comment" rows="2" placeholder="Что важно знать: специфика бизнеса, ЛПР, особые договорённости. Это поле защищено от перезаписи 1С.">${escapeHtml(c.comment||'')}</textarea>
+              ${f1c.note1c ? `<div style="margin-top:8px; background:#F0F9FF; border-left:3px solid #2563EB; padding:8px 12px; font-size:13px; color:#1E40AF; border-radius:4px;">📌 <b>Комментарий из 1С:</b> ${escapeHtml(f1c.note1c)}</div>` : ''}
+            </div>
+          </details>
+        </div>
+
+        <!-- BLOCK: Контакты -->
+        <div class="client-block">
+          <div class="client-block-title">📇 Контакты</div>
+          <div class="info-grid-2col">
+            <label class="field-row"><span>Контактное лицо (ЛПР)</span><input id="ci-contact-name" value="${escapeHtml(c.contact_name||'')}" placeholder="Иванов Иван Иванович"></label>
+            <label class="field-row"><span>Должность</span><input id="ci-position" value="${escapeHtml(c.position||'')}" placeholder="Директор / Снабжение"></label>
+            <label class="field-row"><span>Телефон</span><input id="ci-phone" value="${escapeHtml(c.phone||'')}" placeholder="+7 ..."></label>
+            <label class="field-row"><span>Email</span><input id="ci-email" value="${escapeHtml(c.email||'')}" placeholder="info@..."></label>
+            <label class="field-row"><span>WhatsApp</span><input id="ci-wa" value="${escapeHtml(c.wa||'')}" placeholder="+7... или ссылка wa.me/..."></label>
+            <label class="field-row"><span>Telegram</span><input id="ci-tg" value="${escapeHtml(c.tg||'')}" placeholder="@username или ссылка t.me/..."></label>
+          </div>
+        </div>
+
+        <!-- BLOCK: Флаги работы -->
+        <div class="client-block">
+          <div class="client-block-title">🚩 Параметры работы</div>
+          <div class="info-grid-2col" style="margin-bottom: 10px;">
+            <label class="field-row" style="grid-column: 1 / -1;"><span>Основной конкурент</span><input id="ci-comp" value="${escapeHtml(c.competitor||f1c.main_competitor||'')}" placeholder="чьим клиентом был / у кого покупает сейчас"></label>
+          </div>
+          <div class="client-flags-grid">
+            <div class="client-flag" title="Подключён ли клиент к нашему B2B-порталу"><span>${flagYes(f1c.wpart_connected)}</span> Подключён на w-part.ru</div>
+            <div class="client-flag" title="Работа по схеме «обмен на товар-сырьё»"><span>${flagYes(f1c.otkh)}</span> Работа по ОТХ</div>
+            <div class="client-flag" title="Есть соглашение на ретро-бонус"><span>${flagYes(f1c.retro_bonus)}</span> Ретро-бонус</div>
+            <div class="client-flag" title="Активна программа кэшбека"><span>${f1c.cashback ? '✅' : '➖'}</span> Кэшбек${f1c.cashback ? ': ' + escapeHtml(f1c.cashback) : ''}</div>
+            <div class="client-flag" title="Клиент тестировал нашу продукцию"><span>${flagYes(f1c.tested_product)}</span> Тест нашей продукции</div>
+            <div class="client-flag" title="Бренд-конкурент">${f1c.brand_competitor ? `🏷 Бренд-конкурент: <b>${escapeHtml(f1c.brand_competitor)}</b>` : '<span>➖</span> Бренд-конкурент не указан'}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN — 45% — Активность -->
+      <div class="client-overview-right">
+        <div class="client-block client-block-events">
+          <div class="client-block-title">💬 События и комментарии</div>
+          <div class="embedded-activity" id="cm-activity"></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// === Вкладка «📁 Файлы» — отдельной вкладкой ===
+function renderClientFilesTab(c) {
+  const files = (c.files || []);
+  const showDemoFile = files.length === 0;
+  return `
+    <div style="max-width: 900px;">
+      <div class="info-banner" style="background:#F0F9FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:13px; color:#1E40AF;">
+        ℹ Прикладывайте сюда всё, что важно по клиенту: подписанный договор, шаблон прайса, акт сверки, фото визитной карточки. Файлы хранятся в браузере (защищены от 1С), лимит 2 МБ на файл.
+      </div>
+
+      <div class="client-block">
+        <div class="client-block-title">📁 Файлы клиента
+          ${files.length ? `<span class="text-sm text-muted" style="font-weight:400; margin-left:6px;">— ${files.length} ${files.length===1?'файл':files.length<5?'файла':'файлов'}</span>` : ''}
+          <button class="btn btn-primary btn-sm" id="cf-add-btn" style="margin-left:auto;">+ Загрузить файл</button>
+          <input type="file" id="cf-input" multiple style="display:none;" accept="*/*">
+        </div>
+        <div id="cf-list">
+          ${files.length || showDemoFile ? `
+            <table class="data" style="margin-top:4px; font-size:13px;">
+              <thead><tr><th>Файл</th><th>Тип</th><th class="num">Размер</th><th>Дата</th><th>Автор</th><th style="width:110px;">Действия</th></tr></thead>
+              <tbody>
+                ${files.map(f => `
+                  <tr>
+                    <td>${fileIcon(f.type)} <b>${escapeHtml(f.name)}</b></td>
+                    <td class="text-muted text-sm">${fileTypeLabel(f.type)}</td>
+                    <td class="num text-sm">${fmt.size(f.size)}</td>
+                    <td class="text-sm">${fmt.date(f.addedAt)}</td>
+                    <td class="text-sm text-muted">${escapeHtml(f.addedBy || '—')}</td>
+                    <td>
+                      <button class="btn btn-sm" data-cf-view="${f.id}" title="Открыть в новой вкладке" style="padding:2px 6px; margin-right:4px;">👁</button>
+                      <a href="${f.dataUrl}" download="${escapeHtml(f.name)}" title="Скачать" style="margin-right:4px; display:inline-block; padding:2px 6px; border:1px solid var(--border); border-radius:6px; background:white; text-decoration:none;">📥</a>
+                      <button class="btn btn-sm" data-cf-del="${f.id}" title="Удалить" style="padding:2px 6px;">🗑</button>
+                    </td>
+                  </tr>
+                `).join('')}
+                ${showDemoFile ? `
+                  <tr style="opacity:0.5;">
+                    <td>📕 <b>Пример_шаблон_договора.pdf</b></td>
+                    <td class="text-muted text-sm">PDF</td>
+                    <td class="num text-sm">245 КБ</td>
+                    <td class="text-sm">пример</td>
+                    <td class="text-sm text-muted">—</td>
+                    <td title="После загрузки реального файла будут доступны: просмотр, скачать, удалить">
+                      <span style="padding:2px 6px; margin-right:4px; border:1px dashed var(--border); border-radius:6px; color:var(--text-soft);">👁</span>
+                      <span style="padding:2px 6px; margin-right:4px; border:1px dashed var(--border); border-radius:6px; color:var(--text-soft);">📥</span>
+                      <span style="padding:2px 6px; border:1px dashed var(--border); border-radius:6px; color:var(--text-soft);">🗑</span>
+                    </td>
+                  </tr>
+                ` : ''}
+              </tbody>
+            </table>
+          ` : `<div class="empty-state" style="padding:32px; text-align:center;"><div style="font-size:32px;">📁</div><div class="fw-600">Файлов пока нет</div><div class="text-sm text-muted">Загрузите прайс, договор, акт сверки — всё, что нужно держать под рукой</div></div>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// === Helpers для блока «Файлы» ===
+function fileIcon(type) {
+  if (!type) return '📄';
+  if (type.includes('pdf')) return '📕';
+  if (type.includes('image')) return '🖼';
+  if (type.includes('excel') || type.includes('sheet')) return '📊';
+  if (type.includes('word') || type.includes('document')) return '📝';
+  if (type.includes('zip') || type.includes('rar')) return '🗜';
+  return '📄';
+}
+function fileTypeLabel(type) {
+  if (!type) return '—';
+  if (type.includes('pdf')) return 'PDF';
+  if (type.includes('jpeg') || type.includes('jpg')) return 'JPG';
+  if (type.includes('png')) return 'PNG';
+  if (type.includes('sheet') || type.includes('excel')) return 'Excel';
+  if (type.includes('word') || type.includes('document')) return 'Word';
+  if (type.includes('text')) return 'Текст';
+  return type.split('/')[1] || type;
+}
+if (!fmt.size) fmt.size = (b) => {
+  if (!b) return '—';
+  if (b < 1024) return b + ' Б';
+  if (b < 1024*1024) return (b/1024).toFixed(1).replace('.0','') + ' КБ';
+  return (b/1024/1024).toFixed(1).replace('.0','') + ' МБ';
+};
+
+function bindClientFiles(c) {
+  const addBtn = document.getElementById('cf-add-btn');
+  const input = document.getElementById('cf-input');
+  if (!addBtn || !input) return;
+
+  const reRender = () => {
+    // Перерендерить вкладку «Файлы»
+    const body = document.getElementById('cm-body');
+    if (!body) return;
+    body.innerHTML = renderClientFilesTab(c);
+    bindClientFiles(c);
+    // Обновить счётчик в табе
+    const filesTab = [...document.querySelectorAll('.client-tab')].find(t => t.dataset.tab === 'files');
+    if (filesTab) {
+      const cnt = (c.files || []).length;
+      const baseLabel = '📁 Файлы';
+      filesTab.innerHTML = cnt ? `${baseLabel} <span class="myday-tab-count" style="margin-left:2px;">${cnt}</span>` : baseLabel;
+    }
+  };
+
+  addBtn.onclick = () => input.click();
+  input.onchange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    c.files = c.files || [];
+    for (const f of files) {
+      if (f.size > 2 * 1024 * 1024) {
+        alert(`Файл «${f.name}» больше 2 МБ. Загружайте через бэкенд, когда он появится. Пока — пропустим.`);
+        continue;
+      }
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(f);
+      });
+      c.files.push({
+        id: 'f_' + uid(),
+        name: f.name,
+        type: f.type || '',
+        size: f.size,
+        dataUrl,
+        addedAt: new Date().toISOString().slice(0, 10),
+        addedBy: state.user.name
+      });
+    }
+    persist();
+    reRender();
+  };
+  document.querySelectorAll('[data-cf-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.cfDel;
+      if (!confirm('Удалить файл?')) return;
+      c.files = (c.files || []).filter(f => f.id !== id);
+      persist();
+      reRender();
+    });
+  });
+  // Просмотр в новой вкладке через blob: URL (надёжнее, чем data:, не блокируется в Chrome)
+  document.querySelectorAll('[data-cf-view]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const f = (c.files || []).find(x => x.id === btn.dataset.cfView);
+      if (!f) return;
+      try {
+        // dataUrl → Blob → blob URL → window.open
+        const dataUrl = f.dataUrl;
+        const commaIdx = dataUrl.indexOf(',');
+        const meta = dataUrl.substring(5, commaIdx); // "image/png;base64"
+        const isBase64 = meta.includes('base64');
+        const mime = meta.split(';')[0];
+        const dataPart = dataUrl.substring(commaIdx + 1);
+        let bytes;
+        if (isBase64) {
+          const binary = atob(dataPart);
+          bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        } else {
+          bytes = new TextEncoder().encode(decodeURIComponent(dataPart));
+        }
+        const blob = new Blob([bytes], { type: mime || f.type || 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const w = window.open(url, '_blank');
+        if (!w) alert('Не получилось открыть окно — разрешите всплывающие окна для этого сайта.');
+        // Освободим память через 1 минуту
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (e) {
+        alert('Не удалось открыть файл: ' + e.message);
+      }
+    });
+  });
+}
+
+// === Вкладка «⚙ Настройки клиента» ===
+function renderClientSettings(c, sgInfo, catInfo, managers) {
+  const hasOverrides = c.stageManual || c.categoryManual || c.cityManual || c.contract_noManual;
+  return `
+    <div style="max-width: 700px;">
+      <div class="info-banner" style="background:#F0F9FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px 14px; margin-bottom:18px; font-size:13px; color:#1E40AF;">
+        ℹ Здесь — ручные override-ы. Они <b>перебивают значения из 1С</b>. Если поле не заполнено — значение берётся из 1С (если есть), иначе авто-расчёт.
+      </div>
+
+      <div class="client-block">
+        <div class="client-block-title">🎯 Этап воронки</div>
+        <div style="padding: 4px 0 8px;">
+          <div style="margin-bottom: 6px;">Сейчас: ${stageChip(sgInfo.stage)}</div>
+          <div class="text-sm text-muted" style="margin-bottom:10px;">Источник: ${sgInfo.reasons.map(escapeHtml).join(', ')}</div>
+        </div>
+        <label class="field-row"><span>Установить вручную (override)</span>
+          <select id="ci-stage-manual">
+            <option value="">— рассчитывать автоматически (приоритет 1С) —</option>
+            ${STAGES.map(s => `<option value="${s.id}" ${c.stageManual===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+
+      <div class="client-block">
+        <div class="client-block-title">🏷 Категория клиента</div>
+        <div style="padding: 4px 0 8px;">
+          <div style="margin-bottom: 6px;">Сейчас: <span class="chip chip-cat-${catInfo.category}">${catInfo.category}</span></div>
+          <div class="text-sm text-muted" style="margin-bottom:10px;">Источник: ${catInfo.reasons.map(escapeHtml).join(', ')}</div>
+        </div>
+        <label class="field-row"><span>Установить вручную (override)</span>
+          <select id="ci-cat-manual">
+            <option value="">— рассчитывать автоматически (приоритет 1С) —</option>
+            <option value="A" ${c.categoryManual==='A'?'selected':''}>A — активный</option>
+            <option value="B" ${c.categoryManual==='B'?'selected':''}>B — слабоактивный</option>
+            <option value="C" ${c.categoryManual==='C'?'selected':''}>C — не отгружается</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="client-block">
+        <div class="client-block-title">👤 Ответственный менеджер</div>
         <label class="field-row"><span>Менеджер</span>
           <select id="ci-manager">
             ${managers.map(m => `<option ${c.manager===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
             ${!managers.includes(c.manager) && c.manager ? `<option selected>${escapeHtml(c.manager)}</option>` : ''}
           </select>
         </label>
-        <label class="field-row"><span>Вид деятельности</span>
-          <select id="ci-activity">
-            ${acts.map(a => `<option ${c.activity===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
-          </select>
-        </label>
+        ${c.from1c && c.from1c.primary_manager && c.from1c.primary_manager !== c.manager ? `
+          <div class="text-sm" style="color:var(--warning); margin-top:6px;">⚠ В 1С указан другой менеджер: <b>${escapeHtml(c.from1c.primary_manager)}</b>. При следующем импорте значение в CRM перепишется.</div>
+        ` : ''}
       </div>
 
-      <!-- Этап и категория -->
-      <div class="status-block">
-        <div class="status-cell">
-          <div class="status-label">Этап воронки</div>
-          <div class="status-value">${stageChip(sgInfo.stage)}</div>
-          <div class="status-reason">${sgInfo.reasons.map(escapeHtml).join(', ')}</div>
-          <select id="ci-stage-manual" class="status-override">
-            <option value="">— рассчитывать автоматически —</option>
-            ${STAGES.map(s => `<option value="${s.id}" ${c.stageManual===s.id?'selected':''}>Установить вручную: ${escapeHtml(s.name)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="status-cell">
-          <div class="status-label">Категория клиента</div>
-          <div class="status-value"><span class="chip chip-cat-${catInfo.category}" style="font-size:13px; padding: 4px 12px;">${catInfo.category}</span></div>
-          <div class="status-reason">${catInfo.reasons.map(escapeHtml).join(', ')}</div>
-          <select id="ci-cat-manual" class="status-override">
-            <option value="">— рассчитывать автоматически —</option>
-            <option value="A" ${c.categoryManual==='A'?'selected':''}>Установить вручную: A — активный</option>
-            <option value="B" ${c.categoryManual==='B'?'selected':''}>Установить вручную: B — слабоактивный</option>
-            <option value="C" ${c.categoryManual==='C'?'selected':''}>Установить вручную: C — не отгружается</option>
-          </select>
-        </div>
-      </div>
+      ${hasOverrides ? `
+        <button class="btn btn-sm" id="ci-reset-overrides" style="margin-top:10px;">↺ Сбросить все override-ы</button>
+      ` : ''}
 
-      <!-- Описание -->
-      <label class="field-row" style="margin-top: 4px;"><span>Краткое описание клиента</span>
-      <textarea id="ci-comment" class="big-comment" rows="2" placeholder="Что важно знать об этом клиенте: специфика бизнеса, основные позиции, кто принимает решения, особые договорённости, история взаимодействия в двух словах...">${escapeHtml(c.comment||'')}</textarea>
-      </label>
-
-      <!-- COLLAPSIBLE: Контакты -->
-      <details class="card-collapse" ${(c.contact_name||c.phone||c.email||c.address||c.city) ? 'open' : ''}>
-        <summary>📇 Контактные данные ${c.contact_name?`<span class="summary-hint">${escapeHtml(c.contact_name)}</span>`:''}</summary>
-        <div class="info-grid-2col" style="margin-top: 12px;">
-          <label class="field-row"><span>Контактное лицо (ЛПР)</span><input id="ci-contact-name" value="${escapeHtml(c.contact_name||'')}" placeholder="Иванов Иван Иванович"></label>
-          <label class="field-row"><span>Должность</span><input id="ci-position" value="${escapeHtml(c.position||'')}" placeholder="Директор / Снабжение"></label>
-          <label class="field-row"><span>Телефон</span><input id="ci-phone" value="${escapeHtml(c.phone||'')}" placeholder="+7 ..."></label>
-          <label class="field-row"><span>Email</span><input id="ci-email" value="${escapeHtml(c.email||'')}" placeholder="info@..."></label>
-          <label class="field-row"><span>Город</span><input id="ci-city" value="${escapeHtml(c.city||'')}" placeholder="Москва"></label>
-          <label class="field-row"><span>Адрес / Регион</span><input id="ci-addr" value="${escapeHtml(c.address||'')}" placeholder="ул. ..., офис ..."></label>
-        </div>
-      </details>
-
-      <!-- COLLAPSIBLE: Бизнес и 1С -->
-      <details class="card-collapse">
-        <summary>💼 Бизнес-параметры и 1С ${c.price_type?`<span class="summary-hint">${escapeHtml(c.price_type)}</span>`:''}</summary>
-        <div class="info-grid-2col" style="margin-top: 12px;">
-          <label class="field-row"><span>Название в 1С</span><input id="ci-name1c" value="${escapeHtml(c.name_1c||'')}" placeholder="как в 1С"></label>
-          <label class="field-row"><span>Дата регистрации</span><input type="date" id="ci-reg" value="${c.reg_date||''}"></label>
-          <label class="field-row"><span>Вид цен</span>
-            <select id="ci-price">${priceOptions}</select>
-          </label>
-          <label class="field-row"><span>Платежеспособность</span>
-            <select id="ci-solv">
-              <option value="">— не оценена —</option>
-              <option ${c.solvency&&c.solvency.includes('Отличная')?'selected':''}>Отличная (D ≤ 5 дней)</option>
-              <option ${c.solvency&&c.solvency.includes('Удовлет')?'selected':''}>Удовлетворительная (D ≤ 15 дней)</option>
-              <option ${c.solvency&&c.solvency.includes('Проблем')?'selected':''}>Проблемная (D > 15 дней)</option>
-            </select>
-          </label>
-          <label class="field-row" style="grid-column: 1 / -1;"><span>Основной конкурент</span><input id="ci-comp" value="${escapeHtml(c.competitor||'')}" placeholder="чьим клиентом был / у кого покупает сейчас"></label>
-        </div>
-      </details>
-
-      <!-- Section: Активность (всегда видна, внизу) -->
-      <h4 class="card-section-h" style="margin-top: 20px;">💬 События и комментарии</h4>
-      <div class="embedded-activity" id="cm-activity"></div>
+      ${c.from1c ? `
+        <details style="margin-top:20px;">
+          <summary style="font-size:12px; color:var(--text-muted); cursor:pointer;">🔎 Технические данные из 1С (raw)</summary>
+          <div style="margin-top:10px; font-size:11px; padding:10px; background:#F9FAFB; border-radius:6px; max-height:300px; overflow:auto;">
+            <div>Код 1С: <b>${escapeHtml(c.from1c.code||'—')}</b></div>
+            <div>Партнёр: <b>${escapeHtml(c.from1c.partner||c.name||'—')}</b></div>
+            <div>Сокр. наим.: <b>${escapeHtml(c.from1c.short_name||'—')}</b></div>
+            <div>Юр/Физлицо: <b>${escapeHtml(c.from1c.entity_type||'—')}</b></div>
+            <div>Последний sync: <b>${c.from1c.last_synced ? fmt.dateLong(c.from1c.last_synced.slice(0,10)) : '—'}</b></div>
+            ${c.from1c_archived ? '<div style="color:var(--danger); margin-top:6px;">⚠ Клиент отсутствует в последней выгрузке 1С (помечен Архив).</div>' : ''}
+          </div>
+        </details>
+      ` : ''}
     </div>
   `;
+}
+
+function bindClientSettings(c) {
+  const reset = document.getElementById('ci-reset-overrides');
+  if (reset) reset.onclick = () => {
+    if (!confirm('Сбросить все ручные override-ы? Значения вернутся к 1С / авто-расчёту.')) return;
+    delete c.stageManual;
+    delete c.categoryManual;
+    delete c.cityManual;
+    delete c.contract_noManual;
+    persist();
+    // Re-render settings tab
+    const sgInfo = computeAutoStage(c);
+    const catInfo = computeAutoCategory(c);
+    document.getElementById('cm-body').innerHTML = renderClientSettings(c, sgInfo, catInfo, uniqueManagers());
+    bindClientSettings(c);
+  };
 }
 
 function renderEmbeddedTimeline(c) {
@@ -3520,53 +4908,559 @@ function bindTimeline(c) {
 }
 
 let _clientSalesChart = null;
+const _monthLabels = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
 function renderSalesTab(c) {
-  return `
-    <div class="grid grid-3 mb-4">
-      <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Выручка</div><div class="kpi-value" style="font-size:20px;">${fmt.rub(c.revenue||0)}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Долг</div><div class="kpi-value" style="font-size:20px;">${fmt.rub(c.debt||0)}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:${c.overdue>0?'var(--danger)':'var(--text-soft)'}"></div><div class="kpi-label">Просрочено</div><div class="kpi-value" style="font-size:20px; color:${c.overdue>0?'var(--danger)':'inherit'};">${fmt.rub(c.overdue||0)}</div></div>
+  const sales = c.from1c && c.from1c.sales ? c.from1c.sales : null;
+  const txns = sales && sales.transactions ? sales.transactions : [];
+  const byMonth = sales && sales.by_month ? sales.by_month : {};
+  const byYear = sales && sales.by_year ? sales.by_year : {};
+
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  const lastYear = thisYear - 1;
+  const curMonth = now.getMonth() + 1;
+  const curMonthKey = `${thisYear}-${String(curMonth).padStart(2,'0')}`;
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(thisYear, curMonth, 0).getDate();
+  const revYTD = byYear[thisYear] || 0;
+  const revLastYear = byYear[lastYear] || 0;
+  const revCurMonth = byMonth[curMonthKey] || 0;
+  const projectedCurMonth = (revCurMonth > 0 && dayOfMonth < daysInMonth)
+    ? revCurMonth * daysInMonth / dayOfMonth
+    : null;
+  const avgCheck = txns.length ? sales.total / (sales.txn_count || txns.length) : 0;
+  const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+  // KPI — 5 плашек (включая текущий месяц)
+  const kpiHtml = `
+    <div class="grid grid-5 mb-4">
+      <div class="kpi" title="Выручка за ${monthNames[curMonth-1]} ${thisYear}, прошло ${dayOfMonth} из ${daysInMonth} дн.">
+        <div class="kpi-accent" style="background:#3B82F6"></div>
+        <div class="kpi-label">${monthNames[curMonth-1]} ${thisYear}</div>
+        <div class="kpi-value" style="font-size:20px;">${fmt.rub(revCurMonth)}</div>
+        <div class="kpi-sub">${projectedCurMonth ? `★ прогноз: <b style="color:#3B82F6;">${fmt.rub(projectedCurMonth)}</b>` : (revCurMonth ? `${dayOfMonth}/${daysInMonth} дн` : 'нет продаж')}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent" style="background:var(--wp-yellow)"></div>
+        <div class="kpi-label">Выручка ${thisYear}</div>
+        <div class="kpi-value" style="font-size:20px;">${fmt.rub(revYTD)}</div>
+        <div class="kpi-sub">YTD</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent" style="background:var(--text-soft)"></div>
+        <div class="kpi-label">Выручка ${lastYear}</div>
+        <div class="kpi-value" style="font-size:20px;">${fmt.rub(revLastYear)}</div>
+        <div class="kpi-sub">${revLastYear ? (revYTD >= revLastYear ? '↑ ' : '↓ ') + Math.abs(Math.round((revYTD-revLastYear)/revLastYear*100)) + '%' : ''}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent" style="background:var(--info)"></div>
+        <div class="kpi-label">Средний чек</div>
+        <div class="kpi-value" style="font-size:20px;">${fmt.rub(avgCheck)}</div>
+        <div class="kpi-sub">${sales ? (sales.txn_count || txns.length) + ' позиций' : '—'}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-accent" style="background:var(--danger)"></div>
+        <div class="kpi-label">Долг / Просрочено</div>
+        <div class="kpi-value" style="font-size:20px;">${fmt.rub(c.debt||0)}</div>
+        <div class="kpi-sub" style="color:${c.overdue>0?'var(--danger)':'var(--text-muted)'};">${c.overdue ? 'просрочено: ' + fmt.rub(c.overdue) : ''}</div>
+      </div>
+    </div>`;
+
+  // Chart container с переключателем периода
+  const hasMonthData = Object.keys(byMonth).length > 0;
+  const curPeriod = state._salesPeriod || '12m';
+  const periods = [
+    { id: '3m',  label: '3 мес' },
+    { id: '6m',  label: '6 мес' },
+    { id: '12m', label: '12 мес' },
+    { id: 'ytd', label: 'Этот год' },
+    { id: 'lastyear', label: 'Прошлый год' },
+    { id: 'all', label: 'Всё' }
+  ];
+  const chartHtml = `
+    <div class="card mb-4">
+      <div class="card-header" style="flex-wrap:wrap; gap:10px;">
+        <div class="card-title">📈 Помесячная динамика выручки</div>
+        <div class="sales-period-tabs">
+          ${periods.map(p => `<button data-period="${p.id}" class="${curPeriod===p.id?'active':''}">${p.label}</button>`).join('')}
+        </div>
+      </div>
+      <div style="padding: 8px 16px 18px; height: 300px;">
+        ${hasMonthData ? '<canvas id="ch-client-months"></canvas>' : '<div class="empty-state" style="padding:40px;"><div style="font-size:32px;">📊</div>Продажи отсутствуют</div>'}
+      </div>
+    </div>`;
+
+  // (Aging-блок переехал в отдельную вкладку renderClientDebtTab)
+
+  // helper: 12500 → "12 500"
+  const numSp = (n) => {
+    if (n == null || isNaN(n)) return '—';
+    const rounded = Math.round(n);
+    return rounded.toLocaleString('ru-RU').replace(/,/g, ' ').replace(/ /g, ' ');
+  };
+
+  // Транзакции (что покупал) — collapse, scrollable
+  const txnTotal = sales ? (sales.txn_count || txns.length) : txns.length;
+  const truncatedAt = sales && sales._truncated_at;
+  const txnsHtml = txns.length ? `
+    <details class="card" ${txns.length <= 5 ? 'open' : ''}>
+      <summary style="display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none; border-bottom:1px solid var(--border); background:white;">
+        <div class="card-title" style="margin:0;">🛒 Что покупал</div>
+        <span class="text-sm text-muted" style="font-weight:400;">
+          — <b style="color:var(--text);">${txns.length}</b>${txnTotal > txns.length ? ` из ${txnTotal}` : ''} ${txns.length===1?'позиция':'позиций'}
+          ${truncatedAt ? `<span style="color:var(--warning); margin-left:6px;" title="При сохранении в браузер часть данных пришлось обрезать (превышен лимит localStorage). Полные данные — в файле 1С.">⚠ обрезано до ${truncatedAt}</span>` : ''}
+        </span>
+        <span style="margin-left:auto; font-size:12px; color:var(--text-muted);">кликните, чтобы развернуть</span>
+      </summary>
+      <div style="padding:0 0 0; background:white;">
+        <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1px solid var(--border);">
+          <input type="search" id="sales-search" placeholder="🔍 Поиск по артикулу / номенклатуре / бренду…" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; width:100%; max-width:400px; font-size:13px;">
+        </div>
+        <div style="max-height: 480px; overflow-y: auto;">
+          <table class="data" id="sales-table" style="font-size:13px;">
+            <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);"><tr>
+              <th>Дата</th>
+              <th>Артикул</th>
+              <th>Номенклатура</th>
+              <th>Бренд</th>
+              <th class="num">Кол-во</th>
+              <th class="num">Цена</th>
+              <th class="num">Сумма</th>
+            </tr></thead>
+            <tbody>
+              ${txns.map(t => {
+                const isRefund = t.amount < 0;
+                return `
+                <tr ${isRefund ? 'style="background:rgba(220,38,38,0.04);"' : ''} title="${isRefund ? 'Возврат / сторно' : ''}">
+                  <td class="text-sm">${fmt.date(t.date)}</td>
+                  <td class="text-sm fw-600">${escapeHtml(t.article||'—')}</td>
+                  <td class="text-sm">${escapeHtml(t.nomenclature||'—')}</td>
+                  <td>${t.brand ? `<span class="chip chip-default" style="font-size:11px;">${escapeHtml(t.brand)}</span>` : '<span class="text-muted">—</span>'}</td>
+                  <td class="num">${numSp(t.qty)}</td>
+                  <td class="num text-sm">${numSp(t.price)}</td>
+                  <td class="num fw-700" style="${isRefund ? 'color:var(--danger);' : ''}">${numSp(t.amount)}</td>
+                </tr>
+              `;}).join('')}
+            </tbody>
+          </table>
+          <div id="sales-table-empty" class="empty-state" style="padding:30px; display:none;">Ничего не найдено</div>
+        </div>
+      </div>
+    </details>
+  ` : `
+    <div class="empty-state" style="padding: 32px;">
+      <div style="font-size:32px;">🛒</div>
+      <div class="fw-600">Истории заказов нет</div>
+      <div class="text-sm text-muted">После импорта из 1С здесь появятся позиции (до 200 последних)</div>
     </div>
-    <div class="chart-card">
-      <h3>Помесячная динамика 2026</h3>
-      <div class="chart-box-sm"><canvas id="ch-client-months"></canvas></div>
+  `;
+
+  return kpiHtml + chartHtml + txnsHtml;
+}
+
+// === Вкладка «💰 ПДЗ» ===
+function renderClientDebtTab(c) {
+  const debt1c = c.from1c && c.from1c.debt ? c.from1c.debt : null;
+  const aging = debt1c && debt1c.aging ? debt1c.aging : null;
+  const totalDebt = c.debt || (debt1c ? debt1c.total : 0);
+  const overdue = c.overdue || (debt1c ? debt1c.overdue : 0);
+  const overduePct = totalDebt ? Math.round(overdue / totalDebt * 100) : 0;
+  const ourDebt = debt1c ? debt1c.our_debt : 0;
+
+  const buckets = aging ? [
+    { key: 'not_overdue', label: 'Не просрочено',  amount: aging.not_overdue, color: '#16A34A', dark: '#166534' },
+    { key: 'd1_2',        label: '1-2 дня',         amount: aging.d1_2,        color: '#84CC16', dark: '#65A30D' },
+    { key: 'd3_14',       label: '3-14 дней',       amount: aging.d3_14,       color: '#EAB308', dark: '#A16207' },
+    { key: 'd15_29',      label: '15-29 дней',      amount: aging.d15_29,      color: '#F59E0B', dark: '#B45309' },
+    { key: 'd30_44',      label: '30-44 дня',       amount: aging.d30_44,      color: '#F97316', dark: '#C2410C' },
+    { key: 'd45_59',      label: '45-59 дней',      amount: aging.d45_59,      color: '#EF4444', dark: '#B91C1C' },
+    { key: 'd60_179',     label: '60-179 дней',     amount: aging.d60_179,     color: '#DC2626', dark: '#991B1B' },
+    { key: 'd180plus',    label: 'Более 180 дней',  amount: aging.d180plus,    color: '#7F1D1D', dark: '#7F1D1D' }
+  ] : [];
+  const totalAging = buckets.reduce((s, b) => s + (b.amount || 0), 0);
+
+  if (!totalDebt && !aging) {
+    return `
+      <div style="max-width: 800px;">
+        <div class="empty-state" style="padding: 40px; text-align: center;">
+          <div style="font-size: 48px;">✨</div>
+          <div class="fw-700" style="font-size:18px; color:var(--success); margin-top: 8px;">Долгов нет</div>
+          <div class="text-sm text-muted" style="margin-top: 4px;">Клиент платит вовремя или ещё не начинал работу. Данные из 1С будут обновлены при следующем импорте.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div style="max-width: 1100px;">
+      <!-- KPI -->
+      <div class="grid grid-4 mb-4">
+        <div class="kpi">
+          <div class="kpi-accent" style="background:#8B5CF6"></div>
+          <div class="kpi-label">Всего долг</div>
+          <div class="kpi-value" style="font-size:20px;">${fmt.rub(totalDebt)}</div>
+          <div class="kpi-sub">${debt1c?.docs_count ? debt1c.docs_count + ' документ(ов)' : ''}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-accent" style="background:${overduePct > 60 ? 'var(--danger)' : overduePct > 30 ? 'var(--warning)' : 'var(--success)'}"></div>
+          <div class="kpi-label">Просрочено</div>
+          <div class="kpi-value" style="font-size:20px; color:${overduePct > 30 ? 'var(--danger)' : 'inherit'};">${fmt.rub(overdue)}</div>
+          <div class="kpi-sub">${overduePct}% от долга</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-accent" style="background:#F59E0B"></div>
+          <div class="kpi-label">Макс. просрочка</div>
+          <div class="kpi-value" style="font-size:20px;">${debt1c?.max_overdue_days || 0} дн</div>
+          <div class="kpi-sub">по одному документу</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-accent" style="background:${ourDebt > 0 ? 'var(--info)' : 'var(--text-soft)'}"></div>
+          <div class="kpi-label">Наш долг клиенту</div>
+          <div class="kpi-value" style="font-size:20px;">${fmt.rub(ourDebt)}</div>
+          <div class="kpi-sub">${ourDebt > 0 ? 'предоплаты / возвраты' : 'нет'}</div>
+        </div>
+      </div>
+
+      ${aging && totalAging > 0 ? `
+        <div class="card mb-4">
+          <div class="card-header">
+            <div class="card-title">🚨 Срочность долга (aging)</div>
+            <span class="text-sm" style="color:${overduePct > 60 ? 'var(--danger)' : overduePct > 30 ? 'var(--warning)' : 'var(--text-muted)'};">${overduePct}% долга просрочено</span>
+          </div>
+          <div style="padding: 14px 18px;">
+            <!-- Горизонтальный стек -->
+            <div style="display:flex; height:32px; border-radius:8px; overflow:hidden; border:1px solid var(--border); margin-bottom:14px;">
+              ${buckets.filter(b => b.amount > 0).map(b => {
+                const pct = totalAging ? (b.amount / totalAging * 100) : 0;
+                return `<div style="width:${pct}%; background:${b.color}; position:relative; display:flex; align-items:center; justify-content:center;" title="${b.label}: ${fmt.rub(b.amount)} (${pct.toFixed(0)}%)">${pct > 8 ? `<span style="font-size:11px; color:white; font-weight:700; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">${pct.toFixed(0)}%</span>` : ''}</div>`;
+              }).join('')}
+            </div>
+
+            <table class="data" style="font-size:13px;">
+              <thead><tr><th></th><th>Срок</th><th class="num">Сумма</th><th class="num">Доля</th></tr></thead>
+              <tbody>
+                ${buckets.map(b => {
+                  const pct = totalAging ? (b.amount / totalAging * 100) : 0;
+                  if (b.amount <= 0) return '';
+                  return `<tr>
+                    <td style="width:12px;"><span style="display:inline-block; width:10px; height:10px; background:${b.color}; border-radius:2px;"></span></td>
+                    <td class="${b.key === 'not_overdue' ? '' : 'fw-600'}" style="color:${b.dark};">${b.label}</td>
+                    <td class="num fw-700">${fmt.rub(b.amount)}</td>
+                    <td class="num text-sm text-muted">${pct.toFixed(1)}%</td>
+                  </tr>`;
+                }).filter(Boolean).join('')}
+                <tr style="border-top:2px solid var(--border);">
+                  <td></td>
+                  <td class="fw-700">Итого долг</td>
+                  <td class="num fw-700">${fmt.rub(totalAging)}</td>
+                  <td class="num text-muted">100%</td>
+                </tr>
+              </tbody>
+            </table>
+            ${debt1c.docs_count ? `<div class="text-sm text-muted" style="margin-top:10px;">📋 Долг распределён по ${debt1c.docs_count} ${debt1c.docs_count===1?'документу':'документам'}. Макс. просрочка по одному документу: <b style="color:var(--text);">${debt1c.max_overdue_days} дн</b>.</div>` : ''}
+          </div>
+        </div>
+      ` : ''}
+
+      ${(c.from1c?.agreement?.days || c.from1c?.contracts?.length) ? `
+        <div class="info-banner" style="background:#FEF3C7; border-left:3px solid var(--wp-yellow); padding:12px 14px; border-radius:6px; font-size:13px;">
+          ${c.from1c?.agreement?.days ? `<div>⏱ <b>Согласованная отсрочка</b>: ${c.from1c.agreement.days} дней. Если фактическая просрочка превышает — переходите в раздел <b>Договор</b> для просмотра условий.</div>` : ''}
+        </div>
+      ` : ''}
     </div>
   `;
 }
+
+function _buildSalesSeries(sales, period) {
+  const byMonth = sales.by_month || {};
+  const allKeys = Object.keys(byMonth).sort();
+  if (!allKeys.length) return null;
+
+  const now = new Date();
+  const curY = now.getFullYear();
+  const curM = now.getMonth() + 1;
+  const curKey = `${curY}-${String(curM).padStart(2,'0')}`;
+  const fmtKey = (y, m) => `${y}-${String(m).padStart(2,'0')}`;
+
+  // Определяем диапазон
+  let startKey, endKey;
+  switch (period) {
+    case '3m':       { let y=curY, m=curM-2; while(m<=0){m+=12;y--;} startKey=fmtKey(y,m); endKey=curKey; break; }
+    case '6m':       { let y=curY, m=curM-5; while(m<=0){m+=12;y--;} startKey=fmtKey(y,m); endKey=curKey; break; }
+    case '12m':      { let y=curY, m=curM-11; while(m<=0){m+=12;y--;} startKey=fmtKey(y,m); endKey=curKey; break; }
+    case 'ytd':      { startKey=fmtKey(curY,1); endKey=curKey; break; }
+    case 'lastyear': { startKey=fmtKey(curY-1,1); endKey=fmtKey(curY-1,12); break; }
+    case 'all':
+    default: {
+      startKey = allKeys[0];
+      const lastDataKey = allKeys[allKeys.length-1];
+      endKey = lastDataKey > curKey ? lastDataKey : curKey;
+      break;
+    }
+  }
+
+  const labels = [];
+  const salesSeries = [];
+  const refundsSeries = [];
+  const monthKeys = [];
+
+  let [sy, sm] = startKey.split('-').map(Number);
+  const [ey, em] = endKey.split('-').map(Number);
+  while (sy < ey || (sy === ey && sm <= em)) {
+    const k = fmtKey(sy, sm);
+    const v = byMonth[k] || 0;
+    labels.push(`${_monthLabels[sm-1]} ${String(sy).slice(2)}`);
+    monthKeys.push(k);
+    // Непрерывная линия — НЕ используем null. Пустой месяц = 0.
+    salesSeries.push(v >= 0 ? v : 0);
+    // Возвраты — отдельная линия. null где нет (Chart рисует с spanGaps:false)
+    refundsSeries.push(v < 0 ? v : null);
+    sm++; if (sm > 12) { sm = 1; sy++; }
+  }
+
+  // Forecast — добавляем виртуальный месяц справа, ТОЛЬКО если:
+  //   1) текущий месяц входит в выбранный диапазон
+  //   2) в текущем месяце есть продажи
+  //   3) месяц ещё не закончился
+  let forecastSeries = labels.map(() => null);
+  let projected = null;
+  const curIdx = monthKeys.indexOf(curKey);
+  if (curIdx >= 0) {
+    const curVal = byMonth[curKey] || 0;
+    const dayOfMonth = now.getDate();
+    const daysInMonth = new Date(curY, curM, 0).getDate();
+    if (curVal > 0 && dayOfMonth > 0 && dayOfMonth < daysInMonth) {
+      projected = curVal * daysInMonth / dayOfMonth;
+      // Добавляем виртуальную точку «прогноз на конец того же месяца»
+      labels.push(`${_monthLabels[curM-1]} ${String(curY).slice(2)} ★`);
+      monthKeys.push(curKey + '_forecast');
+      salesSeries.push(null);     // в прогнозной точке нет «факта»
+      refundsSeries.push(null);
+      forecastSeries.push(projected);
+      // соединяем прогноз с фактической точкой текущего месяца
+      forecastSeries[curIdx] = curVal;
+    }
+  }
+
+  return { labels, salesSeries, refundsSeries, forecastSeries, projected, hasRefunds: refundsSeries.some(v => v !== null) };
+}
+
 function initSalesChart(c) {
-  const months = ['Январь','Февраль','Март','Апрель','Май'];
-  const monthVals = months.map(m => c.months?.[m] || 0);
   const el = document.getElementById('ch-client-months');
-  if (!el) return;
+  const sales = c.from1c && c.from1c.sales ? c.from1c.sales : null;
+  if (!el || !sales || !sales.by_month) return;
+  const period = state._salesPeriod || '12m';
+  const s = _buildSalesSeries(sales, period);
+  if (!s) return;
+
+  const datasets = [
+    {
+      label: 'Продажи',
+      data: s.salesSeries,
+      borderColor: '#FFC72C',
+      backgroundColor: 'rgba(255,199,44,0.12)',
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3,
+      pointRadius: (ctx) => (ctx.raw == null ? 0 : 3),
+      pointBackgroundColor: '#FFC72C',
+      pointBorderColor: 'white',
+      pointBorderWidth: 1.5,
+      pointHoverRadius: 6,
+      spanGaps: true
+    },
+    {
+      label: s.projected ? `Прогноз ${fmt.rub(s.projected)}` : 'Прогноз (тек. месяц)',
+      data: s.forecastSeries,
+      borderColor: '#3B82F6',
+      backgroundColor: 'rgba(59,130,246,0.08)',
+      borderWidth: 2,
+      borderDash: [6, 4],
+      fill: false,
+      tension: 0.2,
+      pointRadius: (ctx) => (ctx.raw == null ? 0 : 4),
+      pointBackgroundColor: '#3B82F6',
+      pointBorderColor: 'white',
+      pointBorderWidth: 1.5,
+      spanGaps: true,
+      hidden: !s.projected
+    }
+  ];
+  if (s.hasRefunds) {
+    datasets.push({
+      label: 'Возвраты',
+      data: s.refundsSeries,
+      borderColor: '#DC2626',
+      backgroundColor: 'rgba(220,38,38,0.12)',
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3,
+      pointRadius: (ctx) => (ctx.raw == null ? 0 : 4),
+      pointBackgroundColor: '#DC2626',
+      pointBorderColor: 'white',
+      pointBorderWidth: 1.5,
+      pointHoverRadius: 6,
+      spanGaps: false
+    });
+  }
+
   if (_clientSalesChart) { try { _clientSalesChart.destroy(); } catch(e){} }
   _clientSalesChart = new Chart(el.getContext('2d'), {
-    type: 'bar',
-    data: { labels: months, datasets: [{ data: monthVals, backgroundColor: '#FFC72C', borderRadius: 6 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
-      tooltip: { callbacks: { label: (ctx) => fmt.rubFull(ctx.parsed.y) } } },
-      scales: { x: { grid: { display: false } },
-                y: { grid: { color: '#F3F4F6' }, ticks: { callback: v => fmt.rub(v) } } } }
+    type: 'line',
+    data: { labels: s.labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top', labels: { font: { size: 11 }, boxWidth: 14, padding: 12 } },
+        tooltip: { callbacks: { label: (ctx) => ctx.parsed.y == null ? '' : `${ctx.dataset.label}: ${fmt.rubFull(ctx.parsed.y)}` } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { grid: { color: '#F3F4F6' }, ticks: { callback: v => fmt.rub(v), font: { size: 11 } } }
+      }
+    }
   });
+
+  // Подключаем переключатель периода
+  document.querySelectorAll('.sales-period-tabs [data-period]').forEach(btn => {
+    btn.onclick = () => {
+      state._salesPeriod = btn.dataset.period;
+      // Меняем активную кнопку
+      document.querySelectorAll('.sales-period-tabs [data-period]').forEach(b => b.classList.toggle('active', b.dataset.period === state._salesPeriod));
+      initSalesChart(c);
+    };
+  });
+
+  // Поиск по таблице
+  const search = document.getElementById('sales-search');
+  if (search) {
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      const rows = document.querySelectorAll('#sales-table tbody tr');
+      let visible = 0;
+      rows.forEach(tr => {
+        const txt = tr.innerText.toLowerCase();
+        const match = !q || txt.includes(q);
+        tr.style.display = match ? '' : 'none';
+        if (match) visible++;
+      });
+      const empty = document.getElementById('sales-table-empty');
+      if (empty) empty.style.display = visible ? 'none' : 'block';
+    });
+  }
 }
 
 function renderContractTab(c) {
+  const f1c = c.from1c || {};
+  const contracts = (f1c.contracts || []).slice().sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const agreement = f1c.agreement;
+  const activeContract = contracts.find(x => x.status === 'Действует') || contracts[0];
+  const totalLimit = contracts.filter(x => x.status === 'Действует').reduce((s,x) => s + (x.limit || 0), 0);
+  const debt = c.debt || 0;
+  const limitUsed = totalLimit ? Math.round(debt / totalLimit * 100) : 0;
+
   return `
-    <div class="info-grid">
-      <div class="info-label">Договор подписан</div>
-      <div class="info-value">
-        <select id="cc-signed">
-          <option value="0" ${!c.contract_signed?'selected':''}>Нет</option>
-          <option value="1" ${c.contract_signed?'selected':''}>Да</option>
-        </select>
+    <div style="max-width: 1100px;">
+      ${activeContract || agreement || totalLimit ? `
+        <!-- Шапка с ключевыми KPI договорной работы -->
+        <div class="grid grid-4 mb-4">
+          ${totalLimit ? `
+            <div class="kpi">
+              <div class="kpi-accent" style="background:#8B5CF6"></div>
+              <div class="kpi-label">Лимит по договорам</div>
+              <div class="kpi-value" style="font-size:20px;">${fmt.rub(totalLimit)}</div>
+              <div class="kpi-sub">${contracts.filter(x=>x.status==='Действует').length} действ. договор(ов)</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-accent" style="background:${limitUsed > 80 ? 'var(--danger)' : limitUsed > 50 ? 'var(--warning)' : 'var(--success)'}"></div>
+              <div class="kpi-label">Использовано</div>
+              <div class="kpi-value" style="font-size:20px; color:${limitUsed > 80 ? 'var(--danger)' : 'inherit'};">${limitUsed}%</div>
+              <div class="kpi-sub">${fmt.rub(debt)} / ${fmt.rub(totalLimit)}</div>
+            </div>
+          ` : `
+            <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Договор</div><div class="kpi-value" style="font-size:18px;">${activeContract ? 'Есть' : 'Нет'}</div><div class="kpi-sub">${activeContract ? '№ ' + escapeHtml(activeContract.no || '—') : 'не подписан'}</div></div>
+            <div class="kpi"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">Лимит</div><div class="kpi-value" style="font-size:18px;">—</div><div class="kpi-sub">не задан</div></div>
+          `}
+          ${agreement ? `
+            <div class="kpi">
+              <div class="kpi-accent" style="background:#2563EB"></div>
+              <div class="kpi-label">Отсрочка</div>
+              <div class="kpi-value" style="font-size:20px;">${agreement.days || 0} дн</div>
+              <div class="kpi-sub">${agreement.payment_rule ? agreement.payment_rule.substring(0, 30) : ''}</div>
+            </div>
+            ${agreement.percent ? `
+              <div class="kpi">
+                <div class="kpi-accent" style="background:#06B6D4"></div>
+                <div class="kpi-label">% предоплаты</div>
+                <div class="kpi-value" style="font-size:20px;">${agreement.percent}%</div>
+                <div class="kpi-sub">${agreement.date_base || ''}</div>
+              </div>
+            ` : `<div class="kpi"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">% предоплаты</div><div class="kpi-value" style="font-size:18px;">—</div><div class="kpi-sub">не указано</div></div>`}
+          ` : `
+            <div class="kpi"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">Отсрочка</div><div class="kpi-value" style="font-size:18px;">—</div><div class="kpi-sub">соглашение не найдено</div></div>
+            <div class="kpi"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">% предоплаты</div><div class="kpi-value" style="font-size:18px;">—</div><div class="kpi-sub">—</div></div>
+          `}
+        </div>
+      ` : ''}
+
+      ${contracts.length ? `
+        <div class="card mb-4">
+          <div class="card-header">
+            <div class="card-title">📄 Договоры из 1С</div>
+            <span class="text-sm text-muted">${contracts.length} ${contracts.length===1?'договор':'договоров'}, сортировка по дате</span>
+          </div>
+          <table class="data">
+            <thead><tr>
+              <th>№</th>
+              <th>Дата</th>
+              <th>Статус</th>
+              <th>Тип</th>
+              <th>Валюта</th>
+              <th>НДС</th>
+              <th class="num">Лимит</th>
+              <th>Менеджер</th>
+            </tr></thead>
+            <tbody>
+              ${contracts.map(ct => `
+                <tr>
+                  <td class="fw-600">${escapeHtml(ct.no || '—')}</td>
+                  <td>${ct.date ? fmt.date(ct.date) : '<span class="text-muted">—</span>'}</td>
+                  <td>${ct.status === 'Действует' ? `<span class="chip chip-success">${escapeHtml(ct.status)}</span>` : `<span class="chip chip-default">${escapeHtml(ct.status||'—')}</span>`}</td>
+                  <td class="text-sm text-muted">Реализация</td>
+                  <td>${escapeHtml(ct.currency || 'RUB')}</td>
+                  <td class="text-sm">${escapeHtml(ct.vat || '—')}</td>
+                  <td class="num fw-600">${ct.limit ? fmt.rub(ct.limit) : '<span class="text-muted">—</span>'}</td>
+                  <td class="text-sm">${escapeHtml(ct.manager || '—')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+
+      <div class="client-block">
+        <div class="client-block-title">📝 ${contracts.length ? 'Ручные поля (override данных из 1С)' : 'Договор — ручное заполнение'}</div>
+        <div class="info-grid-2col">
+          <label class="field-row"><span>Договор подписан</span>
+            <select id="cc-signed">
+              <option value="0" ${!c.contract_signed?'selected':''}>Нет</option>
+              <option value="1" ${c.contract_signed?'selected':''}>Да</option>
+            </select>
+          </label>
+          <label class="field-row"><span>№ договора</span><input id="cc-no" value="${escapeHtml(c.contract_no||'')}" placeholder="например, WP-2026/154"></label>
+          <label class="field-row"><span>Дата договора</span><input type="date" id="cc-date" value="${c.contract_date||''}"></label>
+        </div>
+        <label class="field-row" style="margin-top:10px;"><span>Заметка / условия</span>
+          <textarea id="cc-note" rows="3" placeholder="Особые условия, ссылки, статус согласования…">${escapeHtml(c.contract_note||'')}</textarea>
+        </label>
+        ${contracts.length ? `
+          <div class="text-sm text-muted" style="margin-top:8px;">ℹ Данные выше актуализируются автоматически из 1С (актуальный действующий договор). Ручные поля используются как fallback или override.</div>
+        ` : `
+          <div class="text-sm text-muted" style="margin-top:8px;">ℹ Договоры из 1С появятся после импорта.</div>
+        `}
       </div>
-      <div class="info-label">№ договора</div>
-      <div class="info-value"><input id="cc-no" value="${escapeHtml(c.contract_no||'')}" placeholder="например, WP-2026/154"></div>
-      <div class="info-label">Дата договора</div>
-      <div class="info-value"><input type="date" id="cc-date" value="${c.contract_date||''}"></div>
-      <div class="info-label">Срок / условия</div>
-      <div class="info-value"><textarea id="cc-note" rows="4">${escapeHtml(c.contract_note||'')}</textarea></div>
     </div>
-    <div class="mt-5 text-sm text-muted">В будущей версии сюда можно прикрепить скан договора и приложения.</div>
   `;
 }
 
@@ -3774,7 +5668,7 @@ function afterActivity() {
   document.getElementById('af-reset').onclick = () => {
     state.activityFilters = { kind: 'all', manager: 'all', period: '0' };
     state.filters.search = '';
-    document.getElementById('global-search').value = '';
+    const gs = document.getElementById('global-search'); if (gs) gs.value = '';
     renderView();
   };
   document.getElementById('af-add-event').onclick = () => openEventModal(null);
@@ -4234,20 +6128,56 @@ function openVisitModal(visitId) {
 
 // =================== EXPORT PAGE ===================
 function renderExport() {
+  const lastImp = state.lastImportedAt ? new Date(state.lastImportedAt) : null;
+  const lastImpText = lastImp ? `${lastImp.toLocaleDateString('ru-RU')} ${lastImp.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}` : 'ещё не выполнялся';
+  const importStats = state.from1cImportStats;
   return `
+    <div class="card mb-4" style="border-left:4px solid #2563EB;">
+      <div class="card-header">
+        <div class="card-title">📥 Импорт из 1С</div>
+        <span class="text-sm text-muted">основной источник данных</span>
+      </div>
+      <div style="padding:16px 24px;">
+        <p class="text-sm" style="margin-bottom:14px; color:var(--text);">
+          Загружает данные о клиентах из 8 файлов выгрузки 1С: реквизиты, договоры, отсрочки, задолженность, заказы, продажи.
+          Файлы должны лежать в папке <code style="background:#F3F4F6; padding:1px 6px; border-radius:4px;">Claude Cowork/Claude code/Данные 1С/</code>.
+        </p>
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+          <button class="btn btn-primary" id="onec-run">📥 Импорт из 1С (выбрать 8 файлов)</button>
+          <span class="text-sm text-muted">Последний импорт: <b style="color:var(--text);">${lastImpText}</b></span>
+        </div>
+        ${importStats ? `
+          <div style="display:flex; gap:16px; font-size:13px; color:var(--text-muted); padding:10px 14px; background:#F9FAFB; border-radius:8px;">
+            <span>+${importStats.added} новых</span>
+            <span>${importStats.updated} обновлено</span>
+            <span>${importStats.archived} в архив</span>
+          </div>
+        ` : ''}
+        <details style="margin-top:14px;">
+          <summary style="cursor:pointer; font-size:12px; color:var(--text-muted);">Какие файлы нужны и как они связаны?</summary>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:10px; line-height:1.7;">
+            ${ONEC_FILE_TYPES.map(t => `<div>• <b>${escapeHtml(t.label)}</b>${t.required ? ' <span style="color:var(--danger);">(обязательный)</span>' : ''}</div>`).join('')}
+            <div style="margin-top:8px; padding:10px; background:#F0F9FF; border-radius:6px; color:#1E40AF;">
+              ℹ Данные не отправляются в интернет — импорт работает локально в браузере. Контакты и комментарии менеджеров не перезаписываются. Полная архитектура слияния — см. документацию.
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
     <div class="grid grid-2 mb-4" style="grid-template-columns:1fr 1fr;">
       <div class="card">
         <div class="card-header"><div class="card-title">Выгрузка клиентов (менеджеры)</div></div>
         <div class="card-body">
           <p class="text-sm text-muted" style="margin-bottom:10px;">Список клиентов основной базы в Excel: контакты, менеджер, этап, категория, события, комментарии.</p>
-          <button class="btn btn-dark" id="exp-clients">📥 Выгрузить клиентов в XLSX</button>
+          <button class="btn btn-dark" id="exp-clients">📤 Выгрузить клиентов в XLSX</button>
         </div>
       </div>
       <div class="card">
         <div class="card-header"><div class="card-title">Выгрузка базы ТП</div></div>
         <div class="card-body">
           <p class="text-sm text-muted" style="margin-bottom:10px;">Полный свод по клиентам, собранным торговыми представителями.</p>
-          <button class="btn btn-dark" id="exp-tp">📥 Выгрузить базу ТП в XLSX</button>
+          <button class="btn btn-dark" id="exp-tp">📤 Выгрузить базу ТП в XLSX</button>
         </div>
       </div>
       <div class="card">
@@ -4266,6 +6196,7 @@ function renderExport() {
   `;
 }
 function afterExport() {
+  document.getElementById('onec-run')?.addEventListener('click', onec_runImport);
   document.getElementById('exp-clients').onclick = exportClientsXlsx;
   document.getElementById('exp-tp').onclick = exportTpXlsx;
   const fi = document.getElementById('imp-plans');
