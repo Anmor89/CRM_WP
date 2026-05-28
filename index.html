@@ -2383,6 +2383,8 @@ function getNeglectedClients() {
   return visibleClients().filter(c => {
     if (clientStage(c) === 'reject') return false;
     if (!c.revenue && !(c.from1c && c.from1c.sales && c.from1c.sales.total)) return false;
+    // С долгом — не «упущен», менеджер обязан с ним работать (вопрос оплаты)
+    if ((c.debt || 0) > 0) return false;
     // Нет открытых событий (созданных/запланированных после cutoff)
     const hasRecentEvent = state.events.some(e =>
       e.clientId === c.id && !e.completed && new Date(e.date) >= cutoff
