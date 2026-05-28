@@ -1661,24 +1661,26 @@ function renderDashboard() {
     return { client: c, limit, debt, load };
   }).filter(x => x).sort((a,b) => b.load - a.load).slice(0, 5);
 
-  // 📉 ОСТЫВАЮЩИЕ: были регулярные покупки, последние 30-60 дней — тишина
-  const today = new Date();
-  const day30 = new Date(today); day30.setDate(day30.getDate() - 30);
-  const day60 = new Date(today); day60.setDate(day60.getDate() - 60);
-  const day180 = new Date(today); day180.setDate(day180.getDate() - 180);
+  // 📉 ОСТЫВАЮЩИЕ: покупал в прошлом ИЛИ позапрошлом месяце, но НЕ покупает в текущем
+  const _now = new Date();
+  const _ymKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  const curMonthKey = _ymKey(_now);
+  const prevMonthKey = _ymKey(new Date(_now.getFullYear(), _now.getMonth()-1, 1));
+  const prev2MonthKey = _ymKey(new Date(_now.getFullYear(), _now.getMonth()-2, 1));
   const coolingDown = all.map(c => {
     const sales = c.from1c && c.from1c.sales;
-    if (!sales || !sales.last_date || !sales.by_month) return null;
-    const lastDate = new Date(sales.last_date);
-    // Окно «остывает»: 30-60 дней тишины (свежие — пропускаем, 60+ — это уже «упущенные»)
-    if (lastDate >= day30) return null;  // покупал недавно
-    if (lastDate < day60) return null;   // молчит слишком долго — это «упущенный»
-    // Должны были быть регулярные покупки: ≥3 разных месяцев за последние 6 мес
-    const monthsAgo180 = day180.toISOString().slice(0,7);
-    const recentMonths = Object.keys(sales.by_month).filter(m => m >= monthsAgo180 && sales.by_month[m] > 0);
-    if (recentMonths.length < 3) return null;
-    return { client: c, lastDate: sales.last_date, monthsActive: recentMonths.length, total: sales.total || 0 };
-  }).filter(x => x).sort((a,b) => b.total - a.total).slice(0, 5);
+    if (!sales || !sales.by_month) return null;
+    const bm = sales.by_month;
+    const curAmt = bm[curMonthKey] || 0;
+    const prevAmt = bm[prevMonthKey] || 0;
+    const prev2Amt = bm[prev2MonthKey] || 0;
+    // Покупал в любом из 2 предыдущих месяцев И не покупает сейчас
+    if ((prevAmt > 0 || prev2Amt > 0) && curAmt <= 0) {
+      const lastAmt = prevAmt > 0 ? prevAmt : prev2Amt;
+      return { client: c, lastDate: sales.last_date, lastAmt, prevAmt, prev2Amt, total: sales.total || 0 };
+    }
+    return null;
+  }).filter(x => x).sort((a,b) => b.lastAmt - a.lastAmt).slice(0, 5);
 
   // "My Day" — events split into 4 baskets: overdue, today, tomorrow, week
   const _todayStart = new Date(new Date().toDateString());
@@ -1843,26 +1845,26 @@ function renderDashboard() {
         </div>
       </div>
 
-      <!-- Остывающие клиенты — отдельный визуал -->
+      <!-- Остывающие клиенты — покупал недавно, нет заказов в текущем месяце -->
       <div class="card" style="border-left:4px solid ${coolingDown.length ? '#F59E0B' : 'var(--success)'};">
         <div class="card-header" style="padding-bottom: 6px;">
           <div class="card-title">📉 Остывающие</div>
-          <span class="text-sm text-muted">30-60 дн тишины</span>
+          <span class="text-sm text-muted">покупал в пред. мес — сейчас нет</span>
         </div>
         ${coolingDown.length ? coolingDown.map(a => {
-          const daysAgo = Math.round((Date.now() - new Date(a.lastDate).getTime()) / (1000*60*60*24));
+          const lastMonth = a.prevAmt > 0 ? 'в прошлом мес' : 'в позапр. мес';
           return `<div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
             <div style="flex:1; min-width:0;">
               <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
-              <div class="text-sm text-muted">${daysAgo} дн без заказов · ${fmt.rub(a.total)} в истории</div>
+              <div class="text-sm text-muted">${fmt.num(a.lastAmt)} ${lastMonth} · в этом — 0</div>
             </div>
-            <span class="chip chip-default" style="flex-shrink:0;">${a.monthsActive} мес активн.</span>
+            <span class="chip chip-default" style="flex-shrink:0;">всего ${fmt.num(a.total)}</span>
           </div>`;
         }).join('') : `
           <div class="empty-state" style="padding:18px;">
             <div class="empty-state-icon" style="font-size:28px;">✨</div>
             <div class="fw-600">Все активны</div>
-            <div class="text-sm text-muted">Никто не выпал из работы</div>
+            <div class="text-sm text-muted">Все клиенты с заказами в прошлом месяце купили и в этом</div>
           </div>
         `}
       </div>
@@ -4390,23 +4392,25 @@ function onec_parseContracts(rows) {
 }
 
 function onec_parseAgreements(rows) {
-  // Файл: «Соглашения с клиентами (отсрочка)». Header row 8, данные с 9.
-  // Колонки (на основе скана): 0=Спецификация, 3=Оплата, 4=База даты, 6=Партнёр, 7=%, 8=Дней
+  // Файл: «Соглашения с клиентами (отсрочка)». Заголовки на строках 6-7 (i=5,6), данные с i=7.
+  // Колонки (по реальному файлу):
+  //   r[0] = Соглашение/Спецификация, r[3] = Вариант оплаты, r[4] = Вариант отсчёта,
+  //   r[6] = Клиент, r[7] = Срок (дн), r[8] = % платежа
   const map = new Map();
-  for (let i = 9; i < rows.length; i++) {
+  for (let i = 7; i < rows.length; i++) {
     const r = rows[i]; if (!r) continue;
     const partner = (r[6] || '').toString().trim();
     if (!partner) continue;
+    const newDays = onec_num(r[7]);
     const existing = map.get(partner);
-    const newDays = onec_num(r[8]);
-    // Если несколько соглашений — берём с максимальной отсрочкой
+    // Если несколько соглашений у клиента — берём с максимальной отсрочкой
     if (!existing || newDays > existing.days) {
       map.set(partner, {
         spec: (r[0] || '').toString().trim() || null,
         payment_rule: (r[3] || '').toString().trim() || null,
         date_base: (r[4] || '').toString().trim() || null,
-        percent: onec_num(r[7]),
-        days: newDays
+        days: newDays,
+        percent: onec_num(r[8])
       });
     }
   }
@@ -7153,6 +7157,7 @@ function renderRawData() {
       🔍 <b>Просмотрщик данных 1С</b> — таблицы как они есть после импорта. Полезно для проверки полноты и фильтрации.
     </div>
     <div class="page-tabs">
+      <button class="page-tab ${tab==='model'?'active':''}" data-rtab="model">🔗 Модель данных</button>
       <button class="page-tab ${tab==='partners'?'active':''}" data-rtab="partners">🏢 Партнёры</button>
       <button class="page-tab ${tab==='sales'?'active':''}" data-rtab="sales">💰 Продажи (транзакции)</button>
       <button class="page-tab ${tab==='lastsale'?'active':''}" data-rtab="lastsale">📅 Последняя продажа</button>
@@ -7172,12 +7177,204 @@ function afterRawData() {
   });
   const tab = state._rawDataTab || 'partners';
   const wrap = document.getElementById('rawdata-content');
+  if (tab === 'model') return drawRawModel(wrap);
   if (tab === 'partners') return drawRawPartners(wrap);
   if (tab === 'sales') return drawRawSales(wrap);
   if (tab === 'lastsale') return drawRawLastSale(wrap);
   if (tab === 'contracts') return drawRawContracts(wrap);
   if (tab === 'debt') return drawRawDebt(wrap);
   if (tab === 'agreements') return drawRawAgreements(wrap);
+}
+
+// --- Модель данных (Power BI-style) — таблицы 1С с ключами и связями ---
+function drawRawModel(wrap) {
+  // Считаем размеры каждой таблицы
+  const cntPartners = state.clients.filter(c => c.from1c).length;
+  let cntSales = 0, cntContracts = 0, cntAgreements = 0, cntDebt = 0, cntOrders = 0;
+  state.clients.forEach(c => {
+    if (!c.from1c) return;
+    cntSales += (c.from1c.sales && c.from1c.sales.txn_count) || 0;
+    cntContracts += (c.from1c.contracts || []).length;
+    if (c.from1c.agreement) cntAgreements++;
+    if (c.from1c.debt && c.from1c.debt.total > 0) cntDebt++;
+    if (c.from1c.orders) cntOrders++;
+  });
+
+  // Описание таблиц: id, label, источник, поля (PK звёздочкой)
+  const tables = [
+    {
+      id: 'partners', label: '🏢 Партнёры', file: 'Справочник партнёров (B2B)',
+      count: cntPartners, color: '#FFC72C', col: 0, row: 1,
+      fields: ['🔑 name (PK, имя клиента)', 'manager (менеджер)', 'activity (вид)', 'head_company (группа)', 'reg_date', 'price_type', 'wpart_connected', 'cashback', 'otkh', 'retro_bonus']
+    },
+    {
+      id: 'inn', label: '🔢 ИНН/КПП', file: 'Справочник партнёров (ИНН)',
+      count: cntPartners, color: '#3B82F6', col: 1, row: 0,
+      fields: ['🔑 partner (FK→Партнёры)', 'inn', 'kpp', 'short_name', 'head_contractor']
+    },
+    {
+      id: 'address', label: '📍 Адреса', file: 'Справочник клиентов - факт.адрес',
+      count: cntPartners, color: '#10B981', col: 1, row: 1,
+      fields: ['🔑 partner (FK→Партнёры)', 'address_full', 'city', 'region', 'country']
+    },
+    {
+      id: 'sales', label: '💰 Продажи', file: 'Продажи по дням',
+      count: cntSales, color: '#F59E0B', col: 1, row: 2, badge: 'детали по позициям',
+      fields: ['🔑 partner (FK→Партнёры)', 'date (период день, forward-fill)', 'article', 'nomenclature', 'brand', 'qty', 'amount (Сумма)', 'cost (Себест.)', '⭐ profit (Валовая прибыль col 15)']
+    },
+    {
+      id: 'contracts', label: '📝 Договоры', file: 'Договоры с клиентами (лимиты)',
+      count: cntContracts, color: '#8B5CF6', col: 2, row: 0,
+      fields: ['🔑 partner (FK→Партнёры)', 'no (№ договора)', 'date', 'status (Действует/...)', 'limit (Кредит. лимит)', 'currency', 'vat', 'manager', '⚠ фильтр: только Реализация']
+    },
+    {
+      id: 'agreements', label: '⏱ Соглашения', file: 'Соглашения с клиентами (отсрочка)',
+      count: cntAgreements, color: '#06B6D4', col: 2, row: 1,
+      fields: ['🔑 partner (FK→Партнёры)', '⭐ days (Срок дн — col 7)', 'percent (% платежа — col 8)', 'payment_rule (Вариант оплаты)', 'date_base (Вариант отсчёта)', '📌 берём строку с max(days)']
+    },
+    {
+      id: 'debt', label: '💳 Долги', file: 'Задолженность клиентов по срокам',
+      count: cntDebt, color: '#EF4444', col: 2, row: 2,
+      fields: ['🔑 partner (FK→Партнёры)', 'total (общий долг)', 'overdue (просрочено)', 'aging: not_overdue / d1_2 / d3_14 / d15_29 / d30_44 / d45_59 / d60_179 / d180plus']
+    },
+    {
+      id: 'orders', label: '📦 Заказы', file: 'Расшифровка заказов клиентов',
+      count: cntOrders, color: '#EC4899', col: 0, row: 2, badge: 'не используется в UI',
+      fields: ['🔑 partner (FK→Партнёры)', 'total (сумма заказов)', 'open (открытые)', 'closed (закрытые)', 'last_date']
+    }
+  ];
+
+  // Связи: from → to (все идут к Партнёры)
+  const relations = [
+    { from: 'inn', to: 'partners' },
+    { from: 'address', to: 'partners' },
+    { from: 'sales', to: 'partners' },
+    { from: 'contracts', to: 'partners' },
+    { from: 'agreements', to: 'partners' },
+    { from: 'debt', to: 'partners' },
+    { from: 'orders', to: 'partners' }
+  ];
+
+  wrap.innerHTML = `
+    <div class="info-banner" style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:14px 18px; margin-bottom:18px;">
+      <div style="font-size:14px; color:#1E40AF; margin-bottom:8px;"><b>🔗 Модель данных (Power BI-style)</b></div>
+      <div style="font-size:13px; color:#1E3A8A; line-height:1.6;">
+        Каждая таблица соответствует одному xlsx-файлу из выгрузок 1С. Все они связаны с <b>Партнёрами</b> по полю <b>name</b> (имя клиента-партнёра) — это естественный ключ.
+        При импорте имена-филиалы объединяются через <b>head_company</b> в единого клиента (например, ТРАКДРАЙВ ООО — это 17 филиалов).
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header">
+        <div class="card-title">Схема таблиц и связи</div>
+        <span class="text-sm text-muted">наведи на карточку — увидишь поля</span>
+      </div>
+      <div style="padding: 20px; position:relative; min-height:560px; background: linear-gradient(135deg, #FAFBFC 0%, #F3F4F6 100%);">
+        <div id="model-canvas" style="position:relative; display:grid; grid-template-columns: repeat(3, 1fr); gap: 30px 80px; align-items:start;">
+          ${tables.map(t => `
+            <div class="model-tbl" data-tbl="${t.id}" style="grid-column: ${t.col + 1}; grid-row: ${t.row + 1}; background:white; border:2px solid ${t.color}; border-radius:10px; padding:0; box-shadow:0 2px 8px rgba(0,0,0,0.08); position:relative; z-index:2; cursor:pointer; transition: transform 0.15s, box-shadow 0.15s;">
+              <div style="background:${t.color}; color:white; padding:8px 12px; font-weight:700; font-size:14px; border-radius:8px 8px 0 0; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <span>${t.label}</span>
+                <span style="background:rgba(255,255,255,0.25); padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600;">${fmt.int(t.count)}</span>
+              </div>
+              <div style="padding:8px 12px;">
+                <div class="text-sm text-muted" style="font-size:11px; margin-bottom:6px; font-style:italic;">${escapeHtml(t.file)}.xlsx${t.badge ? ` · <span style="color:#D97706;">${t.badge}</span>` : ''}</div>
+                <div style="font-size:12px; line-height:1.7;">
+                  ${t.fields.map(f => `<div style="color:#374151;">${escapeHtml(f)}</div>`).join('')}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <svg id="model-svg" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:1;">
+          <defs>
+            <marker id="arrow-end" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L0,6 L9,3 z" fill="#9CA3AF"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <div style="padding: 12px 18px; background:#FAFBFC; border-top:1px solid var(--border); font-size:12px; color:var(--text-muted); display:flex; gap:18px; flex-wrap:wrap;">
+        <span>🔑 — первичный/связь</span>
+        <span>⭐ — недавно добавлено или важно</span>
+        <span>⚠ — особенности парсинга</span>
+        <span>📌 — заметки по логике</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">📋 Полная таблица всех связей</div></div>
+      <table class="data">
+        <thead><tr><th>Таблица</th><th>Файл xlsx</th><th>Ключ</th><th>Связь с</th><th class="num">Записей</th></tr></thead>
+        <tbody>
+          ${tables.map(t => {
+            const rel = relations.find(r => r.from === t.id);
+            return `<tr>
+              <td class="fw-600">${escapeHtml(t.label)}</td>
+              <td class="text-sm">${escapeHtml(t.file)}.xlsx</td>
+              <td class="text-sm">${rel ? '<b>partner</b> → Партнёры.<b>name</b>' : '<b>name</b> (первичный)'}</td>
+              <td>${rel ? '🏢 Партнёры' : '<span class="text-muted">—</span>'}</td>
+              <td class="num">${fmt.int(t.count)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // После рендера — рисуем стрелки SVG между карточками
+  setTimeout(() => {
+    const svg = document.getElementById('model-svg');
+    const canvas = document.getElementById('model-canvas');
+    if (!svg || !canvas) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const svgParent = svg.parentElement.getBoundingClientRect();
+    svg.setAttribute('width', svgParent.width);
+    svg.setAttribute('height', svgParent.height);
+    relations.forEach(rel => {
+      const fromEl = canvas.querySelector(`[data-tbl="${rel.from}"]`);
+      const toEl = canvas.querySelector(`[data-tbl="${rel.to}"]`);
+      if (!fromEl || !toEl) return;
+      const fr = fromEl.getBoundingClientRect();
+      const tr = toEl.getBoundingClientRect();
+      // Координаты относительно svgParent
+      const x1 = fr.left - svgParent.left + (fr.width / 2);
+      const y1 = fr.top - svgParent.top + (fr.height / 2);
+      const x2 = tr.left - svgParent.left + (tr.width / 2);
+      const y2 = tr.top - svgParent.top + (tr.height / 2);
+      // Линия curved
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const dx = (x2 - x1) / 2;
+      path.setAttribute('d', `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
+      path.setAttribute('stroke', '#9CA3AF');
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('stroke-dasharray', '4 4');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('marker-end', 'url(#arrow-end)');
+      svg.appendChild(path);
+    });
+  }, 50);
+
+  // Hover-эффект
+  wrap.querySelectorAll('.model-tbl').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      el.style.transform = 'translateY(-3px)';
+      el.style.boxShadow = '0 6px 16px rgba(0,0,0,0.15)';
+    });
+    el.addEventListener('mouseleave', () => {
+      el.style.transform = '';
+      el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+    });
+    el.addEventListener('click', () => {
+      const tabName = el.dataset.tbl;
+      // Маппинг id→таб (где доступно)
+      const map = { partners: 'partners', sales: 'sales', contracts: 'contracts', debt: 'debt', agreements: 'agreements' };
+      if (map[tabName]) {
+        state._rawDataTab = map[tabName];
+        renderView();
+      }
+    });
+  });
 }
 
 // Helper: универсальная таблица с поиском и пагинацией
