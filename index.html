@@ -1033,6 +1033,11 @@ const fmt = {
     if (n === null || n === undefined || isNaN(n)) return '—';
     return Math.round(Number(n)).toLocaleString('ru-RU') + ' ₽';
   },
+  // Целое число с разделителями групп, без валюты (для таблиц)
+  num(n) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    return Math.round(Number(n)).toLocaleString('ru-RU');
+  },
   int(n) { if (n === null || n === undefined) return '—'; return Number(n).toLocaleString('ru-RU'); },
   date(d) {
     if (!d) return '—';
@@ -1383,6 +1388,7 @@ function renderNav() {
   });
   if (isAdmin) {
     html += '<div class="nav-section">Администрирование</div>';
+    html += `<a data-view="rawdata" class="${state.currentView==='rawdata'?'active':''}">${navIcon('M4 6a8 3 0 0 0 16 0 M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6 M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6')}Данные 1С</a>`;
     html += `<a data-view="settings" class="${state.currentView==='settings'?'active':''}">${navIcon('M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z')}Настройки</a>`;
     html += `<a data-view="admin" class="${state.currentView==='admin'?'active':''}">${navIcon('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 11h-6 M19 8v6')}Доступы<span class="nav-badge">${state.users.filter(u=>u.active).length}</span></a>`;
   }
@@ -1396,7 +1402,7 @@ function setView(v) {
   state.currentView = v;
   renderNav();
   document.getElementById('view-title').textContent =
-    (NAV.find(n=>n.id===v)?.label) || (v==='admin'?'Доступы пользователей':v==='settings'?'Настройки':v);
+    (NAV.find(n=>n.id===v)?.label) || (v==='admin'?'Доступы пользователей':v==='settings'?'Настройки':v==='rawdata'?'Данные 1С':v);
   renderView();
 }
 
@@ -1599,6 +1605,7 @@ function renderView() {
     case 'export': c.innerHTML = renderExport(); afterExport(); break;
     case 'settings': c.innerHTML = renderSettings(); afterSettings(); break;
     case 'admin': c.innerHTML = renderAdmin(); afterAdmin(); break;
+    case 'rawdata': c.innerHTML = renderRawData(); afterRawData(); break;
     default: c.innerHTML = '<div class="empty-state">Раздел не найден</div>';
   }
   setTimeout(() => c.querySelectorAll('table.data').forEach(t => attachTableSort(t)), 0);
@@ -2445,37 +2452,43 @@ function afterClients() {
         </div>` : '<div class="empty-state" style="padding:20px;">Нет данных по категориям</div>'}
       </div>
 
-      <details class="card" style="border-left:4px solid ${neglected.length ? 'var(--danger)' : 'var(--success)'};" ${open ? 'open' : ''} id="neglected-details">
-        <summary style="display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none;">
-          <div class="card-title" style="margin:0; flex:1; color:${neglected.length ? 'var(--danger)' : 'var(--text)'};">⚠ Упущенные клиенты <span class="chip ${neglected.length ? 'chip-danger' : 'chip-default'}" style="margin-left:6px;">${neglected.length}</span></div>
+      <div class="card" style="border-left:4px solid ${neglected.length ? 'var(--danger)' : 'var(--success)'};">
+        <div class="card-header">
+          <div class="card-title" style="color:${neglected.length ? 'var(--danger)' : 'var(--text)'};">${neglected.length ? '⚠' : '✨'} Упущенные клиенты <span class="chip ${neglected.length ? 'chip-danger' : 'chip-default'}" style="margin-left:6px;">${neglected.length}</span></div>
           <span class="text-sm text-muted">${months} мес без активности</span>
-          <span class="text-sm text-muted" style="font-size:12px;">показать ▼</span>
-        </summary>
+        </div>
         ${neglected.length ? `
-          <div style="border-top:1px solid var(--border);"></div>
-          <table class="data">
+          <table class="data" style="font-size:13px;">
             <thead><tr><th>Клиент</th><th class="num">Последнее событие</th><th class="num">Последняя продажа</th><th class="num">Выручка</th><th class="num">Долг</th></tr></thead>
-            <tbody>
-              ${neglected.slice(0, 50).map(c => {
+            <tbody id="neglected-tbody">
+              ${(open ? neglected.slice(0, 50) : neglected.slice(0, 3)).map(c => {
                 const lastSale = (c.from1c && c.from1c.sales && c.from1c.sales.last_date) || null;
                 const lastEv = lastEventDate(c.id);
                 return `<tr data-cid="${c.id}" style="cursor:pointer;">
                   <td class="fw-600">${escapeHtml(c.name)}</td>
                   <td class="num">${lastEv ? fmt.date(lastEv) : '<span class="text-muted">никогда</span>'}</td>
                   <td class="num">${lastSale ? fmt.date(lastSale) : '<span class="text-muted">—</span>'}</td>
-                  <td class="num">${(c.revenue||0) > 0 ? fmt.rub(c.revenue) : '<span class="text-muted">—</span>'}</td>
-                  <td class="num" style="${(c.debt||0)>0?'color:var(--danger);':''}">${(c.debt||0)>0 ? fmt.rub(c.debt) : '<span class="text-muted">—</span>'}</td>
+                  <td class="num">${(c.revenue||0) > 0 ? fmt.num(c.revenue) : '<span class="text-muted">—</span>'}</td>
+                  <td class="num" style="${(c.debt||0)>0?'color:var(--danger);':''}">${(c.debt||0)>0 ? fmt.num(c.debt) : '<span class="text-muted">—</span>'}</td>
                 </tr>`;
               }).join('')}
-              ${neglected.length > 50 ? `<tr><td colspan="5" class="text-muted text-sm" style="text-align:center;padding:10px;">… ещё ${neglected.length-50}. Используйте фильтры выше для уточнения.</td></tr>` : ''}
             </tbody>
           </table>
-        ` : `<div style="border-top:1px solid var(--border);"></div><div class="empty-state" style="padding:24px;">
-          <div class="empty-state-icon" style="font-size:32px;">✨</div>
-          <div class="fw-600">Нет упущенных клиентов</div>
-          <div class="text-sm text-muted">Со всеми работают вовремя</div>
-        </div>`}
-      </details>
+          ${neglected.length > 3 ? `
+            <div style="padding:10px 16px; text-align:center; border-top:1px solid var(--border); background:#FAFBFC;">
+              <button class="btn btn-ghost btn-sm" id="neglected-toggle">${open ? `Свернуть ↑` : `Показать все ${neglected.length} ↓`}</button>
+              ${!open ? `<div class="text-sm text-muted" style="margin-top:4px;">показано 3 из ${neglected.length}</div>` : ''}
+              ${open && neglected.length > 50 ? `<div class="text-sm text-muted" style="margin-top:4px;">показано 50 из ${neglected.length}. Используйте фильтры выше для уточнения.</div>` : ''}
+            </div>
+          ` : ''}
+        ` : `
+          <div class="empty-state" style="padding:30px;">
+            <div class="empty-state-icon" style="font-size:36px;">🎉</div>
+            <div class="fw-700" style="color:var(--success); font-size:15px;">Все клиенты в работе</div>
+            <div class="text-sm text-muted" style="margin-top:4px;">Со всеми ведётся коммуникация или есть свежие продажи за ${months} мес</div>
+          </div>
+        `}
+      </div>
     </div>
   `;
   section.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
@@ -2486,9 +2499,12 @@ function afterClients() {
       renderView();
     });
   });
-  // Запоминаем открыт/закрыт упущенных
-  const det = document.getElementById('neglected-details');
-  if (det) det.addEventListener('toggle', () => { state._neglectedOpen = det.open; });
+  // Кнопка «Показать все / Свернуть» для упущенных
+  const toggleBtn = document.getElementById('neglected-toggle');
+  if (toggleBtn) toggleBtn.addEventListener('click', () => {
+    state._neglectedOpen = !state._neglectedOpen;
+    afterClients();
+  });
 }
 function drawClientsTable() {
   const list = applyFilters(visibleClients());
@@ -2803,8 +2819,8 @@ function drawSalesPage() {
     return `<tr>
       <td class="fw-600">${escapeHtml(m.manager)}</td>
       <td class="num">${m.clients}</td>
-      <td class="num">${fmt.rub(m.rev)}</td>
-      <td class="num">${fmt.rub(m.profit)}</td>
+      <td class="num">${fmt.num(m.rev)}</td>
+      <td class="num">${fmt.num(m.profit)}</td>
       <td class="num">${marg.toFixed(1)}%</td>
       <td class="num">
         <div style="display:inline-flex; align-items:center; gap:8px;">
@@ -2838,9 +2854,9 @@ function drawSalesPage() {
       <td class="fw-600">${escapeHtml(r.name)}</td>
       <td>${escapeHtml(r.manager)}</td>
       <td><span class="chip chip-cat-${r.category}">${r.category}</span></td>
-      ${monthIdxs.map(i => `<td class="num text-sm">${r.monthRev[i] ? fmt.rub(r.monthRev[i]) : '<span class="text-muted">—</span>'}</td>`).join('')}
-      <td class="num fw-700">${fmt.rub(r.totalRev)}</td>
-      <td class="num">${r.totalProf !== 0 ? fmt.rub(r.totalProf) : '<span class="text-muted">—</span>'}</td>
+      ${monthIdxs.map(i => `<td class="num text-sm">${r.monthRev[i] ? fmt.num(r.monthRev[i]) : '<span class="text-muted">—</span>'}</td>`).join('')}
+      <td class="num fw-700">${fmt.num(r.totalRev)}</td>
+      <td class="num">${r.totalProf !== 0 ? fmt.num(r.totalProf) : '<span class="text-muted">—</span>'}</td>
       <td class="num text-sm" style="${margColor}">${r.totalProf !== 0 && r.totalRev !== 0 ? marg.toFixed(1) + '%' : '<span class="text-muted">—</span>'}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="${monthCols.length + 6}"><div class="empty-state">Нет клиентов с продажами за выбранный период</div></td></tr>`;
@@ -7124,6 +7140,349 @@ function exportTpXlsx() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'База ТП');
   XLSX.writeFile(wb, `WestPart_база_ТП_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// =================== RAW DATA VIEW (Power BI-like data explorer) ===================
+function renderRawData() {
+  if (state.user.role !== 'admin') {
+    return '<div class="empty-state">Раздел доступен только администратору</div>';
+  }
+  const tab = state._rawDataTab || 'partners';
+  return `
+    <div class="info-banner" style="background:#F0F9FF; border:1px solid #BFDBFE; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; color:#1E40AF;">
+      🔍 <b>Просмотрщик данных 1С</b> — таблицы как они есть после импорта. Полезно для проверки полноты и фильтрации.
+    </div>
+    <div class="page-tabs">
+      <button class="page-tab ${tab==='partners'?'active':''}" data-rtab="partners">🏢 Партнёры</button>
+      <button class="page-tab ${tab==='sales'?'active':''}" data-rtab="sales">💰 Продажи (транзакции)</button>
+      <button class="page-tab ${tab==='lastsale'?'active':''}" data-rtab="lastsale">📅 Последняя продажа</button>
+      <button class="page-tab ${tab==='contracts'?'active':''}" data-rtab="contracts">📝 Договоры</button>
+      <button class="page-tab ${tab==='debt'?'active':''}" data-rtab="debt">💳 Долги</button>
+      <button class="page-tab ${tab==='agreements'?'active':''}" data-rtab="agreements">⏱ Соглашения</button>
+    </div>
+    <div id="rawdata-content"></div>
+  `;
+}
+
+function afterRawData() {
+  if (state.user.role !== 'admin') return;
+  document.querySelectorAll('.page-tab[data-rtab]').forEach(b => b.onclick = () => {
+    state._rawDataTab = b.dataset.rtab;
+    renderView();
+  });
+  const tab = state._rawDataTab || 'partners';
+  const wrap = document.getElementById('rawdata-content');
+  if (tab === 'partners') return drawRawPartners(wrap);
+  if (tab === 'sales') return drawRawSales(wrap);
+  if (tab === 'lastsale') return drawRawLastSale(wrap);
+  if (tab === 'contracts') return drawRawContracts(wrap);
+  if (tab === 'debt') return drawRawDebt(wrap);
+  if (tab === 'agreements') return drawRawAgreements(wrap);
+}
+
+// Helper: универсальная таблица с поиском и пагинацией
+function _rawTable({ wrap, title, total, columns, rows, searchPlaceholder, exportName, exportFn }) {
+  const search = (state._rawSearch && state._rawSearch[exportName]) || '';
+  const filteredRows = search ? rows.filter(r => columns.some(col => {
+    const v = col.value(r);
+    return v != null && String(v).toLowerCase().includes(search.toLowerCase());
+  })) : rows;
+  const limit = 200;
+  wrap.innerHTML = `
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap; gap:10px;">
+        <div class="card-title">${title}</div>
+        <span class="text-sm text-muted">всего: <b style="color:var(--text);">${total}</b>${search ? ` · найдено: <b style="color:var(--text);">${filteredRows.length}</b>` : ''}</span>
+        <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+          <input type="search" class="raw-search" placeholder="${searchPlaceholder}" value="${escapeHtml(search)}" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; width:280px; font-size:13px;">
+          ${exportFn ? `<button class="btn btn-sm" id="raw-export">📤 Excel</button>` : ''}
+        </div>
+      </div>
+      <div style="overflow-x:auto; max-height:600px; overflow-y:auto;">
+        <table class="data" style="font-size:13px;">
+          <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);">
+            <tr>${columns.map(c => `<th${c.num ? ' class="num"' : ''} style="${c.width ? 'width:' + c.width + ';' : ''} white-space:nowrap;">${c.label}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${filteredRows.length ? filteredRows.slice(0, limit).map(r => `
+              <tr${r._cid ? ` data-cid="${r._cid}" style="cursor:pointer;"` : ''}>
+                ${columns.map(c => `<td${c.num ? ' class="num"' : ''}>${c.render ? c.render(r) : (c.value(r) ?? '<span class="text-muted">—</span>')}</td>`).join('')}
+              </tr>
+            `).join('') : `<tr><td colspan="${columns.length}"><div class="empty-state" style="padding:30px;">Данных нет. Загрузите xlsx через «🔄 Обновить».</div></td></tr>`}
+            ${filteredRows.length > limit ? `<tr><td colspan="${columns.length}" class="text-muted text-sm" style="text-align:center;padding:10px;">… ещё ${filteredRows.length-limit}. Уточните поиск.</td></tr>` : ''}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  const searchInput = wrap.querySelector('.raw-search');
+  if (searchInput) {
+    let t = null;
+    searchInput.addEventListener('input', e => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        if (!state._rawSearch) state._rawSearch = {};
+        state._rawSearch[exportName] = e.target.value;
+        afterRawData();
+      }, 200);
+    });
+  }
+  wrap.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
+  const exportBtn = document.getElementById('raw-export');
+  if (exportBtn && exportFn) exportBtn.onclick = exportFn;
+}
+
+function _exportXlsx(rows, sheetName, filePrefix) {
+  if (typeof XLSX === 'undefined') { alert('Библиотека экспорта не загрузилась.'); return; }
+  if (!rows.length) { alert('Нет данных для экспорта.'); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = Object.keys(rows[0]).map(() => ({ wch: 18 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, `${filePrefix}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function drawRawPartners(wrap) {
+  const rows = state.clients.filter(c => c.from1c).map(c => {
+    const f = c.from1c;
+    return {
+      _cid: c.id,
+      name: c.name, inn: f.inn || c.inn || '', kpp: f.kpp || '',
+      head_company: f.head_company || '',
+      manager: c.manager, activity: c.activity || f.activity || '',
+      city: c.city || f.city || '', region: f.region || '',
+      revenue: c.revenue || 0, debt: c.debt || 0, overdue: c.overdue || 0,
+      txn_count: (f.sales && f.sales.txn_count) || 0,
+      last_sale: (f.sales && f.sales.last_date) || '',
+      contracts_count: (f.contracts || []).length,
+      is_group: f.is_group ? 'Да' : '',
+      sub_partners: f.sub_partners ? f.sub_partners.length : 1
+    };
+  });
+  _rawTable({
+    wrap, title: '🏢 Партнёры из 1С', total: rows.length,
+    searchPlaceholder: 'Поиск по названию / ИНН / городу…',
+    exportName: 'partners',
+    columns: [
+      { label: 'Клиент', value: r => r.name, render: r => `<span class="fw-600">${escapeHtml(r.name)}</span>${r.is_group ? `<div class="text-sm text-muted">группа: ${r.sub_partners} филиалов</div>` : ''}` },
+      { label: 'ИНН', value: r => r.inn, render: r => escapeHtml(r.inn || '') || '<span class="text-muted">—</span>' },
+      { label: 'Менеджер', value: r => r.manager, render: r => escapeHtml(r.manager || '—') },
+      { label: 'Вид', value: r => r.activity, render: r => r.activity ? `<span class="chip chip-activity">${escapeHtml(r.activity)}</span>` : '<span class="text-muted">—</span>' },
+      { label: 'Город', value: r => r.city, render: r => escapeHtml(r.city || '') || '<span class="text-muted">—</span>' },
+      { label: 'Выручка', value: r => r.revenue, num: true, render: r => r.revenue > 0 ? fmt.num(r.revenue) : '<span class="text-muted">—</span>' },
+      { label: 'Долг', value: r => r.debt, num: true, render: r => r.debt > 0 ? `<span style="color:${r.overdue > 0 ? 'var(--danger)' : ''};">${fmt.num(r.debt)}</span>` : '<span class="text-muted">—</span>' },
+      { label: 'Транзакций', value: r => r.txn_count, num: true, render: r => fmt.int(r.txn_count) },
+      { label: 'Посл. продажа', value: r => r.last_sale, num: true, render: r => r.last_sale ? fmt.date(r.last_sale) : '<span class="text-muted">никогда</span>' },
+      { label: 'Договоров', value: r => r.contracts_count, num: true }
+    ],
+    exportFn: () => _exportXlsx(rows, 'Партнёры', '1С_партнёры')
+  });
+}
+
+function drawRawSales(wrap) {
+  // Собираем ВСЕ транзакции с привязкой к клиенту
+  const all = [];
+  state.clients.forEach(c => {
+    if (!c.from1c || !c.from1c.sales || !c.from1c.sales.transactions) return;
+    c.from1c.sales.transactions.forEach(t => {
+      all.push({
+        _cid: c.id,
+        date: t.date, client: c.name, manager: c.manager,
+        article: t.article, nomenclature: t.nomenclature, brand: t.brand,
+        qty: t.qty, amount: t.amount, cost: t.cost || 0,
+        profit: t.profit != null ? t.profit : (t.amount - (t.cost||0)),
+        margin: t.margin != null ? t.margin : (t.amount > 0 ? ((t.amount-(t.cost||0))/t.amount*100) : 0)
+      });
+    });
+  });
+  all.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  _rawTable({
+    wrap, title: '💰 Все транзакции продаж', total: all.length,
+    searchPlaceholder: 'Поиск по клиенту / артикулу / бренду…',
+    exportName: 'sales',
+    columns: [
+      { label: 'Дата', value: r => r.date, num: true, render: r => fmt.date(r.date) },
+      { label: 'Клиент', value: r => r.client, render: r => `<span class="fw-600">${escapeHtml(r.client||'')}</span>` },
+      { label: 'Менеджер', value: r => r.manager, render: r => escapeHtml(r.manager || '—') },
+      { label: 'Артикул', value: r => r.article },
+      { label: 'Номенклатура', value: r => r.nomenclature, render: r => `<span style="max-width:300px; display:inline-block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(r.nomenclature || '')}</span>` },
+      { label: 'Бренд', value: r => r.brand, render: r => r.brand ? `<span class="chip chip-default" style="font-size:11px;">${escapeHtml(r.brand)}</span>` : '<span class="text-muted">—</span>' },
+      { label: 'Кол-во', value: r => r.qty, num: true, render: r => fmt.num(r.qty) },
+      { label: 'Сумма', value: r => r.amount, num: true, render: r => `<span class="fw-600" style="${r.amount < 0 ? 'color:var(--danger);' : ''}">${fmt.num(r.amount)}</span>` },
+      { label: 'С/с', value: r => r.cost, num: true, render: r => r.cost ? fmt.num(r.cost) : '<span class="text-muted">—</span>' },
+      { label: 'Прибыль', value: r => r.profit, num: true, render: r => r.profit !== 0 ? `<span style="color:${r.profit < 0 ? 'var(--danger)' : 'var(--success)'};">${fmt.num(r.profit)}</span>` : '<span class="text-muted">—</span>' },
+      { label: 'Маржа', value: r => r.margin, num: true, render: r => r.margin !== 0 ? r.margin.toFixed(1) + '%' : '<span class="text-muted">—</span>' }
+    ],
+    exportFn: () => _exportXlsx(all, 'Продажи', '1С_продажи')
+  });
+}
+
+function drawRawLastSale(wrap) {
+  // Свод: клиент × последняя продажа × сколько дней назад × фильтр по периоду
+  const period = state._rawLastSalePeriod || 'all';
+  const today = new Date();
+  const cutoffs = { '30': 30, '60': 60, '90': 90, '180': 180, '365': 365 };
+  const cutoffDays = cutoffs[period] || null;
+  const allClients = state.clients.filter(c => c.from1c);
+  const rows = allClients.map(c => {
+    const f = c.from1c;
+    const lastSale = (f.sales && f.sales.last_date) || null;
+    const daysSince = lastSale ? Math.round((today - new Date(lastSale)) / (1000*60*60*24)) : null;
+    return {
+      _cid: c.id, name: c.name, manager: c.manager,
+      activity: c.activity || '',
+      category: clientCategory(c),
+      total_sales: (f.sales && f.sales.total) || 0,
+      txn_count: (f.sales && f.sales.txn_count) || 0,
+      last_sale: lastSale, days_since: daysSince
+    };
+  });
+  const filtered = cutoffDays
+    ? rows.filter(r => r.days_since == null || r.days_since > cutoffDays)
+    : rows;
+  filtered.sort((a,b) => {
+    // null/больше дней — наверх
+    if (a.days_since == null && b.days_since == null) return 0;
+    if (a.days_since == null) return -1;
+    if (b.days_since == null) return 1;
+    return b.days_since - a.days_since;
+  });
+  // Сразу пишем фильтр над таблицей через innerHTML override
+  const periodOpts = [
+    { id: 'all', label: 'Все клиенты' },
+    { id: '30', label: 'Не покупали > 30 дн' },
+    { id: '60', label: 'Не покупали > 60 дн' },
+    { id: '90', label: 'Не покупали > 90 дн' },
+    { id: '180', label: 'Не покупали > 180 дн' },
+    { id: '365', label: 'Не покупали > 1 года' }
+  ];
+  _rawTable({
+    wrap, title: `📅 Последняя продажа · ${periodOpts.find(p => p.id === period)?.label || ''}`,
+    total: filtered.length,
+    searchPlaceholder: 'Поиск по клиенту / менеджеру…',
+    exportName: 'lastsale',
+    columns: [
+      { label: 'Клиент', value: r => r.name, render: r => `<span class="fw-600">${escapeHtml(r.name)}</span>` },
+      { label: 'Менеджер', value: r => r.manager, render: r => escapeHtml(r.manager || '—') },
+      { label: 'Вид', value: r => r.activity, render: r => r.activity ? `<span class="chip chip-activity">${escapeHtml(r.activity)}</span>` : '<span class="text-muted">—</span>' },
+      { label: 'Кат.', value: r => r.category, render: r => `<span class="chip chip-cat-${r.category}">${r.category}</span>` },
+      { label: 'Посл. продажа', value: r => r.last_sale, num: true, render: r => r.last_sale ? fmt.date(r.last_sale) : '<span class="text-muted">никогда</span>' },
+      { label: 'Дней назад', value: r => r.days_since, num: true, render: r => {
+        if (r.days_since == null) return '<span class="text-muted">∞</span>';
+        const color = r.days_since > 180 ? 'var(--danger)' : r.days_since > 60 ? '#D97706' : 'inherit';
+        return `<span style="color:${color}; font-weight:600;">${r.days_since}</span>`;
+      } },
+      { label: 'Всего покупок', value: r => r.txn_count, num: true, render: r => fmt.int(r.txn_count) },
+      { label: 'Выручка всего', value: r => r.total_sales, num: true, render: r => r.total_sales > 0 ? fmt.num(r.total_sales) : '<span class="text-muted">—</span>' }
+    ],
+    exportFn: () => _exportXlsx(filtered.map(r => ({ ...r, last_sale: r.last_sale || '', days_since: r.days_since == null ? 'никогда' : r.days_since })), 'Последняя продажа', '1С_последняя_продажа')
+  });
+  // Поверх — переключатель периода
+  const card = wrap.querySelector('.card-header');
+  if (card) {
+    const periodTabs = document.createElement('div');
+    periodTabs.style.cssText = 'width:100%; display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; border-top:1px solid var(--border); padding-top:10px;';
+    periodTabs.innerHTML = periodOpts.map(p =>
+      `<button data-lsperiod="${p.id}" class="btn btn-sm" style="${period === p.id ? 'background:var(--wp-yellow); color:var(--wp-black); font-weight:600;' : ''}">${p.label}</button>`
+    ).join('');
+    card.appendChild(periodTabs);
+    periodTabs.querySelectorAll('[data-lsperiod]').forEach(b => b.onclick = () => {
+      state._rawLastSalePeriod = b.dataset.lsperiod;
+      afterRawData();
+    });
+  }
+}
+
+function drawRawContracts(wrap) {
+  const all = [];
+  state.clients.forEach(c => {
+    if (!c.from1c || !c.from1c.contracts) return;
+    c.from1c.contracts.forEach(ct => {
+      all.push({
+        _cid: c.id, client: c.name, manager: ct.manager || c.manager,
+        no: ct.no, date: ct.date, status: ct.status,
+        limit: ct.limit || 0, currency: ct.currency, vat: ct.vat
+      });
+    });
+  });
+  all.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+  _rawTable({
+    wrap, title: '📝 Договоры из 1С', total: all.length,
+    searchPlaceholder: 'Поиск по клиенту / № договора…',
+    exportName: 'contracts',
+    columns: [
+      { label: 'Клиент', value: r => r.client, render: r => `<span class="fw-600">${escapeHtml(r.client||'')}</span>` },
+      { label: 'Менеджер', value: r => r.manager, render: r => escapeHtml(r.manager || '—') },
+      { label: '№', value: r => r.no, render: r => `<span class="fw-600">${escapeHtml(r.no||'—')}</span>` },
+      { label: 'Дата', value: r => r.date, num: true, render: r => r.date ? fmt.date(r.date) : '<span class="text-muted">—</span>' },
+      { label: 'Статус', value: r => r.status, render: r => r.status === 'Действует' ? `<span class="chip chip-success">${escapeHtml(r.status)}</span>` : `<span class="chip chip-default">${escapeHtml(r.status || '—')}</span>` },
+      { label: 'Лимит', value: r => r.limit, num: true, render: r => r.limit ? fmt.num(r.limit) : '<span class="text-muted">—</span>' },
+      { label: 'Валюта', value: r => r.currency, render: r => r.currency || 'RUB' },
+      { label: 'НДС', value: r => r.vat, render: r => r.vat || '—' }
+    ],
+    exportFn: () => _exportXlsx(all, 'Договоры', '1С_договоры')
+  });
+}
+
+function drawRawDebt(wrap) {
+  const rows = state.clients.filter(c => c.from1c && c.from1c.debt && (c.from1c.debt.total > 0 || c.from1c.debt.overdue > 0)).map(c => {
+    const d = c.from1c.debt;
+    const a = d.aging || {};
+    return {
+      _cid: c.id, client: c.name, manager: c.manager,
+      total: d.total || 0, overdue: d.overdue || 0,
+      not_overdue: a.not_overdue || 0, d1_2: a.d1_2 || 0, d3_14: a.d3_14 || 0,
+      d15_29: a.d15_29 || 0, d30_44: a.d30_44 || 0, d45_59: a.d45_59 || 0,
+      d60_179: a.d60_179 || 0, d180plus: a.d180plus || 0
+    };
+  });
+  rows.sort((a,b) => b.total - a.total);
+  _rawTable({
+    wrap, title: '💳 Задолженность по клиентам', total: rows.length,
+    searchPlaceholder: 'Поиск по клиенту…',
+    exportName: 'debt',
+    columns: [
+      { label: 'Клиент', value: r => r.client, render: r => `<span class="fw-600">${escapeHtml(r.client||'')}</span>` },
+      { label: 'Менеджер', value: r => r.manager, render: r => escapeHtml(r.manager || '—') },
+      { label: 'Всего', value: r => r.total, num: true, render: r => `<span class="fw-700">${fmt.num(r.total)}</span>` },
+      { label: 'Просрочено', value: r => r.overdue, num: true, render: r => r.overdue > 0 ? `<span style="color:var(--danger); font-weight:600;">${fmt.num(r.overdue)}</span>` : '<span class="text-muted">—</span>' },
+      { label: 'Не просроч.', value: r => r.not_overdue, num: true, render: r => r.not_overdue > 0 ? `<span style="color:var(--success);">${fmt.num(r.not_overdue)}</span>` : '<span class="text-muted">—</span>' },
+      { label: '1-2 дн', value: r => r.d1_2, num: true, render: r => r.d1_2 > 0 ? fmt.num(r.d1_2) : '<span class="text-muted">—</span>' },
+      { label: '3-14 дн', value: r => r.d3_14, num: true, render: r => r.d3_14 > 0 ? fmt.num(r.d3_14) : '<span class="text-muted">—</span>' },
+      { label: '15-29 дн', value: r => r.d15_29, num: true, render: r => r.d15_29 > 0 ? fmt.num(r.d15_29) : '<span class="text-muted">—</span>' },
+      { label: '30-44 дн', value: r => r.d30_44, num: true, render: r => r.d30_44 > 0 ? `<span style="color:#D97706;">${fmt.num(r.d30_44)}</span>` : '<span class="text-muted">—</span>' },
+      { label: '45-59 дн', value: r => r.d45_59, num: true, render: r => r.d45_59 > 0 ? `<span style="color:#EF4444;">${fmt.num(r.d45_59)}</span>` : '<span class="text-muted">—</span>' },
+      { label: '60-179 дн', value: r => r.d60_179, num: true, render: r => r.d60_179 > 0 ? `<span style="color:#DC2626;">${fmt.num(r.d60_179)}</span>` : '<span class="text-muted">—</span>' },
+      { label: '180+ дн', value: r => r.d180plus, num: true, render: r => r.d180plus > 0 ? `<span style="color:#7F1D1D; font-weight:700;">${fmt.num(r.d180plus)}</span>` : '<span class="text-muted">—</span>' }
+    ],
+    exportFn: () => _exportXlsx(rows, 'Долги', '1С_долги')
+  });
+}
+
+function drawRawAgreements(wrap) {
+  const rows = state.clients.filter(c => c.from1c && c.from1c.agreement).map(c => {
+    const a = c.from1c.agreement;
+    return {
+      _cid: c.id, client: c.name, manager: c.manager,
+      days: a.days || 0, percent: a.percent || 0, payment_rule: a.payment_rule || '',
+      date_base: a.date_base || ''
+    };
+  });
+  rows.sort((a,b) => b.days - a.days);
+  _rawTable({
+    wrap, title: '⏱ Соглашения об отсрочке', total: rows.length,
+    searchPlaceholder: 'Поиск по клиенту…',
+    exportName: 'agreements',
+    columns: [
+      { label: 'Клиент', value: r => r.client, render: r => `<span class="fw-600">${escapeHtml(r.client||'')}</span>` },
+      { label: 'Менеджер', value: r => r.manager, render: r => escapeHtml(r.manager || '—') },
+      { label: 'Отсрочка, дн', value: r => r.days, num: true, render: r => r.days > 0 ? `<span class="fw-600">${r.days}</span>` : '<span class="text-muted">—</span>' },
+      { label: 'Предоплата %', value: r => r.percent, num: true, render: r => r.percent > 0 ? r.percent + '%' : '<span class="text-muted">—</span>' },
+      { label: 'Правило оплаты', value: r => r.payment_rule, render: r => escapeHtml(r.payment_rule || '—') },
+      { label: 'База', value: r => r.date_base, render: r => escapeHtml(r.date_base || '—') }
+    ],
+    exportFn: () => _exportXlsx(rows, 'Соглашения', '1С_соглашения')
+  });
 }
 
 // =================== BOOTSTRAP ===================
