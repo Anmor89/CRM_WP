@@ -688,16 +688,19 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 
 .client-header {
   display: flex; align-items: flex-start; gap: 18px; padding: 24px 32px;
-  background: linear-gradient(135deg, #64748B 0%, #475569 100%);
-  color: white;
+  background: linear-gradient(135deg, #F59E0B 0%, #EA580C 100%);
+  color: #1F2937;
 }
 .client-header-avatar {
   width: 56px; height: 56px; border-radius: 12px;
-  background: var(--wp-yellow); color: #1F2937;
+  background: #1F2937; color: #FCD34D;
   display: flex; align-items: center; justify-content: center;
   font-weight: 800; font-size: 22px; flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
 }
+.client-header-name { color: #1F2937; }
+.client-header-meta { color: white; }
+.client-header-meta span { color: white; }
 .client-header-info { flex: 1; min-width: 0; }
 .client-header-name { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .client-header-meta { margin-top: 6px; color: #D1D5DB; font-size: 13px; display: flex; gap: 12px; flex-wrap: wrap; }
@@ -1694,15 +1697,6 @@ function renderDashboard() {
   const w = state.settings.dashboardWidgets;
   const isAdmin = state.user && state.user.role === 'admin';
 
-  // Per-manager distribution (admin only)
-  const managers = [...new Set(all.map(c => c.manager).filter(Boolean))].sort();
-  const mgrData = managers.map(m => {
-    const mClients = all.filter(c => c.manager === m);
-    const active = mClients.filter(c => clientStage(c) === 'active').length;
-    const archive = mClients.filter(c => clientStage(c) === 'reject').length;
-    return { manager: m, total: mClients.length, active, archive, inFunnel: mClients.length - active - archive };
-  }).sort((a, b) => b.total - a.total);
-
   // helper: render a single task row
   const renderTaskRow = (ev) => {
     const cl = getClient(ev.clientId);
@@ -1738,7 +1732,7 @@ function renderDashboard() {
       <div class="kpi dash-kpi-link" data-kpi-nav="funnel-active" style="cursor:pointer;" title="Перейти в воронку — Активно работают"><div class="kpi-accent" style="background: var(--success)"></div><div class="kpi-label">Активных</div><div class="kpi-value">${fmt.int(activeCount)}</div><div class="kpi-sub">${totalClients?Math.round(activeCount/totalClients*100):0}% от базы</div></div>
       <div class="kpi dash-kpi-link" data-kpi-nav="analytics-month" style="cursor:pointer;" title="Аналитика текущего месяца"><div class="kpi-accent" style="background: var(--wp-yellow)"></div><div class="kpi-label">Выручка месяца</div><div class="kpi-value">${fmt.rub(revCurMonth)}</div><div class="kpi-sub">${profitCurMonth > 0 ? 'прибыль: ' + fmt.rub(profitCurMonth) : 'данные за ' + curMonth}</div></div>
       <div class="kpi dash-kpi-link" data-kpi-nav="analytics-pdz" style="cursor:pointer;" title="Аналитика ПДЗ"><div class="kpi-accent" style="background: ${overdueTotal>0?'var(--danger)':'var(--text-soft)'}"></div><div class="kpi-label">Долг общий</div><div class="kpi-value">${fmt.rub(debtTotal)}</div><div class="kpi-sub" style="color:${overdueTotal>0?'var(--danger)':'var(--text-muted)'}">просрочено: ${fmt.rub(overdueTotal)}</div></div>
-      <div class="kpi dash-kpi-link" data-kpi-nav="analytics" style="cursor:pointer;" title="Аналитика конверсии"><div class="kpi-accent" style="background: var(--info)"></div><div class="kpi-label">Win Rate</div><div class="kpi-value">${winRate}%</div><div class="kpi-sub">${won} клиентов из ${won+lost} обработанных</div></div>
+      <div class="kpi dash-kpi-link" data-kpi-nav="analytics-winrate" style="cursor:pointer;" title="Аналитика Win Rate"><div class="kpi-accent" style="background: var(--info)"></div><div class="kpi-label">Win Rate</div><div class="kpi-value">${winRate}%</div><div class="kpi-sub">${won} клиентов из ${won+lost} обработанных</div></div>
     </div>
     ` : ''}
 
@@ -1769,49 +1763,32 @@ function renderDashboard() {
         </div>
       </div>
 
-      <div class="card" style="border-left:4px solid ${limitAlerts.length || coolingDown.length ? '#F59E0B' : 'var(--success)'};">
+      <div class="card" style="border-left:4px solid ${limitAlerts.length ? '#DC2626' : 'var(--success)'};">
         <div class="card-header" style="padding-bottom: 6px;">
-          <div class="card-title">🔥 Требует внимания</div>
-          <span class="text-sm text-muted">${limitAlerts.length + coolingDown.length} ${(limitAlerts.length + coolingDown.length)===1?'клиент':'клиентов'}</span>
+          <div class="card-title">⚠ На грани лимита</div>
+          <span class="text-sm text-muted">долг ≥ 80% от лимита</span>
         </div>
-        ${limitAlerts.length ? `
-          <div style="padding: 4px 16px 8px;"><div class="text-sm" style="color:var(--danger); font-weight:600; margin-bottom:4px;">⚠ На грани лимита</div></div>
-          ${limitAlerts.map(a => `
-            <div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
-              <div style="flex:1; min-width:0;">
-                <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
-                <div class="text-sm text-muted">${fmt.rub(a.debt)} / ${fmt.rub(a.limit)}</div>
-              </div>
-              <span class="chip" style="background:${a.load >= 100 ? '#FEE2E2' : '#FEF3C7'}; color:${a.load >= 100 ? '#991B1B' : '#92400E'}; font-weight:700; flex-shrink:0;">${a.load}%</span>
+        ${limitAlerts.length ? limitAlerts.map(a => `
+          <div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
+            <div style="flex:1; min-width:0;">
+              <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
+              <div class="text-sm text-muted">${fmt.rub(a.debt)} / ${fmt.rub(a.limit)}</div>
             </div>
-          `).join('')}
-        ` : ''}
-        ${coolingDown.length ? `
-          <div style="padding: 8px 16px 4px; ${limitAlerts.length ? 'border-top:1px solid var(--border);' : ''}"><div class="text-sm" style="color:#D97706; font-weight:600; margin-bottom:4px;">📉 Остывающие — пора связаться</div></div>
-          ${coolingDown.map(a => {
-            const daysAgo = Math.round((Date.now() - new Date(a.lastDate).getTime()) / (1000*60*60*24));
-            return `<div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
-              <div style="flex:1; min-width:0;">
-                <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
-                <div class="text-sm text-muted">${daysAgo} дн без заказов · ${fmt.rub(a.total)} в истории</div>
-              </div>
-              <span class="chip chip-default" style="flex-shrink:0;">${a.monthsActive} мес активн.</span>
-            </div>`;
-          }).join('')}
-        ` : ''}
-        ${!limitAlerts.length && !coolingDown.length ? `
+            <span class="chip" style="background:${a.load >= 100 ? '#FEE2E2' : '#FEF3C7'}; color:${a.load >= 100 ? '#991B1B' : '#92400E'}; font-weight:700; flex-shrink:0;">${a.load}%</span>
+          </div>
+        `).join('') : `
           <div class="empty-state" style="padding:18px;">
             <div class="empty-state-icon" style="font-size:28px;">✨</div>
-            <div class="fw-600">Угроз не обнаружено</div>
-            <div class="text-sm text-muted">Лимиты в норме, клиенты активны</div>
+            <div class="fw-600">Лимиты в норме</div>
+            <div class="text-sm text-muted">Нет клиентов с загрузкой ≥ 80%</div>
           </div>
-        ` : ''}
+        `}
       </div>
     </div>
     ` : ''}
 
     ${(w.funnel !== false) ? `
-    <div class="mb-4">
+    <div class="grid grid-2 mb-4" style="grid-template-columns: 1.6fr 1fr; align-items: stretch;">
       <div class="card">
         <div class="card-header">
           <div class="card-title">Воронка по клиентам</div>
@@ -1858,54 +1835,31 @@ function renderDashboard() {
           <div title="Сколько % обработанных лидов дошли до постоянного клиента (или хотя бы первого заказа)"><span class="text-muted text-sm">Конверсия:</span> <span class="fw-700" style="color:${winRate>=60?'var(--success)':winRate>=30?'var(--text)':'var(--danger)'}">${winRate}%</span> <span class="text-sm text-muted">(${won} из ${won+lost} обработанных)</span></div>
         </div>
       </div>
-    </div>
-    ` : ''}
 
-    ${(isAdmin && w.managers !== false && mgrData.length) ? `
-    <details class="card card-collapsible mb-4" ${state.dashboardMgrOpen?'open':''}>
-      <summary style="display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none; border-bottom:1px solid var(--border);">
-        <div class="card-title" style="margin:0; flex:1;">Клиенты по менеджерам <span class="text-sm text-muted" style="font-weight:400;">— только для администратора</span></div>
-        <span class="text-sm text-muted">${mgrData.length} ${mgrData.length===1?'менеджер':'менеджеров'}</span>
-        <span class="text-sm text-muted" style="font-size:12px;">▼</span>
-      </summary>
-      <table class="data mgr-table">
-        <thead><tr>
-          <th>Менеджер</th>
-          <th class="num">Всего</th>
-          <th class="num">Активных</th>
-          <th class="num">В воронке</th>
-          <th class="num">Архив</th>
-          <th style="width:30%;">Структура базы</th>
-        </tr></thead>
-        <tbody>
-          ${mgrData.map(md => {
-            const ap = md.total ? md.active/md.total*100 : 0;
-            const fp = md.total ? md.inFunnel/md.total*100 : 0;
-            const rp = md.total ? md.archive/md.total*100 : 0;
-            return `
-            <tr class="mgr-row" data-manager="${escapeHtml(md.manager)}" title="Кликните, чтобы посмотреть данные этого менеджера">
-              <td><div style="display:flex;align-items:center;gap:9px;"><div class="user-avatar" style="width:24px;height:24px;font-size:9px;">${fmt.initials(md.manager)}</div><span class="fw-600">${escapeHtml(md.manager)}</span></div></td>
-              <td class="num fw-700">${md.total}</td>
-              <td class="num" style="color:#3F7F5B;">${md.active}</td>
-              <td class="num">${md.inFunnel}</td>
-              <td class="num text-muted">${md.archive}</td>
-              <td>
-                <div class="mgr-bar2">
-                  <div class="mgr-bar2-seg" style="width:${ap}%; background:#9CC9AE;" title="Активных: ${md.active}"></div>
-                  <div class="mgr-bar2-seg" style="width:${fp}%; background:#F2D77E;" title="В воронке: ${md.inFunnel}"></div>
-                  <div class="mgr-bar2-seg" style="width:${rp}%; background:#D7DADE;" title="Архив: ${md.archive}"></div>
-                </div>
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-      <div class="mgr-legend" style="padding: 8px 16px;">
-        <span class="mgr-legend-item"><span class="chip-dot" style="background:#9CC9AE"></span>Активные</span>
-        <span class="mgr-legend-item"><span class="chip-dot" style="background:#F2D77E"></span>В воронке</span>
-        <span class="mgr-legend-item"><span class="chip-dot" style="background:#D7DADE"></span>Архив</span>
+      <!-- Остывающие клиенты — отдельный визуал -->
+      <div class="card" style="border-left:4px solid ${coolingDown.length ? '#F59E0B' : 'var(--success)'};">
+        <div class="card-header" style="padding-bottom: 6px;">
+          <div class="card-title">📉 Остывающие</div>
+          <span class="text-sm text-muted">30-60 дн тишины</span>
+        </div>
+        ${coolingDown.length ? coolingDown.map(a => {
+          const daysAgo = Math.round((Date.now() - new Date(a.lastDate).getTime()) / (1000*60*60*24));
+          return `<div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
+            <div style="flex:1; min-width:0;">
+              <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
+              <div class="text-sm text-muted">${daysAgo} дн без заказов · ${fmt.rub(a.total)} в истории</div>
+            </div>
+            <span class="chip chip-default" style="flex-shrink:0;">${a.monthsActive} мес активн.</span>
+          </div>`;
+        }).join('') : `
+          <div class="empty-state" style="padding:18px;">
+            <div class="empty-state-icon" style="font-size:28px;">✨</div>
+            <div class="fw-600">Все активны</div>
+            <div class="text-sm text-muted">Никто не выпал из работы</div>
+          </div>
+        `}
       </div>
-    </details>
+    </div>
     ` : ''}
 
     <div class="card mb-4">
@@ -1917,7 +1871,6 @@ function renderDashboard() {
             <option value="call">📞 Звонки</option>
             <option value="meeting">🤝 Встречи</option>
             <option value="contract">📝 Договоры</option>
-            <option value="followup">✅ Контроль</option>
             <option value="note">📝 Заметки</option>
             <option value="comment">💬 Комментарии</option>
           </select>
@@ -2068,7 +2021,9 @@ function afterDashboard() {
       const nav = el.dataset.kpiNav;
       if (nav === 'clients') setView('clients');
       else if (nav === 'funnel-active') { state.filters = { ...state.filters, stage: 'active' }; setView('funnel'); }
-      else if (nav === 'analytics-month' || nav === 'analytics-pdz') { state._analyticsTab = nav === 'analytics-pdz' ? 'pdz' : 'month'; setView('analytics'); }
+      else if (nav === 'analytics-month') { state._analyticsTab = 'month'; setView('analytics'); }
+      else if (nav === 'analytics-pdz') { state._analyticsTab = 'pdz'; setView('analytics'); }
+      else if (nav === 'analytics-winrate') { state._analyticsTab = 'winrate'; setView('analytics'); }
       else setView('analytics');
     });
   });
@@ -2109,7 +2064,7 @@ function stageChip(stageId) {
   return `<span class="chip chip-stage-${stageId}"><span class="chip-dot"></span>${s.name}</span>`;
 }
 function eventKindLabel(k) {
-  return ({call:'Звонок', meeting:'Встреча', contract:'Договор', followup:'Контроль'})[k] || k;
+  return ({call:'Звонок', meeting:'Встреча', contract:'Договор', note:'Заметка', followup:'Заметка'})[k] || k;
 }
 
 // =================== DEALS (Kanban funnel) ===================
@@ -2304,7 +2259,7 @@ function openDealModal() {
           <select id="d-ev-kind">
             <option value="call">Звонок</option>
             <option value="meeting">Встреча</option>
-            <option value="followup">Контрольная точка</option>
+            <option value="note">Заметка</option>
             <option value="contract">Договор</option>
           </select>
         </label>
@@ -2436,39 +2391,78 @@ function afterClients() {
   const esEl = document.getElementById('f-event-status');
   if (esEl) esEl.addEventListener('change', () => { state.filters.eventStatus = esEl.value; drawClientsTable(); });
   drawClientsTable();
-  // Таблица упущенных клиентов
+  // Упущенные клиенты (слева, сворачиваемая) + полезный визуал (справа)
   const neglected = getNeglectedClients();
   const months = (state.settings && state.settings.neglectedMonths) || 2;
   const section = document.getElementById('neglected-section');
-  if (section && neglected.length) {
-    section.innerHTML = `
-      <div class="card mb-4" style="border-left:4px solid var(--danger);">
+  if (!section) return;
+
+  // Правый визуал: Топ-10 клиентов по выручке среди отфильтрованных
+  const visible = applyFilters(visibleClients());
+  const topRev = [...visible].filter(c => (c.revenue||0) > 0).sort((a,b) => (b.revenue||0) - (a.revenue||0)).slice(0, 10);
+  const maxRev = topRev[0] ? topRev[0].revenue : 1;
+  const open = state._neglectedOpen !== false; // по умолчанию открыто
+
+  section.innerHTML = `
+    <div class="grid grid-2 mb-4" style="grid-template-columns: 1fr 1fr; align-items: stretch;">
+      <details class="card" style="border-left:4px solid ${neglected.length ? 'var(--danger)' : 'var(--success)'};" ${open ? 'open' : ''} id="neglected-details">
+        <summary style="display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none; border-bottom:1px solid var(--border);">
+          <div class="card-title" style="margin:0; flex:1; color:${neglected.length ? 'var(--danger)' : 'var(--text)'};">⚠ Упущенные клиенты <span class="chip ${neglected.length ? 'chip-danger' : 'chip-default'}" style="margin-left:6px;">${neglected.length}</span></div>
+          <span class="text-sm text-muted">${months} мес без активности</span>
+          <span class="text-sm text-muted" style="font-size:12px;">▼</span>
+        </summary>
+        ${neglected.length ? `
+          <table class="data">
+            <thead><tr><th>Клиент</th><th class="num">Последнее событие</th><th class="num">Последняя продажа</th><th class="num">Выручка</th><th class="num">Долг</th></tr></thead>
+            <tbody>
+              ${neglected.slice(0, 50).map(c => {
+                const lastSale = (c.from1c && c.from1c.sales && c.from1c.sales.last_date) || null;
+                const lastEv = lastEventDate(c.id);
+                return `<tr data-cid="${c.id}" style="cursor:pointer;">
+                  <td class="fw-600">${escapeHtml(c.name)}</td>
+                  <td class="num">${lastEv ? fmt.date(lastEv) : '<span class="text-muted">никогда</span>'}</td>
+                  <td class="num">${lastSale ? fmt.date(lastSale) : '<span class="text-muted">—</span>'}</td>
+                  <td class="num">${(c.revenue||0) > 0 ? fmt.rub(c.revenue) : '<span class="text-muted">—</span>'}</td>
+                  <td class="num" style="${(c.debt||0)>0?'color:var(--danger);':''}">${(c.debt||0)>0 ? fmt.rub(c.debt) : '<span class="text-muted">—</span>'}</td>
+                </tr>`;
+              }).join('')}
+              ${neglected.length > 50 ? `<tr><td colspan="5" class="text-muted text-sm" style="text-align:center;padding:10px;">… ещё ${neglected.length-50}. Используйте фильтры выше для уточнения.</td></tr>` : ''}
+            </tbody>
+          </table>
+        ` : `<div class="empty-state" style="padding:24px;">
+          <div class="empty-state-icon" style="font-size:32px;">✨</div>
+          <div class="fw-600">Нет упущенных клиентов</div>
+          <div class="text-sm text-muted">Со всеми работают вовремя</div>
+        </div>`}
+      </details>
+
+      <div class="card">
         <div class="card-header">
-          <div class="card-title" style="color:var(--danger);">⚠ Упущенные клиенты <span class="chip chip-danger">${neglected.length}</span></div>
-          <span class="text-sm text-muted">нет событий и продаж за ${months} мес.</span>
+          <div class="card-title">🏆 Топ клиентов по выручке</div>
+          <span class="text-sm text-muted">в текущей выборке: ${visible.length}</span>
         </div>
-        <table class="data">
-          <thead><tr><th>Клиент</th><th>Менеджер</th><th class="num">Последняя продажа</th><th class="num">Выручка</th><th class="num">Долг</th></tr></thead>
-          <tbody>
-            ${neglected.slice(0, 50).map(c => {
-              const lastSale = (c.from1c && c.from1c.sales && c.from1c.sales.last_date) || null;
-              return `<tr data-cid="${c.id}" style="cursor:pointer;">
-                <td class="fw-600">${escapeHtml(c.name)}</td>
-                <td>${escapeHtml(c.manager||'—')}</td>
-                <td class="num">${lastSale ? fmt.date(lastSale) : '<span class="text-muted">—</span>'}</td>
-                <td class="num">${(c.revenue||0) > 0 ? fmt.rub(c.revenue) : '<span class="text-muted">—</span>'}</td>
-                <td class="num" style="${(c.debt||0)>0?'color:var(--danger);':''}">${(c.debt||0)>0 ? fmt.rub(c.debt) : '<span class="text-muted">—</span>'}</td>
-              </tr>`;
-            }).join('')}
-            ${neglected.length > 50 ? `<tr><td colspan="5" class="text-muted text-sm" style="text-align:center;padding:10px;">… ещё ${neglected.length-50}. Используйте фильтры для уточнения.</td></tr>` : ''}
-          </tbody>
-        </table>
+        ${topRev.length ? `<div style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
+          ${topRev.map((c, i) => {
+            const barW = (c.revenue / maxRev) * 100;
+            return `<div data-cid="${c.id}" style="cursor:pointer;" title="${escapeHtml(c.name)}">
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; gap:8px;">
+                <span class="fw-600 text-sm" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;"><span class="text-muted">${i+1}.</span> ${escapeHtml(c.name)}</span>
+                <span style="font-size:12px; color:var(--text); white-space:nowrap; font-weight:600;">${fmt.rub(c.revenue)}</span>
+              </div>
+              <div style="height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden;">
+                <div style="height:100%; width:${barW}%; background:var(--wp-yellow); border-radius:3px;"></div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>` : '<div class="empty-state" style="padding:20px;">Нет клиентов с выручкой</div>'}
       </div>
-    `;
-    section.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
-  } else if (section) {
-    section.innerHTML = '';
-  }
+    </div>
+  `;
+  section.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
+  section.querySelectorAll('[data-cid]:not(tr)').forEach(el => el.addEventListener('click', () => openClientModal(el.dataset.cid)));
+  // Запоминаем открыт/закрыт упущенных
+  const det = document.getElementById('neglected-details');
+  if (det) det.addEventListener('toggle', () => { state._neglectedOpen = det.open; });
 }
 function drawClientsTable() {
   const list = applyFilters(visibleClients());
@@ -2843,7 +2837,7 @@ function openEventModal(eventId, defaultDate=null, defaultClientId=null) {
             <option value="call" ${e.kind==='call'?'selected':''}>Звонок</option>
             <option value="meeting" ${e.kind==='meeting'?'selected':''}>Встреча</option>
             <option value="contract" ${e.kind==='contract'?'selected':''}>Договор</option>
-            <option value="followup" ${e.kind==='followup'?'selected':''}>Контрольная точка</option>
+            <option value="note" ${(e.kind==='note'||e.kind==='followup')?'selected':''}>Заметка</option>
           </select>
         </label>
         <label class="field"><span>Дата и время</span>
@@ -3012,6 +3006,7 @@ function renderAnalytics() {
     <div class="page-tabs">
       <button class="page-tab ${tab==='overview'?'active':''}" data-atab="overview">📊 Обзор базы</button>
       <button class="page-tab ${tab==='month'?'active':''}" data-atab="month">💰 Месяц</button>
+      <button class="page-tab ${tab==='winrate'?'active':''}" data-atab="winrate">🏆 Win Rate</button>
       <button class="page-tab ${tab==='pdz'?'active':''}" data-atab="pdz">⚠ ПДЗ</button>
     </div>
     <div id="analytics-tab-content"></div>
@@ -3027,6 +3022,7 @@ function afterAnalytics() {
   const wrap = document.getElementById('analytics-tab-content');
   if (tab === 'month') return drawAnalyticsMonth(wrap);
   if (tab === 'pdz') return drawAnalyticsPdz(wrap);
+  if (tab === 'winrate') return drawAnalyticsWinRate(wrap);
   return drawAnalyticsOverview(wrap);
 }
 
@@ -3076,6 +3072,54 @@ function drawAnalyticsOverview(wrap) {
       <div style="padding:18px;"><div class="chart-box"><canvas id="ch-cohort"></canvas></div></div>
     </div>
 
+    ${(() => {
+      const isAdmin = state.user && state.user.role === 'admin';
+      if (!isAdmin) return '';
+      const managers = [...new Set(all.map(c => c.manager).filter(Boolean))].sort();
+      const mgrData = managers.map(m => {
+        const mClients = all.filter(c => c.manager === m);
+        const active = mClients.filter(c => clientStage(c) === 'active').length;
+        const archive = mClients.filter(c => clientStage(c) === 'reject').length;
+        return { manager: m, total: mClients.length, active, archive, inFunnel: mClients.length - active - archive };
+      }).sort((a, b) => b.total - a.total);
+      if (!mgrData.length) return '';
+      return `
+        <div class="card mb-4">
+          <div class="card-header">
+            <div class="card-title">Клиенты по менеджерам</div>
+            <span class="text-sm text-muted">${mgrData.length} ${mgrData.length===1?'менеджер':'менеджеров'} — клик переключает контекст</span>
+          </div>
+          <table class="data mgr-table">
+            <thead><tr><th>Менеджер</th><th class="num">Всего</th><th class="num">Активных</th><th class="num">В воронке</th><th class="num">Архив</th><th style="width:30%;">Структура базы</th></tr></thead>
+            <tbody>
+              ${mgrData.map(md => {
+                const ap = md.total ? md.active/md.total*100 : 0;
+                const fp = md.total ? md.inFunnel/md.total*100 : 0;
+                const rp = md.total ? md.archive/md.total*100 : 0;
+                return `<tr class="mgr-row" data-manager="${escapeHtml(md.manager)}" title="Кликните, чтобы посмотреть данные этого менеджера">
+                  <td><div style="display:flex;align-items:center;gap:9px;"><div class="user-avatar" style="width:24px;height:24px;font-size:9px;">${fmt.initials(md.manager)}</div><span class="fw-600">${escapeHtml(md.manager)}</span></div></td>
+                  <td class="num fw-700">${md.total}</td>
+                  <td class="num" style="color:#3F7F5B;">${md.active}</td>
+                  <td class="num">${md.inFunnel}</td>
+                  <td class="num text-muted">${md.archive}</td>
+                  <td><div class="mgr-bar2">
+                    <div class="mgr-bar2-seg" style="width:${ap}%; background:#9CC9AE;" title="Активных: ${md.active}"></div>
+                    <div class="mgr-bar2-seg" style="width:${fp}%; background:#F2D77E;" title="В воронке: ${md.inFunnel}"></div>
+                    <div class="mgr-bar2-seg" style="width:${rp}%; background:#D7DADE;" title="Архив: ${md.archive}"></div>
+                  </div></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+          <div class="mgr-legend" style="padding: 8px 16px;">
+            <span class="mgr-legend-item"><span class="chip-dot" style="background:#9CC9AE"></span>Активные</span>
+            <span class="mgr-legend-item"><span class="chip-dot" style="background:#F2D77E"></span>В воронке</span>
+            <span class="mgr-legend-item"><span class="chip-dot" style="background:#D7DADE"></span>Архив</span>
+          </div>
+        </div>
+      `;
+    })()}
+
     <div class="card">
       <div class="card-header">
         <div class="card-title">Работа клиентской базы по событиям</div>
@@ -3098,6 +3142,13 @@ function drawAnalyticsOverview(wrap) {
       </div>
     </div>
   `;
+  // Клик по строке менеджера → переключение контекста
+  wrap.querySelectorAll('.mgr-row').forEach(el => {
+    el.addEventListener('click', () => {
+      state.adminViewMgr = el.dataset.manager;
+      renderNav(); renderView();
+    });
+  });
   drawAnalyticsCharts();
 }
 
@@ -3187,6 +3238,107 @@ function drawAnalyticsMonth(wrap) {
     </div>
   `;
   wrap.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
+}
+
+// --- Tab: Win Rate — разбор конверсии в постоянных клиентов ---
+function drawAnalyticsWinRate(wrap) {
+  const all = visibleClients();
+  const won = all.filter(c => { const s = clientStage(c); return s === 'active' || s === 'firstorder'; });
+  const lost = all.filter(c => clientStage(c) === 'reject');
+  const inFunnel = all.filter(c => { const s = clientStage(c); return s !== 'active' && s !== 'firstorder' && s !== 'reject'; });
+  const totalDone = won.length + lost.length;
+  const winRate = totalDone ? Math.round(won.length / totalDone * 100) : 0;
+  const winColor = winRate >= 60 ? 'var(--success)' : winRate >= 30 ? '#D97706' : 'var(--danger)';
+
+  // По менеджерам
+  const mgrs = [...new Set(all.map(c => c.manager).filter(Boolean))].sort();
+  const mgrStats = mgrs.map(m => {
+    const mClients = all.filter(c => c.manager === m);
+    const mWon = mClients.filter(c => { const s = clientStage(c); return s === 'active' || s === 'firstorder'; }).length;
+    const mLost = mClients.filter(c => clientStage(c) === 'reject').length;
+    const mTotal = mWon + mLost;
+    const wr = mTotal ? Math.round(mWon / mTotal * 100) : 0;
+    return { manager: m, total: mClients.length, won: mWon, lost: mLost, winRate: wr };
+  }).sort((a,b) => b.winRate - a.winRate);
+
+  wrap.innerHTML = `
+    <div class="info-banner" style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:14px 18px; margin-bottom:18px;">
+      <div style="font-size:14px; color:#1E40AF; margin-bottom:8px;"><b>🏆 Что такое Win Rate?</b></div>
+      <div style="font-size:13px; color:#1E3A8A; line-height:1.6;">
+        Win Rate = доля клиентов, которые <b>дошли до постоянных или хотя бы сделали первый заказ</b>, из всех клиентов, чей путь уже завершён (либо стали покупать, либо ушли в архив).<br>
+        <b>Формула:</b> <code style="background:#DBEAFE; padding:2px 6px; border-radius:4px;">Win Rate = (Активно работают + Первый заказ) ÷ (Активно + Первый заказ + Архив) × 100%</code><br>
+        <b>Клиенты «в работе»</b> (этапы Контакт, Переговоры, Договор) <b>не считаются</b> — их путь ещё не завершён.
+      </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+      <div class="kpi" style="border-left:4px solid ${winColor}; padding-left:14px;"><div class="kpi-label">Текущий Win Rate</div><div class="kpi-value" style="color:${winColor}; font-size:32px;">${winRate}%</div><div class="kpi-sub">${won.length} из ${totalDone} завершённых</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">✓ Стали клиентами</div><div class="kpi-value">${won.length}</div><div class="kpi-sub">активные + первый заказ</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">✕ Архив</div><div class="kpi-value">${lost.length}</div><div class="kpi-sub">не сложилось</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">⏳ Ещё в работе</div><div class="kpi-value">${inFunnel.length}</div><div class="kpi-sub">не учитываются в WR</div></div>
+    </div>
+
+    ${mgrStats.length ? `
+      <div class="card mb-4">
+        <div class="card-header"><div class="card-title">Win Rate по менеджерам</div><span class="text-sm text-muted">только клиенты с завершённым путём</span></div>
+        <table class="data">
+          <thead><tr><th>Менеджер</th><th class="num">Стали клиентами</th><th class="num">Архив</th><th class="num">Завершённых</th><th class="num">Win Rate</th><th style="width:25%">Визуально</th></tr></thead>
+          <tbody>
+            ${mgrStats.map(m => {
+              const total = m.won + m.lost;
+              const wrColor = m.winRate >= 60 ? 'var(--success)' : m.winRate >= 30 ? '#D97706' : 'var(--danger)';
+              const wonP = total ? m.won/total*100 : 0;
+              const lostP = total ? m.lost/total*100 : 0;
+              return `<tr class="mgr-row" data-manager="${escapeHtml(m.manager)}" style="cursor:pointer;" title="Кликните, чтобы переключиться на этого менеджера">
+                <td class="fw-600">${escapeHtml(m.manager)}</td>
+                <td class="num" style="color:#3F7F5B;">${m.won}</td>
+                <td class="num text-muted">${m.lost}</td>
+                <td class="num">${total}</td>
+                <td class="num fw-700" style="color:${wrColor}">${total ? m.winRate + '%' : '—'}</td>
+                <td>${total ? `<div class="mgr-bar2">
+                  <div class="mgr-bar2-seg" style="width:${wonP}%; background:#9CC9AE;" title="Стали клиентами: ${m.won}"></div>
+                  <div class="mgr-bar2-seg" style="width:${lostP}%; background:#D7DADE;" title="Архив: ${m.lost}"></div>
+                </div>` : '<span class="text-muted">нет завершённых</span>'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : ''}
+
+    <div class="grid grid-2 mb-4">
+      <div class="card">
+        <div class="card-header"><div class="card-title">✓ Стали клиентами — ${won.length}</div></div>
+        <div style="max-height:380px; overflow-y:auto;">
+          ${won.length ? won.slice(0, 100).map(c => `<div class="card-row" data-cid="${c.id}" style="cursor:pointer; padding:8px 16px;">
+            <div style="flex:1; min-width:0;">
+              <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(c.name)}</div>
+              <div class="text-sm text-muted">${escapeHtml(c.manager||'—')} · ${fmt.rub(c.revenue||0)}</div>
+            </div>
+            ${stageChip(clientStage(c))}
+          </div>`).join('') : '<div class="empty-state" style="padding:20px;">Пока нет клиентов в постоянных или с первым заказом</div>'}
+          ${won.length > 100 ? `<div class="text-sm text-muted" style="text-align:center;padding:8px;">… ещё ${won.length-100}</div>` : ''}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">✕ Архив — ${lost.length}</div></div>
+        <div style="max-height:380px; overflow-y:auto;">
+          ${lost.length ? lost.slice(0, 100).map(c => `<div class="card-row" data-cid="${c.id}" style="cursor:pointer; padding:8px 16px;">
+            <div style="flex:1; min-width:0;">
+              <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(c.name)}</div>
+              <div class="text-sm text-muted">${escapeHtml(c.manager||'—')}</div>
+            </div>
+          </div>`).join('') : '<div class="empty-state" style="padding:20px;">Нет архивных клиентов — хорошо!</div>'}
+          ${lost.length > 100 ? `<div class="text-sm text-muted" style="text-align:center;padding:8px;">… ещё ${lost.length-100}</div>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+  wrap.querySelectorAll('[data-cid]').forEach(el => el.addEventListener('click', () => openClientModal(el.dataset.cid)));
+  wrap.querySelectorAll('.mgr-row').forEach(el => el.addEventListener('click', () => {
+    state.adminViewMgr = el.dataset.manager;
+    renderNav(); renderView();
+  }));
 }
 
 // --- Tab: ПДЗ — таблица должников ---
@@ -3962,6 +4114,29 @@ function onec_parseInn(rows) {
   return map;
 }
 
+// Извлекает город из адресной строки.
+// Поддерживает "г. Москва, ...", "г.Москва, ...", "Москва, ул...",
+// "Московская обл., г Подольск, ...", и т.д. Возвращает строку или null.
+function onec_cityFromAddress(addr) {
+  if (!addr) return null;
+  const s = String(addr).trim();
+  // 1) Явный маркер "г. <Город>" или "г <Город>"
+  let m = s.match(/(?:^|[,;])\s*г\.?\s+([А-ЯЁA-Z][а-яёa-z\-]+(?:[\s\-][А-ЯЁA-Z][а-яёa-z\-]+)?)/i);
+  if (m) return m[1].trim();
+  // 2) "г.Москва" без пробела
+  m = s.match(/(?:^|[,;])\s*г\.([А-ЯЁA-Z][а-яёa-z\-]+(?:[\s\-][А-ЯЁA-Z][а-яёa-z\-]+)?)/i);
+  if (m) return m[1].trim();
+  // 3) Если адрес начинается с города без префикса (напр. "Москва, ...")
+  const firstChunk = s.split(',')[0].trim();
+  // Исключаем «обл.», «край», индексы и т.д.
+  if (firstChunk && firstChunk.length >= 3 && firstChunk.length <= 40 &&
+      !/обл|край|респ|АО|^\d/i.test(firstChunk) &&
+      /^[А-ЯЁA-Z]/.test(firstChunk)) {
+    return firstChunk;
+  }
+  return null;
+}
+
 function onec_parseAddress(rows) {
   // Файл: «Справочник клиентов - факт.адрес». Header row 0, данные с 1.
   const map = new Map();
@@ -3969,11 +4144,15 @@ function onec_parseAddress(rows) {
     const r = rows[i]; if (!r) continue;
     const partner = (r[0] || '').toString().trim();
     if (!partner) continue;
+    const addressFull = (r[1] || '').toString().trim() || null;
+    let city = (r[4] || '').toString().trim() || null;
+    // Если city пустой, но есть адрес — пробуем извлечь
+    if (!city && addressFull) city = onec_cityFromAddress(addressFull);
     map.set(partner, {
-      address_full: (r[1] || '').toString().trim() || null,
+      address_full: addressFull,
       country: (r[2] || '').toString().trim() || null,
       region: (r[3] || '').toString().trim() || null,
-      city: (r[4] || '').toString().trim() || null
+      city: city
     });
   }
   return map;
@@ -4351,7 +4530,7 @@ function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
         activity: from1c.activity || 'Другое',
         inn: from1c.inn || '',
         reg_date: from1c.reg_date || new Date().toISOString().slice(0,10),
-        city: '',
+        city: from1c.city || '',
         address: from1c.address_full || '',
         revenue: from1c.sales ? from1c.sales.total : 0,
         debt: from1c.debt ? from1c.debt.total : 0,
@@ -4829,13 +5008,13 @@ function openClientModal(clientId, initialTab = null) {
   const overduePct = debt ? Math.round(overdue/debt*100) : 0;
   const deferralDays = c.from1c && c.from1c.agreement ? c.from1c.agreement.days : 0;
   const limit = c.from1c && c.from1c.contracts && c.from1c.contracts.length ? (c.from1c.contracts.find(x => x.status === 'Действует') || c.from1c.contracts[0]).limit : 0;
-  const hdrKpiStyle = (bg) => `display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:${bg}; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap;`;
+  const hdrKpiStyle = `display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:rgba(255,255,255,0.92); border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; color:#1F2937;`;
   const headerKpis = (revenue || debt || deferralDays || limit) ? `
         <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          ${revenue ? `<span style="${hdrKpiStyle('rgba(255,199,44,0.18)')}; color:#FCD34D;">💰 Выручка <b style="color:white;">${fmt.rub(revenue)}</b></span>` : ''}
-          ${debt ? `<span style="${hdrKpiStyle('rgba(220,38,38,0.18)')}; color:#FCA5A5;">🔴 Долг <b style="color:white;">${fmt.rub(debt)}</b>${overduePct ? ` <span style="opacity:.8;">(${overduePct}% просрочено)</span>` : ''}</span>` : ''}
-          ${deferralDays ? `<span style="${hdrKpiStyle('rgba(59,130,246,0.18)')}; color:#93C5FD;">⏱ Отсрочка <b style="color:white;">${deferralDays} дн</b></span>` : ''}
-          ${limit ? `<span style="${hdrKpiStyle('rgba(139,92,246,0.2)')}; color:#C4B5FD;">💳 Лимит <b style="color:white;">${fmt.rub(limit)}</b></span>` : ''}
+          ${revenue ? `<span style="${hdrKpiStyle}">💰 Выручка <b>${fmt.rub(revenue)}</b></span>` : ''}
+          ${debt ? `<span style="${hdrKpiStyle} color:#991B1B;">🔴 Долг <b>${fmt.rub(debt)}</b>${overduePct ? ` <span style="opacity:.75;">(${overduePct}% просрочено)</span>` : ''}</span>` : ''}
+          ${deferralDays ? `<span style="${hdrKpiStyle}">⏱ Отсрочка <b>${deferralDays} дн</b></span>` : ''}
+          ${limit ? `<span style="${hdrKpiStyle}">💳 Лимит <b>${fmt.rub(limit)}</b></span>` : ''}
         </div>` : '';
 
   openModal(`
@@ -6020,13 +6199,13 @@ function renderContractTab(c) {
 // =================== ACTIVITY (unified table of events + comments) ===================
 function activityKindLabel(kind, source) {
   if (source === 'event') {
-    return ({ call:'Звонок', meeting:'Встреча', contract:'Договор', followup:'Контроль' })[kind] || 'Событие';
+    return ({ call:'Звонок', meeting:'Встреча', contract:'Договор', note:'Заметка', followup:'Заметка' })[kind] || 'Событие';
   }
   return ({ note:'Заметка', call:'Звонок', meeting:'Встреча', email:'Письмо', other:'Другое' })[kind] || 'Комментарий';
 }
 function activityChipClass(kind, source) {
   if (source === 'event') {
-    return ({ call:'chip-info', meeting:'chip-default', contract:'chip-yellow', followup:'chip-success' })[kind] || 'chip-default';
+    return ({ call:'chip-info', meeting:'chip-default', contract:'chip-yellow', note:'chip-default', followup:'chip-default' })[kind] || 'chip-default';
   }
   return ({ note:'chip-default', call:'chip-info', meeting:'chip-default', email:'chip-info', other:'chip-default' })[kind] || 'chip-default';
 }
@@ -6098,7 +6277,7 @@ function renderActivity() {
           <option value="call" ${f.kind==='call'?'selected':''}>Звонок (план)</option>
           <option value="meeting" ${f.kind==='meeting'?'selected':''}>Встреча (план)</option>
           <option value="contract" ${f.kind==='contract'?'selected':''}>Договор (план)</option>
-          <option value="followup" ${f.kind==='followup'?'selected':''}>Контроль (план)</option>
+          <option value="note" ${(f.kind==='note'||f.kind==='followup')?'selected':''}>Заметка (план)</option>
         </optgroup>
         <optgroup label="Комментарии">
           <option value="comment" ${f.kind==='comment'?'selected':''}>Все комментарии</option>
@@ -6167,7 +6346,6 @@ function renderActivityInline() {
           <option value="call" ${f.kind==='call'?'selected':''}>Звонок</option>
           <option value="meeting" ${f.kind==='meeting'?'selected':''}>Встреча</option>
           <option value="contract" ${f.kind==='contract'?'selected':''}>Договор</option>
-          <option value="followup" ${f.kind==='followup'?'selected':''}>Контроль</option>
         </optgroup>
         <optgroup label="Комментарии">
           <option value="comment" ${f.kind==='comment'?'selected':''}>Все комментарии</option>
