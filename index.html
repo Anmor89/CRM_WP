@@ -886,7 +886,7 @@ mark { background: var(--wp-yellow-soft); padding: 0 2px; border-radius: 2px; co
       <div class="topbar-title" id="view-title">Дашборд</div>
       <div class="topbar-actions">
         <div class="topbar-context" id="topbar-context"></div>
-        <button class="btn" id="onec-refresh-btn" title="Перечитать данные из локальной папки _data/ (нужен запуск через start_crm.ps1)" style="display:none;">🔄 Обновить</button>
+        <button class="btn" id="onec-refresh-btn" title="Обновить данные 1С — выбрать xlsx-файлы (или авто-импорт из локальной папки _data/, если запущен HTTP-сервер)">🔄 Обновить</button>
         <button class="btn btn-primary" id="quick-add-client">+ Новый клиент</button>
       </div>
     </header>
@@ -1319,10 +1319,9 @@ document.getElementById('login-form').addEventListener('submit', (e) => {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   renderApp();
-  // Авто-импорт из локальной папки _data/ (доступна только через локальный сервер)
+  // Авто-импорт из локальной папки _data/, если она доступна (HTTP-сервер запущен).
+  // Без сервера это просто молча пропускается — кнопка «🔄 Обновить» всё равно открывает file picker.
   onec_dataFolderAvailable().then(ok => {
-    const btn = document.getElementById('onec-refresh-btn');
-    if (btn) btn.style.display = ok ? '' : 'none';
     if (ok) onec_autoImport({ silent: true });
   });
 });
@@ -1567,21 +1566,19 @@ document.getElementById('quick-add-client').addEventListener('click', () => open
 document.getElementById('onec-refresh-btn')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
-  // Шаг 1: server-side sync (копируем свежие файлы из Yandex Disk → _data/)
-  btn.textContent = '⏳ Копирую файлы 1С…';
-  let synced = null;
-  try {
-    const r = await fetch('/api/sync', { method: 'POST' });
-    if (r.ok) synced = await r.json();
-  } catch (_) {}
-  if (synced && synced.ok) {
-    onec_toast(`📁 Скопировано ${synced.count} файлов из Яндекс.Диска`, 'info', 2000);
-  } else if (synced && !synced.ok) {
-    onec_toast(`⚠ Sync пропущен: ${synced.error || 'ошибка сервера'}`, 'error', 4000);
+  btn.textContent = '⏳ Проверяю источник…';
+  // Если рядом есть локальная папка _data/ (HTTP-сервер) — авто-импорт.
+  // Если нет (GitHub Pages, file://) — открываем file picker.
+  const hasLocal = await onec_dataFolderAvailable();
+  if (hasLocal) {
+    btn.textContent = '⏳ Импорт из _data/…';
+    await onec_autoImport({ silent: false });
+  } else {
+    btn.innerHTML = '🔄 Обновить';
+    btn.disabled = false;
+    onec_runImport();
+    return;
   }
-  // Шаг 2: импорт в CRM
-  btn.textContent = '⏳ Импорт…';
-  await onec_autoImport({ silent: false });
   btn.disabled = false;
   btn.innerHTML = '🔄 Обновить';
 });
