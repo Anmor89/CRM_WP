@@ -7260,7 +7260,7 @@ function drawRawPartners(wrap) {
     };
   });
   _rawTable({
-    wrap, title: '🏢 Партнёры из 1С', total: rows.length,
+    wrap, rows, title: '🏢 Партнёры из 1С', total: rows.length,
     searchPlaceholder: 'Поиск по названию / ИНН / городу…',
     exportName: 'partners',
     columns: [
@@ -7297,7 +7297,7 @@ function drawRawSales(wrap) {
   });
   all.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   _rawTable({
-    wrap, title: '💰 Все транзакции продаж', total: all.length,
+    wrap, rows: all, title: '💰 Все транзакции продаж', total: all.length,
     searchPlaceholder: 'Поиск по клиенту / артикулу / бренду…',
     exportName: 'sales',
     columns: [
@@ -7357,7 +7357,7 @@ function drawRawLastSale(wrap) {
     { id: '365', label: 'Не покупали > 1 года' }
   ];
   _rawTable({
-    wrap, title: `📅 Последняя продажа · ${periodOpts.find(p => p.id === period)?.label || ''}`,
+    wrap, rows: filtered, title: `📅 Последняя продажа · ${periodOpts.find(p => p.id === period)?.label || ''}`,
     total: filtered.length,
     searchPlaceholder: 'Поиск по клиенту / менеджеру…',
     exportName: 'lastsale',
@@ -7407,7 +7407,7 @@ function drawRawContracts(wrap) {
   });
   all.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
   _rawTable({
-    wrap, title: '📝 Договоры из 1С', total: all.length,
+    wrap, rows: all, title: '📝 Договоры из 1С', total: all.length,
     searchPlaceholder: 'Поиск по клиенту / № договора…',
     exportName: 'contracts',
     columns: [
@@ -7438,7 +7438,7 @@ function drawRawDebt(wrap) {
   });
   rows.sort((a,b) => b.total - a.total);
   _rawTable({
-    wrap, title: '💳 Задолженность по клиентам', total: rows.length,
+    wrap, rows, title: '💳 Задолженность по клиентам', total: rows.length,
     searchPlaceholder: 'Поиск по клиенту…',
     exportName: 'debt',
     columns: [
@@ -7470,7 +7470,7 @@ function drawRawAgreements(wrap) {
   });
   rows.sort((a,b) => b.days - a.days);
   _rawTable({
-    wrap, title: '⏱ Соглашения об отсрочке', total: rows.length,
+    wrap, rows, title: '⏱ Соглашения об отсрочке', total: rows.length,
     searchPlaceholder: 'Поиск по клиенту…',
     exportName: 'agreements',
     columns: [
