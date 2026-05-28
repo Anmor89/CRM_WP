@@ -887,7 +887,6 @@ mark { background: var(--wp-yellow-soft); padding: 0 2px; border-radius: 2px; co
       <div class="topbar-actions">
         <div class="topbar-context" id="topbar-context"></div>
         <button class="btn" id="onec-refresh-btn" title="Обновить данные 1С — выбрать xlsx-файлы (или авто-импорт из локальной папки _data/, если запущен HTTP-сервер)">🔄 Обновить</button>
-        <button class="btn btn-primary" id="quick-add-client">+ Новый клиент</button>
       </div>
     </header>
     <div id="view-container" class="view-container"></div>
@@ -1341,7 +1340,6 @@ const NAV = [
   { id: 'clients',    label: 'Клиенты',   icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75' },
   { id: 'fieldsales', label: 'Полевые продажи', icon: 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z' },
   { id: 'sales',      label: 'Продажи',   icon: 'M3 3v18h18 M19 9l-5 5-4-4-3 3' },
-  { id: 'calendar',   label: 'Календарь', icon: 'M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z M16 2v4 M8 2v4 M3 10h18' },
   { id: 'contracts',  label: 'Договоры',  icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8' },
   { id: 'analytics',  label: 'Аналитика', icon: 'M18 20V10 M12 20V4 M6 20v-6' },
   { id: 'export',     label: 'Выгрузки',  icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3' },
@@ -1395,9 +1393,6 @@ function setView(v) {
   renderNav();
   document.getElementById('view-title').textContent =
     (NAV.find(n=>n.id===v)?.label) || (v==='admin'?'Доступы пользователей':v==='settings'?'Настройки':v);
-  // The top-right "+ Новый клиент" button lives only on the Клиенты page
-  const qa = document.getElementById('quick-add-client');
-  if (qa) qa.style.display = (v === 'clients') ? '' : 'none';
   renderView();
 }
 
@@ -1562,7 +1557,6 @@ function getEvents(clientId, all=false) {
   input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hide(); input.blur(); } });
 })();
 
-document.getElementById('quick-add-client').addEventListener('click', () => openClientModal(null));
 document.getElementById('onec-refresh-btn')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
@@ -1639,7 +1633,11 @@ function renderDashboard() {
 
   const recentClients = all.filter(c => c.reg_date)
     .sort((a, b) => new Date(b.reg_date) - new Date(a.reg_date)).slice(0, 6);
-  const topClients = [...all].sort((a,b) => (b.revenue||0) - (a.revenue||0)).slice(0, 8);
+
+  // Выручка и прибыль текущего месяца из 1С-транзакций
+  const curMonth = new Date().toISOString().slice(0, 7);
+  const revCurMonth = all.reduce((s, c) => s + ((c.from1c && c.from1c.sales && c.from1c.sales.by_month && c.from1c.sales.by_month[curMonth]) || 0), 0);
+  const profitCurMonth = all.reduce((s, c) => s + ((c.from1c && c.from1c.sales && c.from1c.sales.profit_by_month && c.from1c.sales.profit_by_month[curMonth]) || 0), 0);
 
   // "My Day" — events split into 4 baskets: overdue, today, tomorrow, week
   const _todayStart = new Date(new Date().toDateString());
@@ -1704,13 +1702,12 @@ function renderDashboard() {
 
   return `
     ${w.kpis !== false ? `
-    <div class="grid grid-6 mb-4">
-      <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Клиентов в базе</div><div class="kpi-value">${fmt.int(totalClients)}</div><div class="kpi-sub">+${newThisYear} в этом году</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background: var(--info)"></div><div class="kpi-label">В работе</div><div class="kpi-value">${fmt.int(inFunnel)}</div><div class="kpi-sub">в воронке</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background: var(--success)"></div><div class="kpi-label">Активно работают</div><div class="kpi-value">${fmt.int(activeCount)}</div><div class="kpi-sub">${totalClients?Math.round(activeCount/totalClients*100):0}% от базы</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background: var(--wp-yellow)"></div><div class="kpi-label">Выручка ${new Date().getFullYear()}</div><div class="kpi-value">${fmt.rub(revenueTotal)}</div><div class="kpi-sub">за период</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background: ${overdueTotal>0?'var(--danger)':'var(--text-soft)'}"></div><div class="kpi-label">Долг / Просрочено</div><div class="kpi-value">${fmt.rub(debtTotal)}</div><div class="kpi-sub" style="color: ${overdueTotal>0?'var(--danger)':'var(--text-muted)'}">просрочено: ${fmt.rub(overdueTotal)}</div></div>
-      <div class="kpi" title="Σ выручки клиентов в воронке × вероятность сделки на этапе"><div class="kpi-accent" style="background: #8B5CF6"></div><div class="kpi-label">Прогноз воронки</div><div class="kpi-value">${fmt.rub(forecastTotal)}</div><div class="kpi-sub">взвешенный pipeline</div></div>
+    <div class="grid grid-5 mb-4">
+      <div class="kpi dash-kpi-link" data-kpi-nav="clients" style="cursor:pointer;" title="Все клиенты"><div class="kpi-accent"></div><div class="kpi-label">Клиентов в базе</div><div class="kpi-value">${fmt.int(totalClients)}</div><div class="kpi-sub">+${newThisYear} в этом году</div></div>
+      <div class="kpi dash-kpi-link" data-kpi-nav="funnel-active" style="cursor:pointer;" title="Перейти в воронку — Активно работают"><div class="kpi-accent" style="background: var(--success)"></div><div class="kpi-label">Активных</div><div class="kpi-value">${fmt.int(activeCount)}</div><div class="kpi-sub">${totalClients?Math.round(activeCount/totalClients*100):0}% от базы</div></div>
+      <div class="kpi dash-kpi-link" data-kpi-nav="analytics-month" style="cursor:pointer;" title="Аналитика текущего месяца"><div class="kpi-accent" style="background: var(--wp-yellow)"></div><div class="kpi-label">Выручка месяца</div><div class="kpi-value">${fmt.rub(revCurMonth)}</div><div class="kpi-sub">${profitCurMonth > 0 ? 'прибыль: ' + fmt.rub(profitCurMonth) : 'данные за ' + curMonth}</div></div>
+      <div class="kpi dash-kpi-link" data-kpi-nav="analytics-pdz" style="cursor:pointer;" title="Аналитика ПДЗ"><div class="kpi-accent" style="background: ${overdueTotal>0?'var(--danger)':'var(--text-soft)'}"></div><div class="kpi-label">Долг общий</div><div class="kpi-value">${fmt.rub(debtTotal)}</div><div class="kpi-sub" style="color:${overdueTotal>0?'var(--danger)':'var(--text-muted)'}">просрочено: ${fmt.rub(overdueTotal)}</div></div>
+      <div class="kpi dash-kpi-link" data-kpi-nav="analytics" style="cursor:pointer;" title="Аналитика конверсии"><div class="kpi-accent" style="background: var(--info)"></div><div class="kpi-label">Win Rate</div><div class="kpi-value">${winRate}%</div><div class="kpi-sub">${won} клиентов из ${won+lost} обработанных</div></div>
     </div>
     ` : ''}
 
@@ -1727,7 +1724,7 @@ function renderDashboard() {
               <button class="myday-tab ${myDayTab==='week'?'active':''}" data-myday-tab="week">На неделе${evWeek.length?` <span class="myday-tab-count">${evWeek.length}</span>`:''}</button>
             </div>
           </div>
-          <a class="btn btn-ghost btn-sm" id="dash-go-cal-myday">Календарь →</a>
+          <button class="btn btn-sm" id="dash-plan-event" style="background:var(--wp-yellow); color:#5C4914; font-weight:600; border:none;">+ Запланировать</button>
         </div>
         <div>
           ${tabListAll.length ? tabList.map(renderTaskRow).join('') : `
@@ -1763,7 +1760,7 @@ function renderDashboard() {
     ` : ''}
 
     ${(w.funnel !== false) ? `
-    <div class="grid grid-2 mb-4" style="grid-template-columns: 1.6fr 1fr; align-items: stretch;">
+    <div class="mb-4">
       <div class="card">
         <div class="card-header">
           <div class="card-title">Воронка по клиентам</div>
@@ -1807,41 +1804,8 @@ function renderDashboard() {
         </div>
         <div style="padding:10px 16px; display:flex; align-items:center; gap:24px; border-top:1px solid var(--border); background:#FAFBFC; flex-wrap:wrap;">
           <div><span class="text-muted text-sm">Всего в работе:</span> <span class="fw-700">${fmt.int(inFunnel)}</span> <span class="text-sm text-muted">клиентов</span></div>
-          <div title="Сколько % обработанных лидов дошли до постоянного клиента (или хотя бы первого заказа) из всех завершённых (постоянные + первый заказ + архив)"><span class="text-muted text-sm">Конверсия в клиента:</span> <span class="fw-700" style="color:${winRate>=60?'var(--success)':winRate>=30?'var(--text)':'var(--danger)'}">${winRate}%</span> <span class="text-sm text-muted">(${won} стали клиентами из ${won+lost} обработанных)</span></div>
-          <div style="margin-left:auto;"><span class="text-muted text-sm">Прогноз выручки:</span> <span class="fw-700" style="color:#8B5CF6;">${fmt.rub(forecastTotal)}</span></div>
+          <div title="Сколько % обработанных лидов дошли до постоянного клиента (или хотя бы первого заказа)"><span class="text-muted text-sm">Конверсия:</span> <span class="fw-700" style="color:${winRate>=60?'var(--success)':winRate>=30?'var(--text)':'var(--danger)'}">${winRate}%</span> <span class="text-sm text-muted">(${won} из ${won+lost} обработанных)</span></div>
         </div>
-      </div>
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">Виды деятельности</div>
-          <span class="text-sm text-muted">структура базы</span>
-        </div>
-        ${(() => {
-          const actCounts = {};
-          all.forEach(c => { const a = c.activity || 'Не указан'; actCounts[a] = (actCounts[a]||0) + 1; });
-          const actSorted = Object.entries(actCounts).sort((a,b) => b[1] - a[1]);
-          const actMax = actSorted[0] ? actSorted[0][1] : 1;
-          const palette = ['#F59E0B', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#06B6D4', '#EC4899', '#84CC16', '#F97316', '#6B7280'];
-          if (!actSorted.length) return '<div class="empty-state" style="padding:20px;">Нет данных</div>';
-          return `<div style="padding: 14px 16px; display:flex; flex-direction:column; gap:12px;">
-            ${actSorted.map(([name, cnt], i) => {
-              const pct = totalClients ? (cnt / totalClients * 100) : 0;
-              const barW = actMax ? (cnt / actMax * 100) : 0;
-              const color = palette[i % palette.length];
-              return `
-                <div>
-                  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; gap:8px;">
-                    <span class="fw-600" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${escapeHtml(name)}</span>
-                    <span style="font-size:12px; color:var(--text-muted); white-space:nowrap;"><b style="color:var(--text);">${cnt}</b> · ${pct.toFixed(0)}%</span>
-                  </div>
-                  <div style="height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden;">
-                    <div style="height:100%; width:${barW}%; background:${color}; border-radius:3px; transition:width 0.4s;"></div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>`;
-        })()}
       </div>
     </div>
     ` : ''}
@@ -2047,7 +2011,18 @@ function afterDashboard() {
     state.myDayExpanded = false; renderView();
   });
   document.getElementById('dash-go-funnel')?.addEventListener('click', () => setView('funnel'));
-  document.getElementById('dash-go-cal-myday')?.addEventListener('click', () => setView('calendar'));
+  // KPI-плашки — переходы
+  document.querySelectorAll('.dash-kpi-link').forEach(el => {
+    el.addEventListener('click', () => {
+      const nav = el.dataset.kpiNav;
+      if (nav === 'clients') setView('clients');
+      else if (nav === 'funnel-active') { state.filters = { ...state.filters, stage: 'active' }; setView('funnel'); }
+      else if (nav === 'analytics-month' || nav === 'analytics-pdz') { state._analyticsTab = nav === 'analytics-pdz' ? 'pdz' : 'month'; setView('analytics'); }
+      else setView('analytics');
+    });
+  });
+  // Кнопка «+ Запланировать» в «Что сделать»
+  document.getElementById('dash-plan-event')?.addEventListener('click', () => openEventModal(null, null));
   document.getElementById('dash-conv-strip')?.addEventListener('click', (e) => {
     if (e.target.closest('.funnel-stage-clickable')) return;
     setView('analytics');
@@ -2089,20 +2064,10 @@ function eventKindLabel(k) {
 // =================== DEALS (Kanban funnel) ===================
 let _dealsTab = 'board'; // 'board' | 'feed'
 function renderFunnel() {
-  return `
-    <div class="page-tabs">
-      <button class="page-tab ${_dealsTab==='board'?'active':''}" data-dtab="board">🗂 Воронка</button>
-      <button class="page-tab ${_dealsTab==='feed'?'active':''}" data-dtab="feed">📋 Лента активности</button>
-    </div>
-    <div id="deals-tab-content"></div>
-  `;
+  return `<div id="deals-tab-content"></div>`;
 }
 function afterFunnel() {
-  document.querySelectorAll('.page-tab[data-dtab]').forEach(b => b.onclick = () => {
-    _dealsTab = b.dataset.dtab;
-    document.querySelectorAll('.page-tab[data-dtab]').forEach(x => x.classList.toggle('active', x.dataset.dtab === _dealsTab));
-    drawDealsTab();
-  });
+  _dealsTab = 'board';
   drawDealsTab();
 }
 function drawDealsTab() {
@@ -2152,15 +2117,6 @@ function drawDealsTab() {
     if (esEl) esEl.addEventListener('change', () => { state.filters.eventStatus = esEl.value; drawFunnelBoard(); });
     drawFunnelBoard();
     document.getElementById('create-deal-btn').onclick = () => openDealModal();
-  } else {
-    wrap.innerHTML = `
-      <div class="card">
-        <div class="card-header"><div class="card-title">📋 Лента активности по сделкам</div></div>
-        <div id="deals-activity"></div>
-      </div>
-    `;
-    document.getElementById('deals-activity').innerHTML = renderActivityInline();
-    afterActivity();
   }
 }
 function drawFunnelBoard() {
@@ -2378,7 +2334,6 @@ function renderClients() {
       <button class="btn btn-ghost btn-sm" id="f-reset">Сбросить</button>
       <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
         <span class="text-sm text-muted">Найдено: <b id="f-count">—</b></span>
-        <button class="btn btn-primary btn-sm" id="add-client-btn">+ Клиент</button>
       </div>
     </div>
 
@@ -2407,7 +2362,6 @@ function afterClients() {
   bindFilterControls();
   const esEl = document.getElementById('f-event-status');
   if (esEl) esEl.addEventListener('change', () => { state.filters.eventStatus = esEl.value; drawClientsTable(); });
-  document.getElementById('add-client-btn').addEventListener('click', () => openClientModal(null));
   drawClientsTable();
 }
 function drawClientsTable() {
