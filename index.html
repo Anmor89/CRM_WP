@@ -954,6 +954,7 @@ const state = {
     hiddenViews: [],            // view ids hidden from the left menu
     menuOrder: null,            // custom order of NAV ids; null = default
     staleWeeks: 2,              // weeks without events to highlight a client
+    neglectedMonths: 2,         // months without events AND sales to mark client as neglected
   },
 };
 
@@ -2337,6 +2338,8 @@ function renderClients() {
       </div>
     </div>
 
+    <div id="neglected-section"></div>
+
     <div class="table-wrap">
       <table class="data">
         <thead>
@@ -2358,11 +2361,64 @@ function renderClients() {
     </div>
   `;
 }
+function getNeglectedClients() {
+  const months = (state.settings && state.settings.neglectedMonths) || 2;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+  const cutoffMonth = cutoff.toISOString().slice(0, 7); // YYYY-MM
+  return visibleClients().filter(c => {
+    if (clientStage(c) === 'reject') return false;
+    if (!c.revenue && !(c.from1c && c.from1c.sales && c.from1c.sales.total)) return false;
+    // Нет открытых событий (созданных/запланированных после cutoff)
+    const hasRecentEvent = state.events.some(e =>
+      e.clientId === c.id && !e.completed && new Date(e.date) >= cutoff
+    );
+    if (hasRecentEvent) return false;
+    // Нет продаж за последние N месяцев
+    const byMonth = (c.from1c && c.from1c.sales && c.from1c.sales.by_month) || {};
+    const hasRecentSales = Object.keys(byMonth).some(m => m >= cutoffMonth && (byMonth[m] || 0) > 0);
+    return !hasRecentSales;
+  });
+}
+
 function afterClients() {
   bindFilterControls();
   const esEl = document.getElementById('f-event-status');
   if (esEl) esEl.addEventListener('change', () => { state.filters.eventStatus = esEl.value; drawClientsTable(); });
   drawClientsTable();
+  // Таблица упущенных клиентов
+  const neglected = getNeglectedClients();
+  const months = (state.settings && state.settings.neglectedMonths) || 2;
+  const section = document.getElementById('neglected-section');
+  if (section && neglected.length) {
+    section.innerHTML = `
+      <div class="card mb-4" style="border-left:4px solid var(--danger);">
+        <div class="card-header">
+          <div class="card-title" style="color:var(--danger);">⚠ Упущенные клиенты <span class="chip chip-danger">${neglected.length}</span></div>
+          <span class="text-sm text-muted">нет событий и продаж за ${months} мес.</span>
+        </div>
+        <table class="data">
+          <thead><tr><th>Клиент</th><th>Менеджер</th><th class="num">Последняя продажа</th><th class="num">Выручка</th><th class="num">Долг</th></tr></thead>
+          <tbody>
+            ${neglected.slice(0, 50).map(c => {
+              const lastSale = (c.from1c && c.from1c.sales && c.from1c.sales.last_date) || null;
+              return `<tr data-cid="${c.id}" style="cursor:pointer;">
+                <td class="fw-600">${escapeHtml(c.name)}</td>
+                <td>${escapeHtml(c.manager||'—')}</td>
+                <td class="num">${lastSale ? fmt.date(lastSale) : '<span class="text-muted">—</span>'}</td>
+                <td class="num">${(c.revenue||0) > 0 ? fmt.rub(c.revenue) : '<span class="text-muted">—</span>'}</td>
+                <td class="num" style="${(c.debt||0)>0?'color:var(--danger);':''}">${(c.debt||0)>0 ? fmt.rub(c.debt) : '<span class="text-muted">—</span>'}</td>
+              </tr>`;
+            }).join('')}
+            ${neglected.length > 50 ? `<tr><td colspan="5" class="text-muted text-sm" style="text-align:center;padding:10px;">… ещё ${neglected.length-50}. Используйте фильтры для уточнения.</td></tr>` : ''}
+          </tbody>
+        </table>
+      </div>
+    `;
+    section.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
+  } else if (section) {
+    section.innerHTML = '';
+  }
 }
 function drawClientsTable() {
   const list = applyFilters(visibleClients());
@@ -2792,32 +2848,51 @@ function openEventModal(eventId, defaultDate=null, defaultClientId=null) {
 
 // =================== CONTRACTS ===================
 function renderContracts() {
-  const list = visibleClients().filter(c => c.contract_signed || c.contract_no || c.contract_date);
-  const without = visibleClients().filter(c => !c.contract_signed && c.revenue > 100000);
+  const all = visibleClients();
+  const list = all.filter(c => c.contract_signed || c.contract_no || c.contract_date);
+  const without = all.filter(c => !c.contract_signed && (c.revenue||0) > 100000);
+  const inWork = all.filter(c => clientStage(c) === 'contract');
+  const coveragePct = all.length ? Math.round(list.length / all.length * 100) : 0;
+
+  // Загрузка лимита: долг ÷ лимит × 100%
+  function limitLoad(c) {
+    const limit = c.credit_limit || (c.from1c && c.from1c.contract_limit) || 0;
+    const debt = c.debt || 0;
+    if (!limit) return null;
+    return Math.round(debt / limit * 100);
+  }
+
   return `
-    <div class="grid grid-4 mb-4">
-      <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Активных договоров</div><div class="kpi-value">${list.length}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--danger)"></div><div class="kpi-label">Без договора, но с выручкой</div><div class="kpi-value">${without.length}</div><div class="kpi-sub">требуют оформления</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Договоров в работе</div><div class="kpi-value">${visibleClients().filter(c => clientStage(c) === 'contract').length}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">Покрытие</div><div class="kpi-value">${visibleClients().length ? Math.round(list.length/visibleClients().length*100) : 0}%</div></div>
+    <div class="grid grid-4 mb-4" style="cursor:pointer;">
+      <div class="kpi" data-cf="active" title="Нажмите, чтобы показать только эту группу"><div class="kpi-accent"></div><div class="kpi-label">Активных договоров</div><div class="kpi-value">${list.length}</div><div class="kpi-sub">${coveragePct}% клиентов охвачено</div></div>
+      <div class="kpi" data-cf="no-contract" title="Нажмите, чтобы показать только эту группу"><div class="kpi-accent" style="background:var(--danger)"></div><div class="kpi-label">Без договора, но с выручкой</div><div class="kpi-value">${without.length}</div><div class="kpi-sub">требуют оформления</div></div>
+      <div class="kpi" data-cf="in-contract" title="Нажмите, чтобы показать только эту группу"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Договоров в работе</div><div class="kpi-value">${inWork.length}</div><div class="kpi-sub">этап «Договор»</div></div>
+      <div class="kpi" title="Загрузка лимита = Долг ÷ Кредитный лимит × 100%"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">Средняя загрузка лимита</div><div class="kpi-value">${(() => { const loads = list.map(limitLoad).filter(x => x !== null); return loads.length ? Math.round(loads.reduce((a,b)=>a+b,0)/loads.length) + '%' : '—'; })()}</div><div class="kpi-sub">долг ÷ лимит</div></div>
     </div>
+    <p class="text-sm text-muted" style="margin-bottom:12px;">Нажмите на плашку, чтобы отфильтровать таблицу. Нажмите ещё раз — снять фильтр.</p>
 
     <div class="card mb-4">
-      <div class="card-header"><div class="card-title">Действующие договоры</div></div>
+      <div class="card-header"><div class="card-title">Договоры и условия работы</div></div>
       <table class="data">
-        <thead><tr><th>Клиент</th><th>ИНН</th><th>Менеджер</th><th>№ договора</th><th>Дата</th><th class="num">Выручка</th><th>Статус</th></tr></thead>
+        <thead><tr><th>Клиент</th><th>ИНН</th><th>Менеджер</th><th>№ договора</th><th>Дата</th><th class="num">Лимит</th><th class="num">Долг</th><th class="num">Загрузка</th><th>Статус</th></tr></thead>
         <tbody>
-          ${list.length ? list.map(c => `
+          ${list.length ? list.map(c => {
+            const load = limitLoad(c);
+            const loadColor = load === null ? '' : load >= 90 ? 'color:var(--danger); font-weight:700;' : load >= 70 ? 'color:#D97706; font-weight:600;' : 'color:var(--success);';
+            const limit = c.credit_limit || (c.from1c && c.from1c.contract_limit) || 0;
+            return `
             <tr data-cid="${c.id}">
               <td class="fw-600">${escapeHtml(c.name)}</td>
               <td>${escapeHtml(c.inn||'—')}</td>
-              <td>${escapeHtml(c.manager)}</td>
+              <td>${escapeHtml(c.manager||'—')}</td>
               <td>${escapeHtml(c.contract_no||'—')}</td>
               <td>${fmt.date(c.contract_date)}</td>
-              <td class="num">${fmt.rub(c.revenue||0)}</td>
-              <td><span class="chip chip-success">Действует</span></td>
-            </tr>
-          `).join('') : '<tr><td colspan="7"><div class="empty-state">Договоров пока нет</div></td></tr>'}
+              <td class="num">${limit ? fmt.rub(limit) : '<span class="text-muted">—</span>'}</td>
+              <td class="num">${(c.debt||0) > 0 ? fmt.rub(c.debt) : '<span class="text-muted">—</span>'}</td>
+              <td class="num" style="${loadColor}">${load !== null ? load + '%' : '<span class="text-muted">—</span>'}</td>
+              <td><span class="chip ${c.contract_signed ? 'chip-success' : 'chip-default'}">${c.contract_signed ? 'Действует' : 'Зарегистрирован'}</span></td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="9"><div class="empty-state">Договоров пока нет</div></td></tr>'}
         </tbody>
       </table>
     </div>
@@ -2831,8 +2906,8 @@ function renderContracts() {
             ${without.slice(0, 20).map(c => `
               <tr data-cid="${c.id}">
                 <td class="fw-600">${escapeHtml(c.name)}</td>
-                <td>${escapeHtml(c.manager)}</td>
-                <td class="num">${fmt.rub(c.revenue)}</td>
+                <td>${escapeHtml(c.manager||'—')}</td>
+                <td class="num">${fmt.rub(c.revenue||0)}</td>
                 <td>${stageChip(clientStage(c))}</td>
               </tr>
             `).join('')}
@@ -2843,7 +2918,33 @@ function renderContracts() {
   `;
 }
 function afterContracts() {
-  document.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
+  // Фильтрация таблицы при клике на KPI-плашку
+  let _contractFilter = null;
+  function applyContractFilter() {
+    document.querySelectorAll('tr[data-cid]').forEach(tr => {
+      if (!_contractFilter) { tr.style.display = ''; return; }
+      const cid = tr.dataset.cid;
+      const c = getClient(cid);
+      if (!c) { tr.style.display = 'none'; return; }
+      if (_contractFilter === 'no-contract') tr.style.display = (!c.contract_signed && (c.revenue||0) > 100000) ? '' : 'none';
+      else if (_contractFilter === 'in-contract') tr.style.display = (clientStage(c) === 'contract') ? '' : 'none';
+      else if (_contractFilter === 'active') tr.style.display = (c.contract_signed || c.contract_no || c.contract_date) ? '' : 'none';
+      else tr.style.display = '';
+    });
+    // Подсветить активную плашку
+    document.querySelectorAll('.kpi[data-cf]').forEach(el => {
+      el.style.outline = el.dataset.cf === _contractFilter ? '2px solid var(--wp-yellow)' : '';
+    });
+  }
+  document.querySelectorAll('.kpi[data-cf]').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => {
+      _contractFilter = _contractFilter === el.dataset.cf ? null : el.dataset.cf;
+      applyContractFilter();
+    });
+  });
+  // Клик по строке → карточка клиента на вкладке «Договор»
+  document.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid, 'contract')));
 }
 
 // =================== ANALYTICS ===================
@@ -3187,6 +3288,20 @@ function renderSettings() {
     </div>
 
     <div class="card">
+      <div class="card-header"><div class="card-title">Параметры работы</div></div>
+      <div class="card-body">
+        <p class="text-sm text-muted mb-3">Настройки логики работы с клиентской базой.</p>
+        <label class="setting-row" style="align-items:center; gap:12px;">
+          <span style="flex:1;">Считать клиента <b>упущенным</b> если нет ни событий, ни продаж за последние</span>
+          <input type="number" id="neglected-months" min="1" max="24" value="${(state.settings && state.settings.neglectedMonths) || 2}" style="width:60px; padding:6px 10px; border:1px solid var(--border); border-radius:6px; text-align:center; font-size:14px;">
+          <span>мес.</span>
+          <button class="btn btn-primary btn-sm" id="neglected-months-save">Сохранить</button>
+        </label>
+        <p class="text-sm text-muted mt-2" style="padding-left:4px;">Упущенные клиенты отображаются в разделе «Клиенты» внизу страницы.</p>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="card-header"><div class="card-title">Системные действия</div></div>
       <div class="card-body">
         <div class="info-grid">
@@ -3323,6 +3438,15 @@ function afterSettings() {
     localStorage.removeItem(LS_KEY);
     location.reload();
   };
+
+  document.getElementById('neglected-months-save')?.addEventListener('click', () => {
+    const val = parseInt(document.getElementById('neglected-months').value, 10);
+    if (val >= 1 && val <= 24) {
+      state.settings.neglectedMonths = val;
+      persist();
+      onec_toast('Настройка сохранена', 'success', 2000);
+    }
+  });
 }
 
 // =================== EXPORT / IMPORT ===================
@@ -3673,7 +3797,7 @@ function onec_parseSales(rows) {
   // Файл: «Продажи по дням». Header row 2, данные с 3. Колонки:
   // 0=Дата (только в верхней строке группы), 3=Артикул, 4=Номенклатура, 5=Бренд,
   // 6=Покупатель(Партнёр), 7=Головное, 8=Заказ, 9=Категория, 10=Менеджер,
-  // 12=Кол-во, 13=Сумма, 14=Себест.
+  // 12=Кол-во, 13=Сумма, 14=Себест., 15=Валовая прибыль
   const map = new Map();
   let currentDate = null;
   for (let i = 3; i < rows.length; i++) {
@@ -3684,17 +3808,23 @@ function onec_parseSales(rows) {
     if (!partner || !currentDate) continue;
     const amount = onec_num(r[13]);
     const cost = onec_num(r[14]);
+    // Валовая прибыль: берём из col 15 если есть, иначе amount - cost
+    const rawProfit = onec_num(r[15]);
+    const profit = rawProfit !== 0 ? rawProfit : (amount - cost);
     const qty = onec_num(r[12]);
     const year = currentDate.slice(0, 4);
     const month = currentDate.slice(0, 7);     // YYYY-MM
     const entry = map.get(partner) || {
-      total: 0, total_cost: 0, by_year: {}, by_month: {},
+      total: 0, total_cost: 0, total_profit: 0,
+      by_year: {}, by_month: {}, profit_by_month: {},
       last_date: null, txn_count: 0, transactions: []
     };
     entry.total += amount;
     entry.total_cost += cost;
+    entry.total_profit += profit;
     entry.by_year[year] = (entry.by_year[year] || 0) + amount;
     entry.by_month[month] = (entry.by_month[month] || 0) + amount;
+    entry.profit_by_month[month] = (entry.profit_by_month[month] || 0) + profit;
     if (!entry.last_date || currentDate > entry.last_date) entry.last_date = currentDate;
     // Пропускаем строки с нулевой суммой (служебные / не отгружено / сторно с 0)
     if (amount === 0) continue;
@@ -3807,12 +3937,14 @@ function onec_buildClients(parsed, allowedManagers /* Set | null */) {
         if (o.last_date && (!aggOrders.last_date || o.last_date > aggOrders.last_date)) aggOrders.last_date = o.last_date;
       }
       if (s) {
-        if (!aggSales) aggSales = { total: 0, total_cost: 0, by_year: {}, by_month: {}, last_date: null, txn_count: 0, transactions: [] };
+        if (!aggSales) aggSales = { total: 0, total_cost: 0, total_profit: 0, by_year: {}, by_month: {}, profit_by_month: {}, last_date: null, txn_count: 0, transactions: [] };
         aggSales.total += s.total;
         aggSales.total_cost += s.total_cost;
+        aggSales.total_profit += (s.total_profit || 0);
         aggSales.txn_count += s.txn_count;
         for (const k of Object.keys(s.by_year)) aggSales.by_year[k] = (aggSales.by_year[k] || 0) + s.by_year[k];
         for (const k of Object.keys(s.by_month)) aggSales.by_month[k] = (aggSales.by_month[k] || 0) + s.by_month[k];
+        for (const k of Object.keys(s.profit_by_month || {})) aggSales.profit_by_month[k] = (aggSales.profit_by_month[k] || 0) + s.profit_by_month[k];
         if (s.transactions && s.transactions.length) aggSales.transactions = aggSales.transactions.concat(s.transactions);
         if (s.last_date && (!aggSales.last_date || s.last_date > aggSales.last_date)) aggSales.last_date = s.last_date;
       }
@@ -4368,7 +4500,7 @@ function openUserModal(username) {
 }
 
 // =================== CLIENT MODAL ===================
-function openClientModal(clientId) {
+function openClientModal(clientId, initialTab = null) {
   const isNew = !clientId;
   const c = isNew ? {
     id: 'c_new_' + uid(), name: '', manager: state.user.manager || '', activity: 'СТО',
@@ -4449,7 +4581,7 @@ function openClientModal(clientId) {
       <button class="btn btn-primary" id="cm-save">Сохранить и закрыть</button>
     </div>
   `, 'modal-wide');
-  let activeTab = 'overview';
+  let activeTab = initialTab || 'overview';
   function renderTab() {
     const body = document.getElementById('cm-body');
     if (activeTab === 'overview') {
