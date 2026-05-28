@@ -2597,112 +2597,273 @@ function renderManagers() {
 function afterManagers() {}
 
 // =================== SALES ===================
+// Возвращает массив YYYY-MM ключей для выбранного периода (включая текущий месяц)
+function _salesPeriodMonths(periodId) {
+  const out = [];
+  const now = new Date();
+  const cy = now.getFullYear();
+  const cm = now.getMonth(); // 0..11
+  const push = (y, m) => out.push(`${y}-${String(m+1).padStart(2,'0')}`);
+  if (periodId === '3m' || periodId === '6m' || periodId === '12m') {
+    const n = periodId === '3m' ? 3 : periodId === '6m' ? 6 : 12;
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(cy, cm - i, 1);
+      push(d.getFullYear(), d.getMonth());
+    }
+  } else if (periodId === 'ytd') {
+    for (let m = 0; m <= cm; m++) push(cy, m);
+  } else if (periodId === 'lastyear') {
+    for (let m = 0; m < 12; m++) push(cy - 1, m);
+  } else if (periodId === 'all') {
+    // соберём все месяцы из данных
+    const set = new Set();
+    state.clients.forEach(c => {
+      const bm = c.from1c && c.from1c.sales && c.from1c.sales.by_month;
+      if (bm) Object.keys(bm).forEach(k => set.add(k));
+    });
+    return Array.from(set).sort();
+  }
+  return out;
+}
+
+function _monthLabel(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const names = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+  return `${names[m-1]} ${String(y).slice(2)}`;
+}
+
 function renderSales() {
   const managers = uniqueManagers();
+  const cats = ['A','B','C'];
+  const period = state._salesPagePeriod || '12m';
+  const mgrFilter = state._salesPageMgr || 'all';
+  const catFilter = state._salesPageCat || 'all';
   return `
-    <div class="grid grid-2 mb-4" style="grid-template-columns: 2fr 1fr;">
-      <div class="chart-card">
-        <h3>Выручка по месяцам, 2026</h3>
-        <div class="chart-box"><canvas id="chart-sales-months"></canvas></div>
+    <div class="card mb-4" style="padding:14px 18px;">
+      <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+        <span class="text-sm fw-600">Период:</span>
+        <div class="sales-period-tabs">
+          ${[
+            {id:'3m', label:'3 мес'},
+            {id:'6m', label:'6 мес'},
+            {id:'12m', label:'12 мес'},
+            {id:'ytd', label:'YTD'},
+            {id:'lastyear', label:'Прошлый год'},
+            {id:'all', label:'Всё'}
+          ].map(p => `<button data-sales-period="${p.id}" class="${period===p.id?'active':''}">${p.label}</button>`).join('')}
+        </div>
+        <div style="margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <select id="sales-mgr-filter" style="padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+            <option value="all">Все менеджеры</option>
+            ${managers.map(m => `<option value="${escapeHtml(m)}" ${mgrFilter===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
+          </select>
+          <select id="sales-cat-filter" style="padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+            <option value="all">Все категории</option>
+            ${cats.map(c => `<option value="${c}" ${catFilter===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </div>
       </div>
-      <div class="chart-card">
-        <h3>План vs Факт по менеджерам (Q1)</h3>
-        <div class="chart-box"><canvas id="chart-plan-fact"></canvas></div>
+    </div>
+
+    <div class="grid grid-4 mb-4" id="sales-kpis"></div>
+
+    <div class="card mb-4">
+      <div class="card-header">
+        <div class="card-title">📈 Динамика выручки и прибыли</div>
+        <span class="text-sm text-muted" id="sales-chart-label"></span>
       </div>
+      <div style="padding: 8px 16px 18px; height: 320px;">
+        <canvas id="chart-sales-months"></canvas>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header">
+        <div class="card-title">По менеджерам</div>
+        <span class="text-sm text-muted" id="sales-mgr-period-label"></span>
+      </div>
+      <table class="data">
+        <thead><tr>
+          <th>Менеджер</th>
+          <th class="num">Клиентов с заказами</th>
+          <th class="num">Выручка</th>
+          <th class="num">Валовая прибыль</th>
+          <th class="num">Маржа</th>
+          <th class="num">Доля выручки</th>
+        </tr></thead>
+        <tbody id="sales-mgr-tbody"></tbody>
+      </table>
     </div>
 
     <div class="card">
       <div class="card-header">
         <div class="card-title">Клиенты по выручке</div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <select id="sales-mgr-filter" style="padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
-            <option value="all">Все менеджеры</option>
-            ${managers.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}
-          </select>
-          <span class="text-sm text-muted">Янв—Май 2026</span>
-        </div>
+        <span class="text-sm text-muted" id="sales-table-label"></span>
       </div>
-      <table class="data" id="sales-table">
-        <thead>
-          <tr>
-            <th>Клиент</th>
-            <th>Менеджер</th>
-            <th>Категория</th>
-            <th class="num">Январь</th>
-            <th class="num">Февраль</th>
-            <th class="num">Март</th>
-            <th class="num">Апрель</th>
-            <th class="num">Май</th>
-            <th class="num">Итого</th>
-          </tr>
-        </thead>
-        <tbody id="sales-tbody"></tbody>
-      </table>
+      <div style="overflow-x:auto;">
+        <table class="data" id="sales-table">
+          <thead id="sales-thead"></thead>
+          <tbody id="sales-tbody"></tbody>
+        </table>
+      </div>
     </div>
   `;
 }
-function drawSalesTable() {
-  const months = ['Январь','Февраль','Март','Апрель','Май'];
-  const mgrFilter = (document.getElementById('sales-mgr-filter') || {}).value || 'all';
-  let list = state.clients.filter(c => c.revenue > 0);
-  if (mgrFilter !== 'all') list = list.filter(c => c.manager === mgrFilter);
-  list.sort((a,b) => (b.revenue||0) - (a.revenue||0));  // sort by total desc
-  const tbody = document.getElementById('sales-tbody');
-  tbody.innerHTML = list.length ? list.slice(0, 100).map(c => `
-    <tr data-cid="${c.id}">
-      <td class="fw-600">${escapeHtml(c.name)}</td>
-      <td>${escapeHtml(c.manager)}</td>
-      <td><span class="chip chip-cat-${clientCategory(c)}">${clientCategory(c)}</span></td>
-      ${months.map(m => `<td class="num">${c.months?.[m] ? fmt.rub(c.months[m]) : '<span class="muted">—</span>'}</td>`).join('')}
-      <td class="num fw-700">${fmt.rub(c.revenue)}</td>
-    </tr>
-  `).join('') : `<tr><td colspan="9"><div class="empty-state">Нет данных по выручке</div></td></tr>`;
-  if (list.length > 100) tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="9" class="muted text-sm" style="text-align:center;padding:12px;">Показано 100 из ${list.length}</td></tr>`);
-  tbody.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
+
+function _calcSalesMatrix() {
+  const period = state._salesPagePeriod || '12m';
+  const mgrFilter = state._salesPageMgr || 'all';
+  const catFilter = state._salesPageCat || 'all';
+  const months = _salesPeriodMonths(period);
+  // Фильтруем клиентов
+  let clients = visibleClients();
+  if (mgrFilter !== 'all') clients = clients.filter(c => c.manager === mgrFilter);
+  if (catFilter !== 'all') clients = clients.filter(c => clientCategory(c) === catFilter);
+  // Для каждого клиента — выручка/прибыль по месяцам + итого
+  const rows = clients.map(c => {
+    const sales = (c.from1c && c.from1c.sales) || {};
+    const bm = sales.by_month || {};
+    const pm = sales.profit_by_month || {};
+    const monthRev = months.map(m => bm[m] || 0);
+    const monthProf = months.map(m => pm[m] || 0);
+    const totalRev = monthRev.reduce((s,v) => s+v, 0);
+    const totalProf = monthProf.reduce((s,v) => s+v, 0);
+    return { id: c.id, name: c.name, manager: c.manager||'—', category: clientCategory(c), monthRev, monthProf, totalRev, totalProf };
+  }).filter(r => r.totalRev > 0).sort((a,b) => b.totalRev - a.totalRev);
+  // Тоталы по месяцам
+  const totalsRev = months.map((_, i) => rows.reduce((s,r) => s + r.monthRev[i], 0));
+  const totalsProf = months.map((_, i) => rows.reduce((s,r) => s + r.monthProf[i], 0));
+  const grandRev = totalsRev.reduce((s,v) => s+v, 0);
+  const grandProf = totalsProf.reduce((s,v) => s+v, 0);
+  return { months, rows, totalsRev, totalsProf, grandRev, grandProf, period };
 }
+
 let _chartRefs = {};
 function destroyCharts() {
   Object.values(_chartRefs).forEach(c => { try { c.destroy(); } catch(e){} });
   _chartRefs = {};
 }
-function afterSales() {
+
+function drawSalesPage() {
+  const d = _calcSalesMatrix();
+  const periodLabels = { '3m':'последние 3 мес', '6m':'последние 6 мес', '12m':'последние 12 мес', 'ytd':'с начала года', 'lastyear':'прошлый год', 'all':'всё время' };
+  const periodText = periodLabels[d.period] || d.period;
+  const margin = d.grandRev > 0 ? (d.grandProf / d.grandRev * 100) : 0;
+  const clientsCount = d.rows.length;
+  const avgCheck = clientsCount > 0 ? d.grandRev / clientsCount : 0;
+
+  // KPI
+  document.getElementById('sales-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-accent" style="background:var(--wp-yellow)"></div><div class="kpi-label">Выручка</div><div class="kpi-value">${fmt.rub(d.grandRev)}</div><div class="kpi-sub">${periodText}</div></div>
+    <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">Валовая прибыль</div><div class="kpi-value">${fmt.rub(d.grandProf)}</div><div class="kpi-sub">маржа ${margin.toFixed(1)}%</div></div>
+    <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Клиентов с заказами</div><div class="kpi-value">${clientsCount}</div><div class="kpi-sub">в выборке</div></div>
+    <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Средний чек</div><div class="kpi-value">${fmt.rub(avgCheck)}</div><div class="kpi-sub">выручка ÷ клиентов</div></div>
+  `;
+  document.getElementById('sales-chart-label').textContent = periodText;
+  document.getElementById('sales-mgr-period-label').textContent = periodText;
+
+  // График
   destroyCharts();
-  const months = ['Январь','Февраль','Март','Апрель','Май'];
-  const totals = months.map(m => state.clients.reduce((s,c) => s + (c.months?.[m] || 0), 0));
+  const ctx = document.getElementById('chart-sales-months');
+  if (ctx && d.months.length) {
+    _chartRefs.salesMonths = new Chart(ctx, {
+      data: {
+        labels: d.months.map(_monthLabel),
+        datasets: [
+          { type: 'bar', label: 'Выручка', data: d.totalsRev, backgroundColor: '#FFC72C', borderRadius: 6, borderSkipped: false, yAxisID: 'y' },
+          { type: 'line', label: 'Валовая прибыль', data: d.totalsProf, borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.15)', borderWidth: 3, fill: true, tension: 0.25, pointRadius: 4, pointBackgroundColor: '#10B981', yAxisID: 'y' }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { family: 'Inter' } } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt.rubFull(ctx.parsed.y)}` } }
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { grid: { color: '#F3F4F6' }, ticks: { callback: v => fmt.rub(v) } }
+        }
+      }
+    });
+  }
 
-  _chartRefs.salesMonths = new Chart(document.getElementById('chart-sales-months'), {
-    type: 'bar',
-    data: {
-      labels: months,
-      datasets: [{
-        label: 'Выручка',
-        data: totals,
-        backgroundColor: '#FFC72C',
-        borderRadius: 6,
-        borderSkipped: false,
-      }]
-    },
-    options: chartBaseOpts({ valueAsRub: true, yGrid: true })
+  // По менеджерам
+  const mgrAgg = {};
+  d.rows.forEach(r => {
+    if (!mgrAgg[r.manager]) mgrAgg[r.manager] = { manager: r.manager, rev: 0, profit: 0, clients: 0 };
+    mgrAgg[r.manager].rev += r.totalRev;
+    mgrAgg[r.manager].profit += r.totalProf;
+    mgrAgg[r.manager].clients++;
   });
+  const mgrRows = Object.values(mgrAgg).sort((a,b) => b.rev - a.rev);
+  document.getElementById('sales-mgr-tbody').innerHTML = mgrRows.length ? mgrRows.map(m => {
+    const share = d.grandRev ? (m.rev/d.grandRev*100) : 0;
+    const marg = m.rev > 0 ? (m.profit/m.rev*100) : 0;
+    return `<tr>
+      <td class="fw-600">${escapeHtml(m.manager)}</td>
+      <td class="num">${m.clients}</td>
+      <td class="num">${fmt.rub(m.rev)}</td>
+      <td class="num">${fmt.rub(m.profit)}</td>
+      <td class="num">${marg.toFixed(1)}%</td>
+      <td class="num">
+        <div style="display:inline-flex; align-items:center; gap:8px;">
+          <div style="width:80px; height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden;"><div style="width:${share}%; height:100%; background:var(--wp-yellow);"></div></div>
+          <span>${share.toFixed(0)}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6"><div class="empty-state">Нет данных за выбранный период</div></td></tr>';
 
-  const labels = MANAGER_PERF.map(m => m.manager.split(' ')[0]);
-  const planData = MANAGER_PERF.map(m => m.plan.jan + m.plan.feb + m.plan.mar);
-  const factData = MANAGER_PERF.map(m => m.fact.jan + m.fact.feb + m.fact.mar);
-  _chartRefs.planFact = new Chart(document.getElementById('chart-plan-fact'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'План', data: planData, backgroundColor: '#D1D5DB', borderRadius: 4 },
-        { label: 'Факт', data: factData, backgroundColor: '#FFC72C', borderRadius: 4 },
-      ]
-    },
-    options: chartBaseOpts({ valueAsRub: true, yGrid: true })
+  // Таблица клиентов
+  const monthCols = d.months.slice(-6); // показываем последние 6 месяцев в таблице
+  const monthIdxs = monthCols.map(m => d.months.indexOf(m));
+  document.getElementById('sales-thead').innerHTML = `
+    <tr>
+      <th>Клиент</th>
+      <th>Менеджер</th>
+      <th>Кат.</th>
+      ${monthCols.map(m => `<th class="num">${_monthLabel(m)}</th>`).join('')}
+      <th class="num">Итого</th>
+      <th class="num">Прибыль</th>
+      <th class="num">Маржа</th>
+    </tr>
+  `;
+  document.getElementById('sales-table-label').textContent = `${periodText} · показано ${Math.min(d.rows.length, 100)} из ${d.rows.length}`;
+  const tbody = document.getElementById('sales-tbody');
+  tbody.innerHTML = d.rows.length ? d.rows.slice(0, 100).map(r => {
+    const marg = r.totalRev > 0 ? (r.totalProf/r.totalRev*100) : 0;
+    const margColor = marg < 0 ? 'color:var(--danger);' : marg < 10 ? 'color:#D97706;' : 'color:var(--success);';
+    return `<tr data-cid="${r.id}" style="cursor:pointer;">
+      <td class="fw-600">${escapeHtml(r.name)}</td>
+      <td>${escapeHtml(r.manager)}</td>
+      <td><span class="chip chip-cat-${r.category}">${r.category}</span></td>
+      ${monthIdxs.map(i => `<td class="num text-sm">${r.monthRev[i] ? fmt.rub(r.monthRev[i]) : '<span class="text-muted">—</span>'}</td>`).join('')}
+      <td class="num fw-700">${fmt.rub(r.totalRev)}</td>
+      <td class="num">${r.totalProf !== 0 ? fmt.rub(r.totalProf) : '<span class="text-muted">—</span>'}</td>
+      <td class="num text-sm" style="${margColor}">${r.totalProf !== 0 && r.totalRev !== 0 ? marg.toFixed(1) + '%' : '<span class="text-muted">—</span>'}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="${monthCols.length + 6}"><div class="empty-state">Нет клиентов с продажами за выбранный период</div></td></tr>`;
+  if (d.rows.length > 100) tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="${monthCols.length + 6}" class="text-muted text-sm" style="text-align:center;padding:12px;">… ещё ${d.rows.length-100}. Используйте фильтры для уточнения.</td></tr>`);
+  tbody.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
+}
+
+function afterSales() {
+  // Переключатель периода
+  document.querySelectorAll('[data-sales-period]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state._salesPagePeriod = btn.dataset.salesPeriod;
+      document.querySelectorAll('[data-sales-period]').forEach(b => b.classList.toggle('active', b === btn));
+      drawSalesPage();
+    });
   });
-
-  drawSalesTable();
+  // Фильтр менеджер
   const mf = document.getElementById('sales-mgr-filter');
-  if (mf) mf.addEventListener('change', drawSalesTable);
+  if (mf) mf.addEventListener('change', () => { state._salesPageMgr = mf.value; drawSalesPage(); });
+  // Фильтр категория
+  const cf = document.getElementById('sales-cat-filter');
+  if (cf) cf.addEventListener('change', () => { state._salesPageCat = cf.value; drawSalesPage(); });
+  drawSalesPage();
 }
 
 function chartBaseOpts({valueAsRub=false, yGrid=false} = {}) {
