@@ -533,7 +533,7 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
   background: #FAFBFC; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px;
 }
 .embedded-activity .comment-form { background: white; }
-.embedded-activity .timeline { max-height: 280px; overflow-y: auto; padding: 0 4px; }
+.embedded-activity .timeline { max-height: 420px; overflow-y: auto; padding: 0 4px; }
 
 /* Wider modal body with comfortable padding */
 .modal.modal-wide .modal-body { padding: 24px 32px; }
@@ -541,7 +541,7 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 
 /* Client overview — 2-column layout (левая шире/правая просторнее для событий) */
 .client-overview-grid {
-  display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px;
+  display: grid; grid-template-columns: 1fr 1.15fr; gap: 18px;
   align-items: start;
 }
 @media (max-width: 1200px) {
@@ -1640,6 +1640,36 @@ function renderDashboard() {
   const revCurMonth = all.reduce((s, c) => s + ((c.from1c && c.from1c.sales && c.from1c.sales.by_month && c.from1c.sales.by_month[curMonth]) || 0), 0);
   const profitCurMonth = all.reduce((s, c) => s + ((c.from1c && c.from1c.sales && c.from1c.sales.profit_by_month && c.from1c.sales.profit_by_month[curMonth]) || 0), 0);
 
+  // ⚠ КРИТИЧНО: клиенты на грани лимита (долг ≥ 80% от лимита)
+  const limitAlerts = all.map(c => {
+    const contracts = (c.from1c && c.from1c.contracts) || [];
+    const limit = contracts.filter(x => x.status === 'Действует').reduce((s,x) => s + (x.limit || 0), 0);
+    const debt = c.debt || 0;
+    if (limit <= 0) return null;
+    const load = Math.round(debt / limit * 100);
+    if (load < 80) return null;
+    return { client: c, limit, debt, load };
+  }).filter(x => x).sort((a,b) => b.load - a.load).slice(0, 5);
+
+  // 📉 ОСТЫВАЮЩИЕ: были регулярные покупки, последние 30-60 дней — тишина
+  const today = new Date();
+  const day30 = new Date(today); day30.setDate(day30.getDate() - 30);
+  const day60 = new Date(today); day60.setDate(day60.getDate() - 60);
+  const day180 = new Date(today); day180.setDate(day180.getDate() - 180);
+  const coolingDown = all.map(c => {
+    const sales = c.from1c && c.from1c.sales;
+    if (!sales || !sales.last_date || !sales.by_month) return null;
+    const lastDate = new Date(sales.last_date);
+    // Окно «остывает»: 30-60 дней тишины (свежие — пропускаем, 60+ — это уже «упущенные»)
+    if (lastDate >= day30) return null;  // покупал недавно
+    if (lastDate < day60) return null;   // молчит слишком долго — это «упущенный»
+    // Должны были быть регулярные покупки: ≥3 разных месяцев за последние 6 мес
+    const monthsAgo180 = day180.toISOString().slice(0,7);
+    const recentMonths = Object.keys(sales.by_month).filter(m => m >= monthsAgo180 && sales.by_month[m] > 0);
+    if (recentMonths.length < 3) return null;
+    return { client: c, lastDate: sales.last_date, monthsActive: recentMonths.length, total: sales.total || 0 };
+  }).filter(x => x).sort((a,b) => b.total - a.total).slice(0, 5);
+
   // "My Day" — events split into 4 baskets: overdue, today, tomorrow, week
   const _todayStart = new Date(new Date().toDateString());
   const _todayEnd = new Date(_todayStart); _todayEnd.setDate(_todayEnd.getDate() + 1);
@@ -1739,24 +1769,44 @@ function renderDashboard() {
         </div>
       </div>
 
-      ${w.recent !== false ? `
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">Новые клиенты</div>
-          <span class="text-sm text-muted">за последнее время</span>
+      <div class="card" style="border-left:4px solid ${limitAlerts.length || coolingDown.length ? '#F59E0B' : 'var(--success)'};">
+        <div class="card-header" style="padding-bottom: 6px;">
+          <div class="card-title">🔥 Требует внимания</div>
+          <span class="text-sm text-muted">${limitAlerts.length + coolingDown.length} ${(limitAlerts.length + coolingDown.length)===1?'клиент':'клиентов'}</span>
         </div>
-        ${recentClients.length ? recentClients.slice(0, 5).map(c => `
-          <div class="card-row" data-cid="${c.id}" style="cursor:pointer; padding:10px 16px;">
-            <div class="user-avatar" style="background:var(--wp-yellow-soft); color:#5C4914; width:32px; height:32px; font-size:12px;">${fmt.initials(c.name)}</div>
-            <div style="flex:1; min-width:0;">
-              <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(c.name)}</div>
-              <div class="text-sm text-muted" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${isAdmin?escapeHtml(c.manager || '—') + ' • ':''}${fmt.daysAgo(c.reg_date)}</div>
+        ${limitAlerts.length ? `
+          <div style="padding: 4px 16px 8px;"><div class="text-sm" style="color:var(--danger); font-weight:600; margin-bottom:4px;">⚠ На грани лимита</div></div>
+          ${limitAlerts.map(a => `
+            <div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
+              <div style="flex:1; min-width:0;">
+                <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
+                <div class="text-sm text-muted">${fmt.rub(a.debt)} / ${fmt.rub(a.limit)}</div>
+              </div>
+              <span class="chip" style="background:${a.load >= 100 ? '#FEE2E2' : '#FEF3C7'}; color:${a.load >= 100 ? '#991B1B' : '#92400E'}; font-weight:700; flex-shrink:0;">${a.load}%</span>
             </div>
-            ${stageChip(clientStage(c))}
+          `).join('')}
+        ` : ''}
+        ${coolingDown.length ? `
+          <div style="padding: 8px 16px 4px; ${limitAlerts.length ? 'border-top:1px solid var(--border);' : ''}"><div class="text-sm" style="color:#D97706; font-weight:600; margin-bottom:4px;">📉 Остывающие — пора связаться</div></div>
+          ${coolingDown.map(a => {
+            const daysAgo = Math.round((Date.now() - new Date(a.lastDate).getTime()) / (1000*60*60*24));
+            return `<div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
+              <div style="flex:1; min-width:0;">
+                <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
+                <div class="text-sm text-muted">${daysAgo} дн без заказов · ${fmt.rub(a.total)} в истории</div>
+              </div>
+              <span class="chip chip-default" style="flex-shrink:0;">${a.monthsActive} мес активн.</span>
+            </div>`;
+          }).join('')}
+        ` : ''}
+        ${!limitAlerts.length && !coolingDown.length ? `
+          <div class="empty-state" style="padding:18px;">
+            <div class="empty-state-icon" style="font-size:28px;">✨</div>
+            <div class="fw-600">Угроз не обнаружено</div>
+            <div class="text-sm text-muted">Лимиты в норме, клиенты активны</div>
           </div>
-        `).join('') : '<div class="empty-state" style="padding:18px;">Нет новых клиентов</div>'}
+        ` : ''}
       </div>
-      ` : ''}
     </div>
     ` : ''}
 
@@ -1879,7 +1929,7 @@ function renderDashboard() {
           </select>
         </div>
       </div>
-      <div id="dash-feed-list" style="max-height: 420px; overflow-y: auto;"></div>
+      <div id="dash-feed-list" style="max-height: 280px; overflow-y: auto;"></div>
     </div>
   `;
 }
@@ -2854,12 +2904,18 @@ function renderContracts() {
   const inWork = all.filter(c => clientStage(c) === 'contract');
   const coveragePct = all.length ? Math.round(list.length / all.length * 100) : 0;
 
-  // Загрузка лимита: долг ÷ лимит × 100%
+  // Лимит и загрузка лимита берём из массива договоров 1С
+  function clientLimit(c) {
+    const contracts = (c.from1c && c.from1c.contracts) || [];
+    return contracts.filter(x => x.status === 'Действует').reduce((s,x) => s + (x.limit || 0), 0);
+  }
   function limitLoad(c) {
-    const limit = c.credit_limit || (c.from1c && c.from1c.contract_limit) || 0;
-    const debt = c.debt || 0;
+    const limit = clientLimit(c);
     if (!limit) return null;
-    return Math.round(debt / limit * 100);
+    return Math.round((c.debt || 0) / limit * 100);
+  }
+  function clientDeferral(c) {
+    return (c.from1c && c.from1c.agreement && c.from1c.agreement.days) || null;
   }
 
   return `
@@ -2874,12 +2930,13 @@ function renderContracts() {
     <div class="card mb-4">
       <div class="card-header"><div class="card-title">Договоры и условия работы</div></div>
       <table class="data">
-        <thead><tr><th>Клиент</th><th>ИНН</th><th>Менеджер</th><th>№ договора</th><th>Дата</th><th class="num">Лимит</th><th class="num">Долг</th><th class="num">Загрузка</th><th>Статус</th></tr></thead>
+        <thead><tr><th>Клиент</th><th>ИНН</th><th>Менеджер</th><th>№ договора</th><th>Дата</th><th class="num">Лимит</th><th class="num">Долг</th><th class="num">Загрузка</th><th class="num">Отсрочка</th><th>Статус</th></tr></thead>
         <tbody>
           ${list.length ? list.map(c => {
             const load = limitLoad(c);
             const loadColor = load === null ? '' : load >= 90 ? 'color:var(--danger); font-weight:700;' : load >= 70 ? 'color:#D97706; font-weight:600;' : 'color:var(--success);';
-            const limit = c.credit_limit || (c.from1c && c.from1c.contract_limit) || 0;
+            const limit = clientLimit(c);
+            const def = clientDeferral(c);
             return `
             <tr data-cid="${c.id}">
               <td class="fw-600">${escapeHtml(c.name)}</td>
@@ -2890,9 +2947,10 @@ function renderContracts() {
               <td class="num">${limit ? fmt.rub(limit) : '<span class="text-muted">—</span>'}</td>
               <td class="num">${(c.debt||0) > 0 ? fmt.rub(c.debt) : '<span class="text-muted">—</span>'}</td>
               <td class="num" style="${loadColor}">${load !== null ? load + '%' : '<span class="text-muted">—</span>'}</td>
+              <td class="num">${def ? def + ' дн' : '<span class="text-muted">—</span>'}</td>
               <td><span class="chip ${c.contract_signed ? 'chip-success' : 'chip-default'}">${c.contract_signed ? 'Действует' : 'Зарегистрирован'}</span></td>
             </tr>`;
-          }).join('') : '<tr><td colspan="9"><div class="empty-state">Договоров пока нет</div></td></tr>'}
+          }).join('') : '<tr><td colspan="10"><div class="empty-state">Договоров пока нет</div></td></tr>'}
         </tbody>
       </table>
     </div>
@@ -2949,10 +3007,65 @@ function afterContracts() {
 
 // =================== ANALYTICS ===================
 function renderAnalytics() {
+  const tab = state._analyticsTab || 'overview';
   return `
+    <div class="page-tabs">
+      <button class="page-tab ${tab==='overview'?'active':''}" data-atab="overview">📊 Обзор базы</button>
+      <button class="page-tab ${tab==='month'?'active':''}" data-atab="month">💰 Месяц</button>
+      <button class="page-tab ${tab==='pdz'?'active':''}" data-atab="pdz">⚠ ПДЗ</button>
+    </div>
+    <div id="analytics-tab-content"></div>
+  `;
+}
+function afterAnalytics() {
+  destroyCharts();
+  const tab = state._analyticsTab || 'overview';
+  document.querySelectorAll('.page-tab[data-atab]').forEach(b => b.onclick = () => {
+    state._analyticsTab = b.dataset.atab;
+    renderView();
+  });
+  const wrap = document.getElementById('analytics-tab-content');
+  if (tab === 'month') return drawAnalyticsMonth(wrap);
+  if (tab === 'pdz') return drawAnalyticsPdz(wrap);
+  return drawAnalyticsOverview(wrap);
+}
+
+// --- Tab: Обзор базы (старый контент + Виды деятельности) ---
+function drawAnalyticsOverview(wrap) {
+  const all = visibleClients();
+  // Виды деятельности — компактная разбивка (перенесена с дашборда)
+  const actCounts = {};
+  all.forEach(c => { const a = c.activity || 'Не указан'; actCounts[a] = (actCounts[a]||0) + 1; });
+  const actSorted = Object.entries(actCounts).sort((a,b) => b[1] - a[1]);
+  const actMax = actSorted[0] ? actSorted[0][1] : 1;
+  const totalClients = all.length;
+  const palette = ['#F59E0B', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#06B6D4', '#EC4899', '#84CC16', '#F97316', '#6B7280'];
+
+  wrap.innerHTML = `
     <div class="grid grid-2 mb-4">
       <div class="chart-card"><h3>Распределение по этапам воронки</h3><div class="chart-box"><canvas id="ch-stages"></canvas></div></div>
-      <div class="chart-card"><h3>Распределение по видам деятельности</h3><div class="chart-box"><canvas id="ch-activity"></canvas></div></div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Виды деятельности</div>
+          <span class="text-sm text-muted">структура базы</span>
+        </div>
+        ${actSorted.length ? `<div style="padding: 14px 16px; display:flex; flex-direction:column; gap:10px;">
+          ${actSorted.map(([name, cnt], i) => {
+            const pct = totalClients ? (cnt / totalClients * 100) : 0;
+            const barW = actMax ? (cnt / actMax * 100) : 0;
+            const color = palette[i % palette.length];
+            return `<div>
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; gap:8px;">
+                <span class="fw-600" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${escapeHtml(name)}</span>
+                <span style="font-size:12px; color:var(--text-muted); white-space:nowrap;"><b style="color:var(--text);">${cnt}</b> · ${pct.toFixed(0)}%</span>
+              </div>
+              <div style="height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden;">
+                <div style="height:100%; width:${barW}%; background:${color}; border-radius:3px; transition:width 0.4s;"></div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>` : '<div class="empty-state" style="padding:20px;">Нет данных</div>'}
+      </div>
     </div>
     <div class="grid grid-2 mb-4" style="grid-template-columns: 1fr 1fr;">
       <div class="chart-card"><h3>Категории клиентов A / B / C</h3><div class="chart-box-sm"><canvas id="ch-cats"></canvas></div></div>
@@ -2985,8 +3098,197 @@ function renderAnalytics() {
       </div>
     </div>
   `;
+  drawAnalyticsCharts();
 }
-function afterAnalytics() {
+
+// --- Tab: Месяц — выручка/прибыль текущего месяца по менеджерам и клиентам ---
+function drawAnalyticsMonth(wrap) {
+  const all = visibleClients();
+  const curMonth = new Date().toISOString().slice(0, 7);
+  const monthLabel = new Date().toLocaleDateString('ru-RU', { year:'numeric', month:'long' });
+
+  // Для каждого клиента — продажи и прибыль за текущий месяц
+  const rows = all.map(c => {
+    const sales = (c.from1c && c.from1c.sales) || {};
+    const rev = (sales.by_month && sales.by_month[curMonth]) || 0;
+    const profit = (sales.profit_by_month && sales.profit_by_month[curMonth]) || 0;
+    return { id: c.id, name: c.name, manager: c.manager||'—', activity: c.activity||'', rev, profit, margin: rev > 0 ? (profit/rev*100) : 0 };
+  }).filter(r => r.rev > 0).sort((a,b) => b.rev - a.rev);
+
+  const totalRev = rows.reduce((s,r) => s + r.rev, 0);
+  const totalProfit = rows.reduce((s,r) => s + r.profit, 0);
+  const avgMargin = totalRev > 0 ? (totalProfit / totalRev * 100) : 0;
+  const clientsCount = rows.length;
+  const avgCheck = clientsCount ? totalRev / clientsCount : 0;
+
+  // По менеджерам
+  const byMgr = {};
+  rows.forEach(r => {
+    if (!byMgr[r.manager]) byMgr[r.manager] = { manager: r.manager, rev: 0, profit: 0, clients: 0 };
+    byMgr[r.manager].rev += r.rev;
+    byMgr[r.manager].profit += r.profit;
+    byMgr[r.manager].clients++;
+  });
+  const mgrRows = Object.values(byMgr).sort((a,b) => b.rev - a.rev);
+
+  wrap.innerHTML = `
+    <div class="grid grid-4 mb-4">
+      <div class="kpi"><div class="kpi-accent" style="background:var(--wp-yellow)"></div><div class="kpi-label">Выручка месяца</div><div class="kpi-value">${fmt.rub(totalRev)}</div><div class="kpi-sub">${monthLabel}</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">Валовая прибыль</div><div class="kpi-value">${fmt.rub(totalProfit)}</div><div class="kpi-sub">маржа ${avgMargin.toFixed(1)}%</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Клиентов с заказами</div><div class="kpi-value">${clientsCount}</div><div class="kpi-sub">из ${all.length} в базе</div></div>
+      <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Средний чек</div><div class="kpi-value">${fmt.rub(avgCheck)}</div><div class="kpi-sub">выручка ÷ клиентов</div></div>
+    </div>
+
+    <div class="info-banner" style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; color:#92400E;">
+      💡 <b>План выручки</b> — функция в разработке. Когда будет загружен план по менеджерам, здесь появится сравнение факт/план.
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header"><div class="card-title">По менеджерам</div></div>
+      <table class="data">
+        <thead><tr><th>Менеджер</th><th class="num">Клиентов с заказами</th><th class="num">Выручка</th><th class="num">Валовая прибыль</th><th class="num">Маржа</th><th class="num">Доля выручки</th></tr></thead>
+        <tbody>
+          ${mgrRows.length ? mgrRows.map(m => {
+            const share = totalRev ? (m.rev/totalRev*100) : 0;
+            const margin = m.rev > 0 ? (m.profit/m.rev*100) : 0;
+            return `<tr>
+              <td class="fw-600">${escapeHtml(m.manager)}</td>
+              <td class="num">${m.clients}</td>
+              <td class="num">${fmt.rub(m.rev)}</td>
+              <td class="num">${fmt.rub(m.profit)}</td>
+              <td class="num">${margin.toFixed(1)}%</td>
+              <td class="num">
+                <div style="display:inline-flex; align-items:center; gap:8px;">
+                  <div style="width:80px; height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden;"><div style="width:${share}%; height:100%; background:var(--wp-yellow);"></div></div>
+                  <span>${share.toFixed(0)}%</span>
+                </div>
+              </td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="6"><div class="empty-state">За текущий месяц продаж не было.</div></td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">По клиентам — топ ${Math.min(rows.length, 50)}</div></div>
+      <table class="data">
+        <thead><tr><th>Клиент</th><th>Менеджер</th><th>Вид</th><th class="num">Выручка</th><th class="num">Валовая прибыль</th><th class="num">Маржа</th></tr></thead>
+        <tbody>
+          ${rows.length ? rows.slice(0, 50).map(r => `<tr data-cid="${r.id}" style="cursor:pointer;">
+            <td class="fw-600">${escapeHtml(r.name)}</td>
+            <td>${escapeHtml(r.manager)}</td>
+            <td>${r.activity ? `<span class="chip chip-activity">${escapeHtml(r.activity)}</span>` : '<span class="text-muted">—</span>'}</td>
+            <td class="num">${fmt.rub(r.rev)}</td>
+            <td class="num">${fmt.rub(r.profit)}</td>
+            <td class="num">${r.margin.toFixed(1)}%</td>
+          </tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">Нет данных</div></td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+  wrap.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
+}
+
+// --- Tab: ПДЗ — таблица должников ---
+function drawAnalyticsPdz(wrap) {
+  const all = visibleClients();
+  const debtors = all.filter(c => (c.debt||0) > 0).sort((a,b) => (b.debt||0) - (a.debt||0));
+  const overdue = all.filter(c => (c.overdue||0) > 0);
+  const totalDebt = all.reduce((s,c) => s + (c.debt||0), 0);
+  const totalOverdue = all.reduce((s,c) => s + (c.overdue||0), 0);
+  const overduePct = totalDebt > 0 ? (totalOverdue / totalDebt * 100) : 0;
+
+  // Aging-стек агрегированный по всем клиентам (берём из from1c.debt.aging)
+  const aging = { current: 0, '1-7': 0, '8-30': 0, '31-60': 0, '61-90': 0, '91-180': 0, '181-365': 0, '365+': 0 };
+  all.forEach(c => {
+    const a = c.from1c && c.from1c.debt && c.from1c.debt.aging;
+    if (a) {
+      for (const k of Object.keys(aging)) aging[k] += (a[k] || 0);
+    }
+  });
+  const agingColors = { current:'#10B981', '1-7':'#84CC16', '8-30':'#F59E0B', '31-60':'#F97316', '61-90':'#EF4444', '91-180':'#DC2626', '181-365':'#991B1B', '365+':'#7F1D1D' };
+  const agingLabels = { current:'Текущий', '1-7':'1-7 дн', '8-30':'8-30 дн', '31-60':'31-60 дн', '61-90':'61-90 дн', '91-180':'91-180 дн', '181-365':'181-365 дн', '365+':'365+ дн' };
+
+  wrap.innerHTML = `
+    <div class="grid grid-4 mb-4">
+      <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Должников всего</div><div class="kpi-value">${debtors.length}</div><div class="kpi-sub">из ${all.length} клиентов</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Общий долг</div><div class="kpi-value">${fmt.rub(totalDebt)}</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--danger)"></div><div class="kpi-label">Просрочено</div><div class="kpi-value" style="color:var(--danger)">${fmt.rub(totalOverdue)}</div><div class="kpi-sub">${overduePct.toFixed(1)}% от долга</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:#DC2626"></div><div class="kpi-label">С просрочкой</div><div class="kpi-value">${overdue.length}</div><div class="kpi-sub">клиентов</div></div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header"><div class="card-title">Структура долга по срокам (вся база)</div></div>
+      <div style="padding:18px;">
+        ${Object.values(aging).some(v=>v>0) ? `
+          <div style="display:flex; height:32px; border-radius:8px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,0.05); margin-bottom:14px;">
+            ${Object.keys(aging).map(k => {
+              const v = aging[k];
+              const pct = totalDebt > 0 ? (v/totalDebt*100) : 0;
+              if (pct < 0.1) return '';
+              return `<div title="${agingLabels[k]}: ${fmt.rub(v)}" style="width:${pct}%; background:${agingColors[k]}; display:flex; align-items:center; justify-content:center; color:white; font-size:11px; font-weight:600;">${pct >= 5 ? pct.toFixed(0)+'%' : ''}</div>`;
+            }).join('')}
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; font-size:12px;">
+            ${Object.keys(aging).map(k => `<span><span style="display:inline-block;width:10px;height:10px;background:${agingColors[k]};border-radius:2px;vertical-align:middle;margin-right:5px;"></span>${agingLabels[k]}: <b>${fmt.rub(aging[k])}</b></span>`).join('')}
+          </div>
+        ` : '<div class="empty-state">Aging-данных нет — нужны выгрузки 1С о задолженности по срокам.</div>'}
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header"><div class="card-title">Должники — топ 100</div><div class="text-sm text-muted">сортировка по сумме долга</div></div>
+      <div style="padding: 10px 16px; display:flex; gap:10px; align-items:center; border-bottom:1px solid var(--border);">
+        <label class="text-sm">Фильтр:</label>
+        <select id="pdz-filter" class="setting-input" style="padding:6px 10px;">
+          <option value="all">Все должники</option>
+          <option value="overdue">Только с просрочкой</option>
+          <option value="critical">Только критичные (просрочка ≥30 дн)</option>
+        </select>
+      </div>
+      <table class="data">
+        <thead><tr><th>Клиент</th><th>Менеджер</th><th class="num">Долг</th><th class="num">Просрочено</th><th class="num">% просрочки</th><th class="num">Загрузка лимита</th></tr></thead>
+        <tbody id="pdz-tbody"></tbody>
+      </table>
+    </div>
+  `;
+
+  function drawPdzTable() {
+    const filter = document.getElementById('pdz-filter').value;
+    const filtered = debtors.filter(c => {
+      if (filter === 'overdue') return (c.overdue||0) > 0;
+      if (filter === 'critical') {
+        const a = c.from1c && c.from1c.debt && c.from1c.debt.aging;
+        if (!a) return false;
+        return (a['31-60']||0) + (a['61-90']||0) + (a['91-180']||0) + (a['181-365']||0) + (a['365+']||0) > 0;
+      }
+      return true;
+    });
+    document.getElementById('pdz-tbody').innerHTML = filtered.length ? filtered.slice(0, 100).map(c => {
+      const debt = c.debt || 0;
+      const overdue = c.overdue || 0;
+      const overduePct = debt > 0 ? (overdue/debt*100) : 0;
+      const contracts = (c.from1c && c.from1c.contracts) || [];
+      const limit = contracts.filter(x => x.status === 'Действует').reduce((s,x) => s + (x.limit || 0), 0);
+      const load = limit > 0 ? Math.round(debt/limit*100) : null;
+      const loadColor = load === null ? '' : load >= 90 ? 'color:var(--danger); font-weight:700;' : load >= 70 ? 'color:#D97706; font-weight:600;' : '';
+      return `<tr data-cid="${c.id}" style="cursor:pointer;">
+        <td class="fw-600">${escapeHtml(c.name)}</td>
+        <td>${escapeHtml(c.manager||'—')}</td>
+        <td class="num">${fmt.rub(debt)}</td>
+        <td class="num" style="${overdue>0?'color:var(--danger); font-weight:600;':''}">${overdue > 0 ? fmt.rub(overdue) : '<span class="text-muted">—</span>'}</td>
+        <td class="num" style="${overdue>0?'color:var(--danger);':''}">${overdue > 0 ? overduePct.toFixed(0) + '%' : '—'}</td>
+        <td class="num" style="${loadColor}">${load !== null ? load + '%' : '<span class="text-muted">—</span>'}</td>
+      </tr>`;
+    }).join('') + (filtered.length > 100 ? `<tr><td colspan="6" class="text-muted text-sm" style="text-align:center;padding:10px;">… ещё ${filtered.length-100}. Используйте фильтр.</td></tr>` : '')
+    : '<tr><td colspan="6"><div class="empty-state">Нет должников</div></td></tr>';
+    document.querySelectorAll('#pdz-tbody tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid, 'debt')));
+  }
+  document.getElementById('pdz-filter').addEventListener('change', drawPdzTable);
+  drawPdzTable();
+}
+
+function drawAnalyticsCharts() {
   destroyCharts();
   const all = visibleClients();
   // Soft brand palette
@@ -3006,14 +3308,8 @@ function afterAnalytics() {
     options: softHBar(false, C)
   });
 
-  // 2. Activities — horizontal soft bar
+  // (2. «Виды деятельности» теперь — HTML-блок, не chart)
   const acts = uniqueActivities();
-  const actCounts = acts.map(a => all.filter(c => (c.activity||'Другое')===a).length);
-  _chartRefs.s2 = new Chart(document.getElementById('ch-activity'), {
-    type: 'bar',
-    data: { labels: acts, datasets: [{ label:'Клиентов', data: actCounts, backgroundColor: C.yellow, borderRadius: 6, borderSkipped:false, barThickness: 16 }] },
-    options: softHBar(false, C)
-  });
 
   // 3. Categories — doughnut, soft tones
   const catCounts = ['A','B','C'].map(k => all.filter(c => clientCategory(c)===k).length);
