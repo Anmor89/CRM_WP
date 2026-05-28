@@ -688,19 +688,19 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 
 .client-header {
   display: flex; align-items: flex-start; gap: 18px; padding: 24px 32px;
-  background: linear-gradient(135deg, #F59E0B 0%, #EA580C 100%);
-  color: #1F2937;
+  background: var(--wp-yellow);
+  color: var(--wp-black);
 }
 .client-header-avatar {
   width: 56px; height: 56px; border-radius: 12px;
-  background: #1F2937; color: #FCD34D;
+  background: var(--wp-black); color: var(--wp-yellow);
   display: flex; align-items: center; justify-content: center;
   font-weight: 800; font-size: 22px; flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
-.client-header-name { color: #1F2937; }
-.client-header-meta { color: white; }
-.client-header-meta span { color: white; }
+.client-header-name { color: var(--wp-black); }
+.client-header-meta { color: var(--wp-black); }
+.client-header-meta span { color: var(--wp-black); opacity: 0.78; }
 .client-header-info { flex: 1; min-width: 0; }
 .client-header-name { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .client-header-meta { margin-top: 6px; color: #D1D5DB; font-size: 13px; display: flex; gap: 12px; flex-wrap: wrap; }
@@ -2397,21 +2397,62 @@ function afterClients() {
   const section = document.getElementById('neglected-section');
   if (!section) return;
 
-  // Правый визуал: Топ-10 клиентов по выручке среди отфильтрованных
+  // Категории A/B/C среди отфильтрованных
   const visible = applyFilters(visibleClients());
-  const topRev = [...visible].filter(c => (c.revenue||0) > 0).sort((a,b) => (b.revenue||0) - (a.revenue||0)).slice(0, 10);
-  const maxRev = topRev[0] ? topRev[0].revenue : 1;
-  const open = state._neglectedOpen !== false; // по умолчанию открыто
+  const catCounts = { A: 0, B: 0, C: 0 };
+  const catRev = { A: 0, B: 0, C: 0 };
+  const catDebt = { A: 0, B: 0, C: 0 };
+  visible.forEach(c => {
+    const cat = clientCategory(c);
+    if (catCounts[cat] !== undefined) {
+      catCounts[cat]++;
+      catRev[cat] += (c.revenue || 0);
+      catDebt[cat] += (c.debt || 0);
+    }
+  });
+  const totalCat = catCounts.A + catCounts.B + catCounts.C;
+  const catColors = { A: '#10B981', B: '#F59E0B', C: '#94A3B8' };
+  const catLabels = { A: 'A — активные', B: 'B — слабоактивные', C: 'C — без отгрузок' };
+  const open = !!state._neglectedOpen; // по умолчанию закрыто
 
   section.innerHTML = `
     <div class="grid grid-2 mb-4" style="grid-template-columns: 1fr 1fr; align-items: stretch;">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📊 Категории клиентов</div>
+          <span class="text-sm text-muted">в текущей выборке: ${visible.length}</span>
+        </div>
+        ${totalCat ? `<div style="padding:14px 16px; display:flex; flex-direction:column; gap:14px;">
+          ${['A','B','C'].map(k => {
+            const pct = totalCat ? (catCounts[k] / totalCat * 100) : 0;
+            return `<div data-cat="${k}" style="cursor:pointer;" title="Фильтровать по категории ${k}">
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; gap:8px;">
+                <span class="fw-600" style="font-size:13px;"><span class="chip chip-cat-${k}" style="margin-right:6px;">${k}</span>${catLabels[k].slice(4)}</span>
+                <span style="font-size:12px; color:var(--text); white-space:nowrap;"><b>${catCounts[k]}</b> · ${pct.toFixed(0)}%</span>
+              </div>
+              <div style="height:8px; background:#F3F4F6; border-radius:4px; overflow:hidden; margin-bottom:4px;">
+                <div style="height:100%; width:${pct}%; background:${catColors[k]}; border-radius:4px; transition:width 0.4s;"></div>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
+                <span>💰 ${fmt.rub(catRev[k])}</span>
+                <span>${catDebt[k] > 0 ? '🔴 ' + fmt.rub(catDebt[k]) : ''}</span>
+              </div>
+            </div>`;
+          }).join('')}
+          <div style="padding-top:8px; border-top:1px solid var(--border); font-size:11px; color:var(--text-muted);">
+            <b>A</b> — заказы 3+ мес за период · <b>B</b> — 1-2 мес · <b>C</b> — нет отгрузок
+          </div>
+        </div>` : '<div class="empty-state" style="padding:20px;">Нет данных по категориям</div>'}
+      </div>
+
       <details class="card" style="border-left:4px solid ${neglected.length ? 'var(--danger)' : 'var(--success)'};" ${open ? 'open' : ''} id="neglected-details">
-        <summary style="display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none; border-bottom:1px solid var(--border);">
+        <summary style="display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none;">
           <div class="card-title" style="margin:0; flex:1; color:${neglected.length ? 'var(--danger)' : 'var(--text)'};">⚠ Упущенные клиенты <span class="chip ${neglected.length ? 'chip-danger' : 'chip-default'}" style="margin-left:6px;">${neglected.length}</span></div>
           <span class="text-sm text-muted">${months} мес без активности</span>
-          <span class="text-sm text-muted" style="font-size:12px;">▼</span>
+          <span class="text-sm text-muted" style="font-size:12px;">показать ▼</span>
         </summary>
         ${neglected.length ? `
+          <div style="border-top:1px solid var(--border);"></div>
           <table class="data">
             <thead><tr><th>Клиент</th><th class="num">Последнее событие</th><th class="num">Последняя продажа</th><th class="num">Выручка</th><th class="num">Долг</th></tr></thead>
             <tbody>
@@ -2429,37 +2470,22 @@ function afterClients() {
               ${neglected.length > 50 ? `<tr><td colspan="5" class="text-muted text-sm" style="text-align:center;padding:10px;">… ещё ${neglected.length-50}. Используйте фильтры выше для уточнения.</td></tr>` : ''}
             </tbody>
           </table>
-        ` : `<div class="empty-state" style="padding:24px;">
+        ` : `<div style="border-top:1px solid var(--border);"></div><div class="empty-state" style="padding:24px;">
           <div class="empty-state-icon" style="font-size:32px;">✨</div>
           <div class="fw-600">Нет упущенных клиентов</div>
           <div class="text-sm text-muted">Со всеми работают вовремя</div>
         </div>`}
       </details>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">🏆 Топ клиентов по выручке</div>
-          <span class="text-sm text-muted">в текущей выборке: ${visible.length}</span>
-        </div>
-        ${topRev.length ? `<div style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
-          ${topRev.map((c, i) => {
-            const barW = (c.revenue / maxRev) * 100;
-            return `<div data-cid="${c.id}" style="cursor:pointer;" title="${escapeHtml(c.name)}">
-              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; gap:8px;">
-                <span class="fw-600 text-sm" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;"><span class="text-muted">${i+1}.</span> ${escapeHtml(c.name)}</span>
-                <span style="font-size:12px; color:var(--text); white-space:nowrap; font-weight:600;">${fmt.rub(c.revenue)}</span>
-              </div>
-              <div style="height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden;">
-                <div style="height:100%; width:${barW}%; background:var(--wp-yellow); border-radius:3px;"></div>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>` : '<div class="empty-state" style="padding:20px;">Нет клиентов с выручкой</div>'}
-      </div>
     </div>
   `;
   section.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
-  section.querySelectorAll('[data-cid]:not(tr)').forEach(el => el.addEventListener('click', () => openClientModal(el.dataset.cid)));
+  // Клик по категории → фильтр таблицы клиентов
+  section.querySelectorAll('[data-cat]').forEach(el => {
+    el.addEventListener('click', () => {
+      state.filters.category = el.dataset.cat;
+      renderView();
+    });
+  });
   // Запоминаем открыт/закрыт упущенных
   const det = document.getElementById('neglected-details');
   if (det) det.addEventListener('toggle', () => { state._neglectedOpen = det.open; });
@@ -4269,16 +4295,22 @@ function onec_parseOrders(rows) {
 }
 
 function onec_parseSales(rows) {
-  // Файл: «Продажи по дням». Header row 2, данные с 3. Колонки:
-  // 0=Дата (только в верхней строке группы), 3=Артикул, 4=Номенклатура, 5=Бренд,
-  // 6=Покупатель(Партнёр), 7=Головное, 8=Заказ, 9=Категория, 10=Менеджер,
-  // 12=Кол-во, 13=Сумма, 14=Себест., 15=Валовая прибыль
+  // Файл: «Продажи по дням». Структура (как видно в xlsx):
+  //   Row 1-2: заголовки
+  //   Row 3+: дата-строка (только в колонке 0), потом несколько строк-товаров под этой датой
+  //           (колонка 0 у них пустая — нужен forward-fill)
+  // Колонки данных:
+  //   0=Период/день, 1=Склад, 2=Спецификация, 3=Артикул, 4=Номенклатура,
+  //   5=Производитель, 6=Клиент(Партнёр), 7=Головное предприятие, 8=Заказ,
+  //   9=Категория, 10=Менеджер, 12=Кол-во, 13=Сумма, 14=Себест., 15=Валовая прибыль
   const map = new Map();
   let currentDate = null;
-  for (let i = 3; i < rows.length; i++) {
+  // Стартуем с i=2 — первой строки после заголовков; дата-строки могут идти раньше товаров
+  for (let i = 2; i < rows.length; i++) {
     const r = rows[i]; if (!r) continue;
+    // Forward-fill: дата в колонке 0 «протекает» вниз до следующей даты
     const dateCell = onec_parseDate(r[0]);
-    if (dateCell) currentDate = dateCell;
+    if (dateCell) { currentDate = dateCell; continue; } // строка-разделитель с датой, без товара
     const partner = (r[6] || '').toString().trim();
     if (!partner || !currentDate) continue;
     const amount = onec_num(r[13]);
@@ -4311,6 +4343,9 @@ function onec_parseSales(rows) {
       brand: (r[5] || '').toString().trim(),
       qty,
       amount,
+      cost,
+      profit,
+      margin: amount > 0 ? (profit / amount) * 100 : 0,
       price: qty ? amount / qty : amount
     });
     map.set(partner, entry);
@@ -5008,13 +5043,13 @@ function openClientModal(clientId, initialTab = null) {
   const overduePct = debt ? Math.round(overdue/debt*100) : 0;
   const deferralDays = c.from1c && c.from1c.agreement ? c.from1c.agreement.days : 0;
   const limit = c.from1c && c.from1c.contracts && c.from1c.contracts.length ? (c.from1c.contracts.find(x => x.status === 'Действует') || c.from1c.contracts[0]).limit : 0;
-  const hdrKpiStyle = `display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:rgba(255,255,255,0.92); border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; color:#1F2937;`;
+  const hdrKpiStyle = `display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:rgba(15,17,21,0.92); border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; color:white;`;
   const headerKpis = (revenue || debt || deferralDays || limit) ? `
         <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          ${revenue ? `<span style="${hdrKpiStyle}">💰 Выручка <b>${fmt.rub(revenue)}</b></span>` : ''}
-          ${debt ? `<span style="${hdrKpiStyle} color:#991B1B;">🔴 Долг <b>${fmt.rub(debt)}</b>${overduePct ? ` <span style="opacity:.75;">(${overduePct}% просрочено)</span>` : ''}</span>` : ''}
-          ${deferralDays ? `<span style="${hdrKpiStyle}">⏱ Отсрочка <b>${deferralDays} дн</b></span>` : ''}
-          ${limit ? `<span style="${hdrKpiStyle}">💳 Лимит <b>${fmt.rub(limit)}</b></span>` : ''}
+          ${revenue ? `<span style="${hdrKpiStyle}">💰 Выручка <b style="color:#FFC72C;">${fmt.rub(revenue)}</b></span>` : ''}
+          ${debt ? `<span style="${hdrKpiStyle}">🔴 Долг <b style="color:#FCA5A5;">${fmt.rub(debt)}</b>${overduePct ? ` <span style="opacity:.7;">(${overduePct}% просрочено)</span>` : ''}</span>` : ''}
+          ${deferralDays ? `<span style="${hdrKpiStyle}">⏱ Отсрочка <b style="color:#93C5FD;">${deferralDays} дн</b></span>` : ''}
+          ${limit ? `<span style="${hdrKpiStyle}">💳 Лимит <b style="color:#C4B5FD;">${fmt.rub(limit)}</b></span>` : ''}
         </div>` : '';
 
   openModal(`
@@ -5655,35 +5690,40 @@ function renderSalesTab(c) {
   const curMonthKey = `${thisYear}-${String(curMonth).padStart(2,'0')}`;
   const dayOfMonth = now.getDate();
   const daysInMonth = new Date(thisYear, curMonth, 0).getDate();
+  const profitByMonth = sales && sales.profit_by_month ? sales.profit_by_month : {};
+  const totalProfit = sales && sales.total_profit ? sales.total_profit : 0;
+  const totalRevenue = sales && sales.total ? sales.total : 0;
+  const overallMargin = totalRevenue > 0 ? (totalProfit / totalRevenue * 100) : 0;
   const revYTD = byYear[thisYear] || 0;
   const revLastYear = byYear[lastYear] || 0;
   const revCurMonth = byMonth[curMonthKey] || 0;
+  const profitCurMonth = profitByMonth[curMonthKey] || 0;
   const projectedCurMonth = (revCurMonth > 0 && dayOfMonth < daysInMonth)
     ? revCurMonth * daysInMonth / dayOfMonth
     : null;
   const avgCheck = txns.length ? sales.total / (sales.txn_count || txns.length) : 0;
   const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
-  // KPI — 5 плашек (включая текущий месяц)
+  // KPI — 5 плашек (текущий месяц + год + прошлый год + Валовая прибыль + средний чек)
   const kpiHtml = `
     <div class="grid grid-5 mb-4">
       <div class="kpi" title="Выручка за ${monthNames[curMonth-1]} ${thisYear}, прошло ${dayOfMonth} из ${daysInMonth} дн.">
         <div class="kpi-accent" style="background:#3B82F6"></div>
         <div class="kpi-label">${monthNames[curMonth-1]} ${thisYear}</div>
         <div class="kpi-value" style="font-size:20px;">${fmt.rub(revCurMonth)}</div>
-        <div class="kpi-sub">${projectedCurMonth ? `★ прогноз: <b style="color:#3B82F6;">${fmt.rub(projectedCurMonth)}</b>` : (revCurMonth ? `${dayOfMonth}/${daysInMonth} дн` : 'нет продаж')}</div>
+        <div class="kpi-sub">${profitCurMonth ? 'прибыль: <b style="color:var(--success);">' + fmt.rub(profitCurMonth) + '</b>' : (projectedCurMonth ? `★ прогноз: <b style="color:#3B82F6;">${fmt.rub(projectedCurMonth)}</b>` : (revCurMonth ? `${dayOfMonth}/${daysInMonth} дн` : 'нет продаж'))}</div>
       </div>
       <div class="kpi">
         <div class="kpi-accent" style="background:var(--wp-yellow)"></div>
         <div class="kpi-label">Выручка ${thisYear}</div>
         <div class="kpi-value" style="font-size:20px;">${fmt.rub(revYTD)}</div>
-        <div class="kpi-sub">YTD</div>
+        <div class="kpi-sub">YTD${revLastYear ? ' · ' + (revYTD >= revLastYear ? '↑' : '↓') + ' ' + Math.abs(Math.round((revYTD-revLastYear)/revLastYear*100)) + '% к ' + lastYear : ''}</div>
       </div>
-      <div class="kpi">
-        <div class="kpi-accent" style="background:var(--text-soft)"></div>
-        <div class="kpi-label">Выручка ${lastYear}</div>
-        <div class="kpi-value" style="font-size:20px;">${fmt.rub(revLastYear)}</div>
-        <div class="kpi-sub">${revLastYear ? (revYTD >= revLastYear ? '↑ ' : '↓ ') + Math.abs(Math.round((revYTD-revLastYear)/revLastYear*100)) + '%' : ''}</div>
+      <div class="kpi" title="Валовая прибыль за всё время = Σ (сумма − себестоимость) по каждой продаже">
+        <div class="kpi-accent" style="background:var(--success)"></div>
+        <div class="kpi-label">Валовая прибыль</div>
+        <div class="kpi-value" style="font-size:20px;">${fmt.rub(totalProfit)}</div>
+        <div class="kpi-sub">маржа ${overallMargin.toFixed(1)}%</div>
       </div>
       <div class="kpi">
         <div class="kpi-accent" style="background:var(--info)"></div>
@@ -5757,12 +5797,16 @@ function renderSalesTab(c) {
               <th>Номенклатура</th>
               <th>Бренд</th>
               <th class="num">Кол-во</th>
-              <th class="num">Цена</th>
               <th class="num">Сумма</th>
+              <th class="num">Прибыль</th>
+              <th class="num">Маржа</th>
             </tr></thead>
             <tbody>
               ${txns.map(t => {
                 const isRefund = t.amount < 0;
+                const prof = t.profit != null ? t.profit : ((t.amount||0) - (t.cost||0));
+                const marg = t.margin != null ? t.margin : (t.amount > 0 ? (prof/t.amount*100) : 0);
+                const margColor = marg < 0 ? 'color:var(--danger);' : marg < 10 ? 'color:#D97706;' : '';
                 return `
                 <tr ${isRefund ? 'style="background:rgba(220,38,38,0.04);"' : ''} title="${isRefund ? 'Возврат / сторно' : ''}">
                   <td class="text-sm">${fmt.date(t.date)}</td>
@@ -5770,8 +5814,9 @@ function renderSalesTab(c) {
                   <td class="text-sm">${escapeHtml(t.nomenclature||'—')}</td>
                   <td>${t.brand ? `<span class="chip chip-default" style="font-size:11px;">${escapeHtml(t.brand)}</span>` : '<span class="text-muted">—</span>'}</td>
                   <td class="num">${numSp(t.qty)}</td>
-                  <td class="num text-sm">${numSp(t.price)}</td>
                   <td class="num fw-700" style="${isRefund ? 'color:var(--danger);' : ''}">${numSp(t.amount)}</td>
+                  <td class="num" style="${prof < 0 ? 'color:var(--danger);' : 'color:var(--success);'}">${prof !== 0 ? numSp(prof) : '<span class="text-muted">—</span>'}</td>
+                  <td class="num text-sm" style="${margColor}">${prof !== 0 && t.amount !== 0 ? marg.toFixed(1) + '%' : '<span class="text-muted">—</span>'}</td>
                 </tr>
               `;}).join('')}
             </tbody>
