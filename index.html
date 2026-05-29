@@ -5317,6 +5317,14 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
     `<option value="${escapeHtml(p)}" ${(c.price_type||'')===p?'selected':''}>${p ? escapeHtml(p) : '— не выбрано —'}</option>`
   ).join('');
 
+  // WhatsApp / Telegram прямые ссылки — для значков-кнопок рядом с полями
+  const waRaw = (c.wa || c.phone || '').trim();
+  const waDigits = waRaw.replace(/\D/g, '');
+  const waLink = waDigits ? (waRaw.startsWith('http') ? waRaw : `https://wa.me/${waDigits}`) : '';
+  const tgRaw = (c.tg || '').trim();
+  const tgHandle = tgRaw.replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '');
+  const tgLink = tgRaw ? (tgRaw.startsWith('http') ? tgRaw : `https://t.me/${tgHandle}`) : '';
+
   // Флаги работы (из 1С + ручные)
   const f1c = c.from1c || {};
   const flagYes = (v) => v === true || v === 'Да' ? '✅' : '➖';
