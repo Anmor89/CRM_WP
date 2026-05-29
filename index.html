@@ -273,6 +273,11 @@ a { color: inherit; text-decoration: none; }
 .kpi-label { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
 .kpi-value { font-size: 20px; font-weight: 700; margin-top: 2px; letter-spacing: -0.01em; }
 .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+/* Компактные KPI плашки в карточке клиента */
+.kpi-compact { padding: 8px 12px; }
+.kpi-compact .kpi-label { font-size: 10px; }
+.kpi-compact .kpi-value { font-size: 16px; margin-top: 1px; }
+.kpi-compact .kpi-sub { font-size: 10px; margin-top: 1px; }
 .kpi-delta { font-size: 12px; font-weight: 600; margin-top: 6px; display: inline-flex; align-items: center; gap: 3px; }
 .kpi-delta.pos { color: var(--success); }
 .kpi-delta.neg { color: var(--danger); }
@@ -550,7 +555,7 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 .client-overview-left { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .client-overview-right { min-width: 0; }
 .client-block {
-  background: #FAFBFC; border: 1px solid var(--border); border-radius: 10px;
+  background: #F3F4F6; border: 1px solid #E5E7EB; border-radius: 10px;
   padding: 14px 16px;
 }
 .client-block-title {
@@ -5174,38 +5179,44 @@ function openClientModal(clientId, initialTab = null) {
   const overduePct = debt ? Math.round(overdue/debt*100) : 0;
   const deferralDays = c.from1c && c.from1c.agreement ? c.from1c.agreement.days : 0;
   const limit = c.from1c && c.from1c.contracts && c.from1c.contracts.length ? (c.from1c.contracts.find(x => x.status === 'Действует') || c.from1c.contracts[0]).limit : 0;
-  const hdrKpiStyle = `display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:rgba(15,17,21,0.92); border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; color:white;`;
+  const hdrKpiStyle = `display:inline-flex; align-items:center; gap:5px; padding:3px 9px; background:rgba(15,17,21,0.92); border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; color:white;`;
   const headerKpis = (revenue || debt || deferralDays || limit) ? `
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          ${revenue ? `<span style="${hdrKpiStyle}">💰 Выручка <b style="color:#FFC72C;">${fmt.rub(revenue)}</b></span>` : ''}
-          ${debt ? `<span style="${hdrKpiStyle}">🔴 Долг <b style="color:#FCA5A5;">${fmt.rub(debt)}</b>${overduePct ? ` <span style="opacity:.7;">(${overduePct}% просрочено)</span>` : ''}</span>` : ''}
+        <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+          ${revenue ? `<span style="${hdrKpiStyle}">💰 Выручка <b style="color:#FFC72C;">${fmt.num(revenue)}</b></span>` : ''}
+          ${debt ? `<span style="${hdrKpiStyle}">🔴 Долг <b style="color:#FCA5A5;">${fmt.num(debt)}</b>${overduePct ? ` <span style="opacity:.7;">(${overduePct}% просрочено)</span>` : ''}</span>` : ''}
           ${deferralDays ? `<span style="${hdrKpiStyle}">⏱ Отсрочка <b style="color:#93C5FD;">${deferralDays} дн</b></span>` : ''}
-          ${limit ? `<span style="${hdrKpiStyle}">💳 Лимит <b style="color:#C4B5FD;">${fmt.rub(limit)}</b></span>` : ''}
+          ${limit ? `<span style="${hdrKpiStyle}">💳 Лимит <b style="color:#C4B5FD;">${fmt.num(limit)}</b></span>` : ''}
         </div>` : '';
 
+  const priceType = (c.from1c && c.from1c.price_type) || c.price_type || null;
   openModal(`
     <div class="client-header">
       <div class="client-header-avatar">${fmt.initials(c.name) || '?'}</div>
       <div class="client-header-info">
-        <div class="client-header-name">${escapeHtml(c.name || 'Новый клиент')}</div>
+        <!-- Имя + крупный вид деятельности рядом -->
+        <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;">
+          <div class="client-header-name">${escapeHtml(c.name || 'Новый клиент')}</div>
+          ${c.activity ? `<span style="background:rgba(15,17,21,0.85); color:#FFC72C; padding:4px 12px; border-radius:999px; font-size:13px; font-weight:700; white-space:nowrap;">🏭 ${escapeHtml(c.activity)}</span>` : ''}
+        </div>
+        <!-- Мета: менеджер / дата / ИНН / город / вид цены -->
         <div class="client-header-meta">
           <span>👤 ${escapeHtml(c.manager||'—')}</span>
           <span>📅 в базе с ${fmt.dateLong(c.reg_date)}</span>
           <span>⏱ ${fmt.daysAgo(c.reg_date)}</span>
           ${c.inn ? `<span>🔢 ИНН ${escapeHtml(c.inn)}</span>` : ''}
           ${c.from1c && c.from1c.city ? `<span>📍 ${escapeHtml(c.from1c.city)}${c.from1c.region ? ', ' + escapeHtml(c.from1c.region) : ''}</span>` : ''}
+          ${priceType ? `<span>💲 ${escapeHtml(priceType)}</span>` : ''}
         </div>
+        <!-- Чипы: этап, договор, архив (без категории — вид деятельности уже наверху) -->
         <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
           ${stageChip(sgInfo.stage)}
-          <span class="chip chip-cat-${catInfo.category}" title="Категория клиента">Категория ${catInfo.category}</span>
-          ${c.activity ? `<span class="chip chip-activity">${escapeHtml(c.activity)}</span>` : ''}
           ${c.contract_signed ? '<span class="chip chip-success">Договор подписан</span>' : ''}
           ${c.from1c_archived ? '<span class="chip chip-danger" title="Клиент исчез из последней выгрузки 1С">⚠ Архив (нет в 1С)</span>' : ''}
         </div>
         ${headerKpis}
         ${contactBtns}
       </div>
-      <button class="modal-close" id="m-close" style="color:white;">✕</button>
+      <button class="modal-close" id="m-close" style="color:var(--wp-black);">✕</button>
     </div>
     <div class="client-tabs">
       <button class="client-tab active" data-tab="overview">Карточка</button>
@@ -5348,16 +5359,14 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
               </select>`}
             </label>
             <label class="field-row"><span>Дата регистрации <span class="from-1c-badge" title="Из 1С — не редактируется">1С</span></span><input type="date" id="ci-reg" value="${c.reg_date||''}" class="${c.from1c?.reg_date ? 'field-from-1c' : ''}" ${c.from1c?.reg_date ? 'readonly' : ''}></label>
-            <label class="field-row"><span>Вид цен ${f1c.price_type ? '<span class="from-1c-badge" title="Из 1С — не редактируется">1С</span>' : ''}</span>
-              ${f1c.price_type ? `<input value="${escapeHtml(f1c.price_type)}" readonly class="field-from-1c">` : `<select id="ci-price">${priceOptions}</select>`}
-            </label>
+            ${!f1c.price_type ? `<label class="field-row"><span>Вид цен</span><select id="ci-price">${priceOptions}</select></label>` : ''}
             ${f1c.head_company ? `<label class="field-row"><span>Группа компаний <span class="from-1c-badge">1С</span></span><input value="${escapeHtml(f1c.head_company)}" readonly class="field-from-1c"></label>` : ''}
             <label class="field-row"><span>Город</span><input id="ci-city" value="${escapeHtml(c.city||'')}" placeholder="Москва"></label>
             <label class="field-row" style="grid-column: 1 / -1;"><span>Адрес ${f1c.address_full ? '<span class="from-1c-badge" title="Из 1С — не редактируется">1С</span>' : ''}</span><input id="ci-addr" value="${escapeHtml(c.address||f1c.address_full||'')}" placeholder="ул. ..., офис ..." class="${f1c.address_full ? 'field-from-1c' : ''}" ${f1c.address_full ? 'readonly' : ''}></label>
           </div>
 
-          <!-- Описание клиента — внутри блока Клиент, свёрнуто по умолчанию если пусто -->
-          <details style="margin-top:14px;" ${(c.comment || f1c.note1c) ? 'open' : ''}>
+          <!-- Описание клиента — свёрнуто по умолчанию -->
+          <details style="margin-top:14px;">
             <summary style="cursor:pointer; font-weight:600; font-size:12px; color:var(--text-muted); user-select:none;">📝 Описание клиента ${c.comment ? `<span style="color:var(--text-soft); font-weight:400; font-size:11px;">— ${escapeHtml(c.comment.substring(0, 50))}${c.comment.length > 50 ? '…' : ''}</span>` : ''}</summary>
             <div style="margin-top:8px;">
               <textarea id="ci-comment" class="big-comment" rows="2" placeholder="Что важно знать: специфика бизнеса, ЛПР, особые договорённости. Это поле защищено от перезаписи 1С.">${escapeHtml(c.comment||'')}</textarea>
@@ -5374,8 +5383,8 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
             <label class="field-row"><span>Должность</span><input id="ci-position" value="${escapeHtml(c.position||'')}" placeholder="Директор / Снабжение"></label>
             <label class="field-row"><span>Телефон</span><input id="ci-phone" value="${escapeHtml(c.phone||'')}" placeholder="+7 ..."></label>
             <label class="field-row"><span>Email</span><input id="ci-email" value="${escapeHtml(c.email||'')}" placeholder="info@..."></label>
-            <label class="field-row"><span>WhatsApp</span><input id="ci-wa" value="${escapeHtml(c.wa||'')}" placeholder="+7... или ссылка wa.me/..."></label>
-            <label class="field-row"><span>Telegram</span><input id="ci-tg" value="${escapeHtml(c.tg||'')}" placeholder="@username или ссылка t.me/..."></label>
+            <label class="field-row"><span>WhatsApp${waLink ? ` <a href="${escapeHtml(waLink)}" target="_blank" rel="noopener" title="Открыть в WhatsApp" style="margin-left:6px; display:inline-flex; vertical-align:middle; align-items:center; justify-content:center; width:18px; height:18px; background:#25D366; color:white; border-radius:4px; text-decoration:none; font-size:11px;">💬</a>` : ''}</span><input id="ci-wa" value="${escapeHtml(c.wa||'')}" placeholder="+7... или ссылка wa.me/..."></label>
+            <label class="field-row"><span>Telegram${tgLink ? ` <a href="${escapeHtml(tgLink)}" target="_blank" rel="noopener" title="Открыть в Telegram" style="margin-left:6px; display:inline-flex; vertical-align:middle; align-items:center; justify-content:center; width:18px; height:18px; background:#2AABEE; color:white; border-radius:4px; text-decoration:none; font-size:11px;">✈</a>` : ''}</span><input id="ci-tg" value="${escapeHtml(c.tg||'')}" placeholder="@username или ссылка t.me/..."></label>
           </div>
         </div>
 
@@ -5959,38 +5968,38 @@ function renderSalesTab(c) {
   const avgCheck = txns.length ? sales.total / (sales.txn_count || txns.length) : 0;
   const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
-  // KPI — 5 плашек (текущий месяц + год + прошлый год + Валовая прибыль + средний чек)
+  // KPI — 5 компактных плашек, числа без ₽ (формат «3 000»)
   const kpiHtml = `
     <div class="grid grid-5 mb-4">
-      <div class="kpi" title="Выручка за ${monthNames[curMonth-1]} ${thisYear}, прошло ${dayOfMonth} из ${daysInMonth} дн.">
+      <div class="kpi kpi-compact" title="Выручка за ${monthNames[curMonth-1]} ${thisYear}, прошло ${dayOfMonth} из ${daysInMonth} дн.">
         <div class="kpi-accent" style="background:#3B82F6"></div>
         <div class="kpi-label">${monthNames[curMonth-1]} ${thisYear}</div>
-        <div class="kpi-value" style="font-size:20px;">${fmt.rub(revCurMonth)}</div>
-        <div class="kpi-sub">${profitCurMonth ? 'прибыль: <b style="color:var(--success);">' + fmt.rub(profitCurMonth) + '</b>' : (projectedCurMonth ? `★ прогноз: <b style="color:#3B82F6;">${fmt.rub(projectedCurMonth)}</b>` : (revCurMonth ? `${dayOfMonth}/${daysInMonth} дн` : 'нет продаж'))}</div>
+        <div class="kpi-value">${fmt.num(revCurMonth)}</div>
+        <div class="kpi-sub">${profitCurMonth ? 'прибыль: <b style="color:var(--success);">' + fmt.num(profitCurMonth) + '</b>' : (projectedCurMonth ? `★ прогноз: <b style="color:#3B82F6;">${fmt.num(projectedCurMonth)}</b>` : (revCurMonth ? `${dayOfMonth}/${daysInMonth} дн` : 'нет продаж'))}</div>
       </div>
-      <div class="kpi">
+      <div class="kpi kpi-compact">
         <div class="kpi-accent" style="background:var(--wp-yellow)"></div>
         <div class="kpi-label">Выручка ${thisYear}</div>
-        <div class="kpi-value" style="font-size:20px;">${fmt.rub(revYTD)}</div>
+        <div class="kpi-value">${fmt.num(revYTD)}</div>
         <div class="kpi-sub">YTD${revLastYear ? ' · ' + (revYTD >= revLastYear ? '↑' : '↓') + ' ' + Math.abs(Math.round((revYTD-revLastYear)/revLastYear*100)) + '% к ' + lastYear : ''}</div>
       </div>
-      <div class="kpi" title="Валовая прибыль за всё время = Σ (сумма − себестоимость) по каждой продаже">
+      <div class="kpi kpi-compact" title="Валовая прибыль за всё время">
         <div class="kpi-accent" style="background:var(--success)"></div>
         <div class="kpi-label">Валовая прибыль</div>
-        <div class="kpi-value" style="font-size:20px;">${fmt.rub(totalProfit)}</div>
+        <div class="kpi-value">${fmt.num(totalProfit)}</div>
         <div class="kpi-sub">маржа ${overallMargin.toFixed(1)}%</div>
       </div>
-      <div class="kpi">
+      <div class="kpi kpi-compact">
         <div class="kpi-accent" style="background:var(--info)"></div>
         <div class="kpi-label">Средний чек</div>
-        <div class="kpi-value" style="font-size:20px;">${fmt.rub(avgCheck)}</div>
+        <div class="kpi-value">${fmt.num(avgCheck)}</div>
         <div class="kpi-sub">${sales ? (sales.txn_count || txns.length) + ' позиций' : '—'}</div>
       </div>
-      <div class="kpi">
+      <div class="kpi kpi-compact">
         <div class="kpi-accent" style="background:var(--danger)"></div>
         <div class="kpi-label">Долг / Просрочено</div>
-        <div class="kpi-value" style="font-size:20px;">${fmt.rub(c.debt||0)}</div>
-        <div class="kpi-sub" style="color:${c.overdue>0?'var(--danger)':'var(--text-muted)'};">${c.overdue ? 'просрочено: ' + fmt.rub(c.overdue) : ''}</div>
+        <div class="kpi-value">${fmt.num(c.debt||0)}</div>
+        <div class="kpi-sub" style="color:${c.overdue>0?'var(--danger)':'var(--text-muted)'};">${c.overdue ? 'просрочено: ' + fmt.num(c.overdue) : ''}</div>
       </div>
     </div>`;
 
@@ -6013,7 +6022,7 @@ function renderSalesTab(c) {
           ${periods.map(p => `<button data-period="${p.id}" class="${curPeriod===p.id?'active':''}">${p.label}</button>`).join('')}
         </div>
       </div>
-      <div style="padding: 8px 16px 18px; height: 300px;">
+      <div style="padding: 8px 16px 14px; height: 220px;">
         ${hasMonthData ? '<canvas id="ch-client-months"></canvas>' : '<div class="empty-state" style="padding:40px;"><div style="font-size:32px;">📊</div>Продажи отсутствуют</div>'}
       </div>
     </div>`;
@@ -6027,22 +6036,23 @@ function renderSalesTab(c) {
     return rounded.toLocaleString('ru-RU').replace(/,/g, ' ').replace(/ /g, ' ');
   };
 
-  // Транзакции (что покупал) — collapse, scrollable
+  // Транзакции (что покупал) — collapse, при раскрытии показываем первые 10
   const txnTotal = sales ? (sales.txn_count || txns.length) : txns.length;
   const truncatedAt = sales && sales._truncated_at;
   const txnsHtml = txns.length ? `
-    <details class="card" ${txns.length <= 5 ? 'open' : ''}>
+    <details class="card mb-4">
       <summary style="display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none; border-bottom:1px solid var(--border); background:white;">
         <div class="card-title" style="margin:0;">🛒 Что покупал</div>
         <span class="text-sm text-muted" style="font-weight:400;">
           — <b style="color:var(--text);">${txns.length}</b>${txnTotal > txns.length ? ` из ${txnTotal}` : ''} ${txns.length===1?'позиция':'позиций'}
-          ${truncatedAt ? `<span style="color:var(--warning); margin-left:6px;" title="При сохранении в браузер часть данных пришлось обрезать (превышен лимит localStorage). Полные данные — в файле 1С.">⚠ обрезано до ${truncatedAt}</span>` : ''}
+          ${truncatedAt ? `<span style="color:var(--warning); margin-left:6px;" title="При сохранении в браузер часть данных пришлось обрезать.">⚠ обрезано до ${truncatedAt}</span>` : ''}
         </span>
         <span style="margin-left:auto; font-size:12px; color:var(--text-muted);">кликните, чтобы развернуть</span>
       </summary>
-      <div style="padding:0 0 0; background:white;">
-        <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1px solid var(--border);">
-          <input type="search" id="sales-search" placeholder="🔍 Поиск по артикулу / номенклатуре / бренду…" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; width:100%; max-width:400px; font-size:13px;">
+      <div style="padding:0; background:white;">
+        <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <input type="search" id="sales-search" placeholder="🔍 Поиск по артикулу / номенклатуре / бренду…" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; flex:1; max-width:400px; font-size:13px;">
+          <span class="text-sm text-muted" id="sales-page-info">показано ${Math.min(10, txns.length)} из ${txns.length}</span>
         </div>
         <div style="max-height: 480px; overflow-y: auto;">
           <table class="data" id="sales-table" style="font-size:13px;">
@@ -6056,8 +6066,8 @@ function renderSalesTab(c) {
               <th class="num">Прибыль</th>
               <th class="num">Маржа</th>
             </tr></thead>
-            <tbody>
-              ${txns.map(t => {
+            <tbody id="sales-tbody">
+              ${txns.slice(0, 10).map(t => {
                 const isRefund = t.amount < 0;
                 const prof = t.profit != null ? t.profit : ((t.amount||0) - (t.cost||0));
                 const marg = t.margin != null ? t.margin : (t.amount > 0 ? (prof/t.amount*100) : 0);
@@ -6078,17 +6088,23 @@ function renderSalesTab(c) {
           </table>
           <div id="sales-table-empty" class="empty-state" style="padding:30px; display:none;">Ничего не найдено</div>
         </div>
+        ${txns.length > 10 ? `
+          <div style="padding:10px 16px; text-align:center; border-top:1px solid var(--border); background:#FAFBFC;">
+            <button class="btn btn-ghost btn-sm" id="sales-show-more">Показать ещё (${txns.length - 10}) ↓</button>
+          </div>
+        ` : ''}
       </div>
     </details>
   ` : `
     <div class="empty-state" style="padding: 32px;">
       <div style="font-size:32px;">🛒</div>
       <div class="fw-600">Истории заказов нет</div>
-      <div class="text-sm text-muted">После импорта из 1С здесь появятся позиции (до 200 последних)</div>
+      <div class="text-sm text-muted">После импорта из 1С здесь появятся позиции</div>
     </div>
   `;
 
-  return kpiHtml + chartHtml + txnsHtml;
+  // Порядок: KPI → Что покупал (выше) → График помесячной динамики (ниже)
+  return kpiHtml + txnsHtml + chartHtml;
 }
 
 // === Вкладка «💰 ПДЗ» ===
@@ -6128,28 +6144,28 @@ function renderClientDebtTab(c) {
     <div style="max-width: 1100px;">
       <!-- KPI -->
       <div class="grid grid-4 mb-4">
-        <div class="kpi">
+        <div class="kpi kpi-compact">
           <div class="kpi-accent" style="background:#8B5CF6"></div>
           <div class="kpi-label">Всего долг</div>
-          <div class="kpi-value" style="font-size:20px;">${fmt.rub(totalDebt)}</div>
+          <div class="kpi-value">${fmt.num(totalDebt)}</div>
           <div class="kpi-sub">${debt1c?.docs_count ? debt1c.docs_count + ' документ(ов)' : ''}</div>
         </div>
-        <div class="kpi">
+        <div class="kpi kpi-compact">
           <div class="kpi-accent" style="background:${overduePct > 60 ? 'var(--danger)' : overduePct > 30 ? 'var(--warning)' : 'var(--success)'}"></div>
           <div class="kpi-label">Просрочено</div>
-          <div class="kpi-value" style="font-size:20px; color:${overduePct > 30 ? 'var(--danger)' : 'inherit'};">${fmt.rub(overdue)}</div>
+          <div class="kpi-value" style="color:${overduePct > 30 ? 'var(--danger)' : 'inherit'};">${fmt.num(overdue)}</div>
           <div class="kpi-sub">${overduePct}% от долга</div>
         </div>
-        <div class="kpi">
+        <div class="kpi kpi-compact">
           <div class="kpi-accent" style="background:#F59E0B"></div>
           <div class="kpi-label">Макс. просрочка</div>
-          <div class="kpi-value" style="font-size:20px;">${debt1c?.max_overdue_days || 0} дн</div>
+          <div class="kpi-value">${debt1c?.max_overdue_days || 0} дн</div>
           <div class="kpi-sub">по одному документу</div>
         </div>
-        <div class="kpi">
+        <div class="kpi kpi-compact">
           <div class="kpi-accent" style="background:${ourDebt > 0 ? 'var(--info)' : 'var(--text-soft)'}"></div>
           <div class="kpi-label">Наш долг клиенту</div>
-          <div class="kpi-value" style="font-size:20px;">${fmt.rub(ourDebt)}</div>
+          <div class="kpi-value">${fmt.num(ourDebt)}</div>
           <div class="kpi-sub">${ourDebt > 0 ? 'предоплаты / возвраты' : 'нет'}</div>
         </div>
       </div>
@@ -6381,6 +6397,36 @@ function initSalesChart(c) {
       if (empty) empty.style.display = visible ? 'none' : 'block';
     });
   }
+  // Кнопка «Показать ещё» — раскрывает все строки сразу
+  const showMore = document.getElementById('sales-show-more');
+  if (showMore) {
+    showMore.addEventListener('click', () => {
+      const sales = c.from1c && c.from1c.sales;
+      const txns = sales && sales.transactions ? sales.transactions : [];
+      const numSp = (n) => { if (n == null || isNaN(n)) return '—'; return Math.round(n).toLocaleString('ru-RU'); };
+      const tbody = document.getElementById('sales-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = txns.map(t => {
+        const isRefund = t.amount < 0;
+        const prof = t.profit != null ? t.profit : ((t.amount||0) - (t.cost||0));
+        const marg = t.margin != null ? t.margin : (t.amount > 0 ? (prof/t.amount*100) : 0);
+        const margColor = marg < 0 ? 'color:var(--danger);' : marg < 10 ? 'color:#D97706;' : '';
+        return `<tr ${isRefund ? 'style="background:rgba(220,38,38,0.04);"' : ''} title="${isRefund ? 'Возврат / сторно' : ''}">
+          <td class="text-sm">${fmt.date(t.date)}</td>
+          <td class="text-sm fw-600">${escapeHtml(t.article||'—')}</td>
+          <td class="text-sm">${escapeHtml(t.nomenclature||'—')}</td>
+          <td>${t.brand ? `<span class="chip chip-default" style="font-size:11px;">${escapeHtml(t.brand)}</span>` : '<span class="text-muted">—</span>'}</td>
+          <td class="num">${numSp(t.qty)}</td>
+          <td class="num fw-700" style="${isRefund ? 'color:var(--danger);' : ''}">${numSp(t.amount)}</td>
+          <td class="num" style="${prof < 0 ? 'color:var(--danger);' : 'color:var(--success);'}">${prof !== 0 ? numSp(prof) : '<span class="text-muted">—</span>'}</td>
+          <td class="num text-sm" style="${margColor}">${prof !== 0 && t.amount !== 0 ? marg.toFixed(1) + '%' : '<span class="text-muted">—</span>'}</td>
+        </tr>`;
+      }).join('');
+      const info = document.getElementById('sales-page-info');
+      if (info) info.textContent = `показано ${txns.length} из ${txns.length}`;
+      showMore.parentElement.remove();
+    });
+  }
 }
 
 function renderContractTab(c) {
@@ -6398,40 +6444,40 @@ function renderContractTab(c) {
         <!-- Шапка с ключевыми KPI договорной работы -->
         <div class="grid grid-4 mb-4">
           ${totalLimit ? `
-            <div class="kpi">
+            <div class="kpi kpi-compact">
               <div class="kpi-accent" style="background:#8B5CF6"></div>
               <div class="kpi-label">Лимит по договорам</div>
-              <div class="kpi-value" style="font-size:20px;">${fmt.rub(totalLimit)}</div>
+              <div class="kpi-value">${fmt.num(totalLimit)}</div>
               <div class="kpi-sub">${contracts.filter(x=>x.status==='Действует').length} действ. договор(ов)</div>
             </div>
-            <div class="kpi">
+            <div class="kpi kpi-compact">
               <div class="kpi-accent" style="background:${limitUsed > 80 ? 'var(--danger)' : limitUsed > 50 ? 'var(--warning)' : 'var(--success)'}"></div>
               <div class="kpi-label">Использовано</div>
-              <div class="kpi-value" style="font-size:20px; color:${limitUsed > 80 ? 'var(--danger)' : 'inherit'};">${limitUsed}%</div>
-              <div class="kpi-sub">${fmt.rub(debt)} / ${fmt.rub(totalLimit)}</div>
+              <div class="kpi-value" style="color:${limitUsed > 80 ? 'var(--danger)' : 'inherit'};">${limitUsed}%</div>
+              <div class="kpi-sub">${fmt.num(debt)} / ${fmt.num(totalLimit)}</div>
             </div>
           ` : `
-            <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Договор</div><div class="kpi-value" style="font-size:18px;">${activeContract ? 'Есть' : 'Нет'}</div><div class="kpi-sub">${activeContract ? '№ ' + escapeHtml(activeContract.no || '—') : 'не подписан'}</div></div>
-            <div class="kpi"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">Лимит</div><div class="kpi-value" style="font-size:18px;">—</div><div class="kpi-sub">не задан</div></div>
+            <div class="kpi kpi-compact"><div class="kpi-accent"></div><div class="kpi-label">Договор</div><div class="kpi-value">${activeContract ? 'Есть' : 'Нет'}</div><div class="kpi-sub">${activeContract ? '№ ' + escapeHtml(activeContract.no || '—') : 'не подписан'}</div></div>
+            <div class="kpi kpi-compact"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">Лимит</div><div class="kpi-value">—</div><div class="kpi-sub">не задан</div></div>
           `}
           ${agreement ? `
-            <div class="kpi">
+            <div class="kpi kpi-compact">
               <div class="kpi-accent" style="background:#2563EB"></div>
               <div class="kpi-label">Отсрочка</div>
-              <div class="kpi-value" style="font-size:20px;">${agreement.days || 0} дн</div>
+              <div class="kpi-value">${agreement.days || 0} дн</div>
               <div class="kpi-sub">${agreement.payment_rule ? agreement.payment_rule.substring(0, 30) : ''}</div>
             </div>
             ${agreement.percent ? `
-              <div class="kpi">
+              <div class="kpi kpi-compact">
                 <div class="kpi-accent" style="background:#06B6D4"></div>
                 <div class="kpi-label">% предоплаты</div>
-                <div class="kpi-value" style="font-size:20px;">${agreement.percent}%</div>
+                <div class="kpi-value">${agreement.percent}%</div>
                 <div class="kpi-sub">${agreement.date_base || ''}</div>
               </div>
-            ` : `<div class="kpi"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">% предоплаты</div><div class="kpi-value" style="font-size:18px;">—</div><div class="kpi-sub">не указано</div></div>`}
+            ` : `<div class="kpi kpi-compact"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">% предоплаты</div><div class="kpi-value">—</div><div class="kpi-sub">не указано</div></div>`}
           ` : `
-            <div class="kpi"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">Отсрочка</div><div class="kpi-value" style="font-size:18px;">—</div><div class="kpi-sub">соглашение не найдено</div></div>
-            <div class="kpi"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">% предоплаты</div><div class="kpi-value" style="font-size:18px;">—</div><div class="kpi-sub">—</div></div>
+            <div class="kpi kpi-compact"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">Отсрочка</div><div class="kpi-value">—</div><div class="kpi-sub">соглашение не найдено</div></div>
+            <div class="kpi kpi-compact"><div class="kpi-accent" style="background:var(--text-soft)"></div><div class="kpi-label">% предоплаты</div><div class="kpi-value">—</div><div class="kpi-sub">—</div></div>
           `}
         </div>
       ` : ''}
@@ -6462,7 +6508,7 @@ function renderContractTab(c) {
                   <td class="text-sm text-muted">Реализация</td>
                   <td>${escapeHtml(ct.currency || 'RUB')}</td>
                   <td class="text-sm">${escapeHtml(ct.vat || '—')}</td>
-                  <td class="num fw-600">${ct.limit ? fmt.rub(ct.limit) : '<span class="text-muted">—</span>'}</td>
+                  <td class="num fw-600">${ct.limit ? fmt.num(ct.limit) : '<span class="text-muted">—</span>'}</td>
                   <td class="text-sm">${escapeHtml(ct.manager || '—')}</td>
                 </tr>
               `).join('')}
@@ -6474,14 +6520,26 @@ function renderContractTab(c) {
       <div class="client-block">
         <div class="client-block-title">📝 ${contracts.length ? 'Ручные поля (override данных из 1С)' : 'Договор — ручное заполнение'}</div>
         <div class="info-grid-2col">
-          <label class="field-row"><span>Договор подписан</span>
-            <select id="cc-signed">
-              <option value="0" ${!c.contract_signed?'selected':''}>Нет</option>
-              <option value="1" ${c.contract_signed?'selected':''}>Да</option>
-            </select>
-          </label>
-          <label class="field-row"><span>№ договора</span><input id="cc-no" value="${escapeHtml(c.contract_no||'')}" placeholder="например, WP-2026/154"></label>
-          <label class="field-row"><span>Дата договора</span><input type="date" id="cc-date" value="${c.contract_date||''}"></label>
+          ${contracts.length ? `
+            <label class="field-row"><span>Договор подписан <span class="from-1c-badge" title="Из 1С — не редактируется">1С</span></span>
+              <input value="${c.contract_signed ? 'Да' : 'Нет'}" readonly class="field-from-1c">
+            </label>
+            <label class="field-row"><span>№ договора <span class="from-1c-badge" title="Из 1С — не редактируется">1С</span></span>
+              <input value="${escapeHtml(c.contract_no||'—')}" readonly class="field-from-1c">
+            </label>
+            <label class="field-row"><span>Дата договора <span class="from-1c-badge" title="Из 1С — не редактируется">1С</span></span>
+              <input type="date" value="${c.contract_date||''}" readonly class="field-from-1c">
+            </label>
+          ` : `
+            <label class="field-row"><span>Договор подписан</span>
+              <select id="cc-signed">
+                <option value="0" ${!c.contract_signed?'selected':''}>Нет</option>
+                <option value="1" ${c.contract_signed?'selected':''}>Да</option>
+              </select>
+            </label>
+            <label class="field-row"><span>№ договора</span><input id="cc-no" value="${escapeHtml(c.contract_no||'')}" placeholder="например, WP-2026/154"></label>
+            <label class="field-row"><span>Дата договора</span><input type="date" id="cc-date" value="${c.contract_date||''}"></label>
+          `}
         </div>
         <label class="field-row" style="margin-top:10px;"><span>Заметка / условия</span>
           <textarea id="cc-note" rows="3" placeholder="Особые условия, ссылки, статус согласования…">${escapeHtml(c.contract_note||'')}</textarea>
