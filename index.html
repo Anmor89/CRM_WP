@@ -972,6 +972,7 @@ const state = {
     menuOrder: null,            // custom order of NAV ids; null = default
     staleWeeks: 2,              // weeks without events to highlight a client
     neglectedMonths: 2,         // months without events AND sales to mark client as neglected
+    hiddenManagers: [],         // managers hidden from CRM (their clients also hidden)
   },
 };
 
@@ -1430,9 +1431,10 @@ function renderApp() {
 
 // =================== HELPERS ===================
 function visibleClients() {
-  // Архивные (помеченные на удаление) — никогда не попадают в рабочие списки.
-  // Их видно только в Настройках → Архив клиентов.
-  let list = state.clients.filter(c => !c.archived);
+  // Архивные клиенты — не в рабочих списках (видно только в Настройках → Архив).
+  // Скрытые менеджеры — их клиенты тоже не показываем.
+  const hiddenMgrs = (state.settings && state.settings.hiddenManagers) || [];
+  let list = state.clients.filter(c => !c.archived && !hiddenMgrs.includes(c.manager));
   if (state.user && state.user.role !== 'admin' && state.user.manager) {
     list = list.filter(c => c.manager === state.user.manager);
   } else if (state.user && state.user.role === 'admin' && state.adminViewMgr && state.adminViewMgr !== 'all') {
@@ -1503,7 +1505,9 @@ function uniqueManagers() {
   // include managers added via admin even if no clients yet
   state.users.forEach(u => u.manager && s.add(u.manager));
   if (state.extraManagers) state.extraManagers.forEach(m => s.add(m));
-  return Array.from(s).sort();
+  // Скрытые менеджеры не попадают в выпадающие списки и фильтры
+  const hidden = new Set((state.settings && state.settings.hiddenManagers) || []);
+  return Array.from(s).filter(m => !hidden.has(m)).sort();
 }
 function uniqueActivities() {
   return ['СТО','АТП','Розничный магазин','Интернет магазин','Агрозапчасти','Масла и смазки','Маркетплейс','ОПТ','Другое'];
@@ -3827,28 +3831,22 @@ function renderSettings() {
       </div>
 
       <div class="card">
-        <div class="card-header"><div class="card-title">Видимость разделов меню</div></div>
+        <div class="card-header"><div class="card-title">Разделы меню</div></div>
         <div class="card-body">
-          <p class="text-sm text-muted mb-3">Какие пункты показывать в левом меню. «Дашборд» скрыть нельзя.</p>
-          ${hideableViews.map(n => `
-            <label class="setting-row"><input type="checkbox" class="view-toggle" data-view-id="${n.id}" ${hidden.includes(n.id)?'':'checked'}> <span>${escapeHtml(n.label)}</span></label>
-          `).join('')}
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><div class="card-title">Порядок разделов меню</div></div>
-        <div class="card-body">
-          <p class="text-sm text-muted mb-3">Перетащите пункты, чтобы изменить их порядок в левом меню.</p>
+          <p class="text-sm text-muted mb-3">Перетащите пункты для изменения порядка. Снимите галку чтобы скрыть из меню. «Дашборд» скрыть нельзя.</p>
           <div id="menu-order-list">
-            ${orderedNav().map(n => `
-              <div class="menu-order-item" draggable="true" data-mid="${n.id}">
+            ${orderedNav().map(n => {
+              const canHide = n.id !== 'dashboard';
+              const isVisible = !hidden.includes(n.id);
+              return `<div class="menu-order-item" draggable="true" data-mid="${n.id}">
                 <span class="menu-order-grip">⠿</span>
+                ${canHide ? `<input type="checkbox" class="view-toggle" data-view-id="${n.id}" ${isVisible?'checked':''} style="margin-right:8px;">` : '<span style="display:inline-block; width:20px;"></span>'}
                 <span>${escapeHtml(n.label)}</span>
-              </div>
-            `).join('')}
+                ${!canHide ? '<span class="text-sm text-muted" style="margin-left:auto;">всегда</span>' : ''}
+              </div>`;
+            }).join('')}
           </div>
-          <button class="btn btn-sm mt-3" id="menu-order-reset">Восстановить стандартный порядок</button>
+          <button class="btn btn-sm mt-3" id="menu-order-reset">↺ Сбросить порядок и видимость</button>
         </div>
       </div>
 
@@ -3856,12 +3854,9 @@ function renderSettings() {
         <div class="card-header"><div class="card-title">Дашборд</div></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-3">Какие блоки показывать на главной странице.</p>
-          <label class="setting-row"><input type="checkbox" id="w-kpis" ${widgets.kpis?'checked':''}> <span>Карточки KPI сверху</span></label>
-          <label class="setting-row"><input type="checkbox" id="w-funnel" ${widgets.funnel?'checked':''}> <span>Воронка по клиентам</span></label>
-          <label class="setting-row"><input type="checkbox" id="w-managers" ${widgets.managers!==false?'checked':''}> <span>Распределение по менеджерам</span></label>
-          <label class="setting-row"><input type="checkbox" id="w-upcoming" ${widgets.upcoming?'checked':''}> <span>Ближайшие события</span></label>
-          <label class="setting-row"><input type="checkbox" id="w-recent" ${widgets.recent?'checked':''}> <span>Новые клиенты</span></label>
-          <label class="setting-row"><input type="checkbox" id="w-top" ${widgets.topClients?'checked':''}> <span>Топ клиентов по выручке</span></label>
+          <label class="setting-row"><input type="checkbox" id="w-kpis" ${widgets.kpis!==false?'checked':''}> <span>📊 Плашки KPI сверху (6 шт)</span></label>
+          <label class="setting-row"><input type="checkbox" id="w-myday" ${widgets.myday!==false?'checked':''}> <span>📋 «Что сделать» + «Без отгрузок» + «Близко к лимиту»</span></label>
+          <label class="setting-row"><input type="checkbox" id="w-funnel" ${widgets.funnel!==false?'checked':''}> <span>🗂 «Воронка» + «ПДЗ — позвонить»</span></label>
         </div>
       </div>
 
@@ -3886,27 +3881,53 @@ function renderSettings() {
       <div class="card">
         <div class="card-header"><div class="card-title">Менеджеры</div></div>
         <div class="card-body">
-          <p class="text-sm text-muted mb-3">Список менеджеров для назначения клиентам.</p>
-          <div id="settings-managers-list" style="display:flex; flex-direction: column; gap: 6px;">
-            ${uniqueManagers().map(m => {
-              const count = state.clients.filter(c => c.manager === m).length;
-              return `
-                <div class="manager-row">
-                  <div class="user-avatar" style="width:32px; height:32px; font-size: 12px;">${fmt.initials(m)}</div>
-                  <div style="flex:1; min-width: 0;">
-                    <div class="fw-600 text-sm">${escapeHtml(m)}</div>
-                    <div class="text-sm text-muted">${count} ${count===1?'клиент':count>=2&&count<=4?'клиента':'клиентов'}</div>
+          ${(() => {
+            const hiddenMgrs = (state.settings && state.settings.hiddenManagers) || [];
+            const allMgrs = [...new Set([
+              ...state.clients.map(c => c.manager).filter(Boolean),
+              ...(state.extraManagers || [])
+            ])].sort();
+            const activeMgrs = allMgrs.filter(m => !hiddenMgrs.includes(m));
+            return `
+              <p class="text-sm text-muted mb-3">Список менеджеров. Кнопка «Скрыть» убирает менеджера и всех его клиентов из CRM (можно вернуть в блоке «Скрытые» ниже).</p>
+              <div id="settings-managers-list" style="display:flex; flex-direction: column; gap: 6px;">
+                ${activeMgrs.map(m => {
+                  const count = state.clients.filter(c => c.manager === m && !c.archived).length;
+                  return `<div class="manager-row">
+                    <div class="user-avatar" style="width:32px; height:32px; font-size: 12px;">${fmt.initials(m)}</div>
+                    <div style="flex:1; min-width: 0;">
+                      <div class="fw-600 text-sm">${escapeHtml(m)}</div>
+                      <div class="text-sm text-muted">${count} ${count===1?'клиент':count>=2&&count<=4?'клиента':'клиентов'}</div>
+                    </div>
+                    <button class="btn btn-sm hide-manager" data-mgr="${escapeHtml(m)}" title="Менеджер и его клиенты исчезнут из всех списков CRM. Восстановить можно ниже.">🙈 Скрыть</button>
+                  </div>`;
+                }).join('')}
+              </div>
+              <div class="flex gap-2 mt-4">
+                <input id="new-manager-name" placeholder="ФИО нового менеджера" style="flex:1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;">
+                <button class="btn btn-primary btn-sm" id="add-manager-btn">+ Добавить</button>
+              </div>
+              <div class="text-sm text-muted mt-3">💡 Менеджеры автоматически подтягиваются из 1С (поле «Основной менеджер» в Справочнике партнёров). При обновлении данных список пересобирается.</div>
+              ${hiddenMgrs.length ? `
+                <details style="margin-top:14px;">
+                  <summary style="cursor:pointer; font-size:13px; font-weight:600; color:var(--text-muted);">🙈 Скрытые менеджеры (${hiddenMgrs.length})</summary>
+                  <div style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
+                    ${hiddenMgrs.map(m => {
+                      const count = state.clients.filter(c => c.manager === m && !c.archived).length;
+                      return `<div class="manager-row" style="opacity:0.7;">
+                        <div class="user-avatar" style="width:32px; height:32px; font-size: 12px; background:#E5E7EB; color:var(--text-muted);">${fmt.initials(m)}</div>
+                        <div style="flex:1; min-width: 0;">
+                          <div class="fw-600 text-sm">${escapeHtml(m)}</div>
+                          <div class="text-sm text-muted">${count} ${count===1?'клиент':count>=2&&count<=4?'клиента':'клиентов'} — скрыты</div>
+                        </div>
+                        <button class="btn btn-sm show-manager" data-mgr="${escapeHtml(m)}">↩ Вернуть</button>
+                      </div>`;
+                    }).join('')}
                   </div>
-                  <button class="btn btn-sm btn-danger del-manager" data-mgr="${escapeHtml(m)}">Удалить</button>
-                </div>
-              `;
-            }).join('')}
-          </div>
-          <div class="flex gap-2 mt-4">
-            <input id="new-manager-name" placeholder="ФИО нового менеджера" style="flex:1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;">
-            <button class="btn btn-primary btn-sm" id="add-manager-btn">+ Добавить</button>
-          </div>
-          <div class="text-sm text-muted mt-3">Совет: после добавления менеджера зайдите в «Доступы» и создайте ему учётную запись. При удалении менеджера с клиентами система предложит переназначить их другому.</div>
+                </details>
+              ` : ''}
+            `;
+          })()}
         </div>
       </div>
 
@@ -4035,8 +4056,8 @@ function afterSettings() {
     };
   })();
 
-  // Dashboard widgets toggles
-  [['kpis','kpis'],['funnel','funnel'],['managers','managers'],['upcoming','upcoming'],['recent','recent'],['top','topClients']].forEach(([key, prop]) => {
+  // Dashboard widgets toggles (актуальный список виджетов)
+  [['kpis','kpis'],['myday','myday'],['funnel','funnel']].forEach(([key, prop]) => {
     const el = document.getElementById('w-' + key);
     if (!el) return;
     el.addEventListener('change', () => {
@@ -4066,23 +4087,20 @@ function afterSettings() {
     persist();
     renderView();
   };
-  // Manager delete
-  document.querySelectorAll('.del-manager').forEach(b => b.onclick = () => {
+  // Скрыть менеджера: добавить в hiddenManagers
+  document.querySelectorAll('.hide-manager').forEach(b => b.onclick = () => {
     const m = b.dataset.mgr;
-    const clients = state.clients.filter(c => c.manager === m);
-    const others = uniqueManagers().filter(x => x !== m);
-    if (clients.length > 0) {
-      if (!others.length) { alert('Нельзя удалить единственного менеджера, у которого есть клиенты.'); return; }
-      const target = prompt(`У менеджера «${m}» ${clients.length} клиент(ов).\nВведите имя менеджера, которому их переназначить:\n\nДоступны: ${others.join(', ')}`, others[0]);
-      if (target === null) return;
-      const t = others.find(x => x.toLowerCase() === target.trim().toLowerCase());
-      if (!t) { alert('Менеджер «' + target + '» не найден. Удаление отменено.'); return; }
-      clients.forEach(c => { c.manager = t; });
-    } else {
-      if (!confirm(`Удалить менеджера «${m}»?`)) return;
-    }
-    state.extraManagers = (state.extraManagers || []).filter(x => x !== m);
-    state.users.forEach(u => { if (u.manager === m) u.manager = null; });
+    const count = state.clients.filter(c => c.manager === m && !c.archived).length;
+    if (!confirm(`Скрыть менеджера «${m}»?\n\n${count > 0 ? `Его ${count} клиент(ов) тоже исчезнут из всех списков CRM.\n` : ''}Восстановить можно ниже в блоке «Скрытые менеджеры».`)) return;
+    if (!state.settings.hiddenManagers) state.settings.hiddenManagers = [];
+    if (!state.settings.hiddenManagers.includes(m)) state.settings.hiddenManagers.push(m);
+    persist();
+    renderView();
+  });
+  // Вернуть скрытого менеджера
+  document.querySelectorAll('.show-manager').forEach(b => b.onclick = () => {
+    const m = b.dataset.mgr;
+    state.settings.hiddenManagers = (state.settings.hiddenManagers || []).filter(x => x !== m);
     persist();
     renderView();
   });
@@ -5095,27 +5113,26 @@ function onec_showSuccess(stats) {
     if (c.from1c.debt && c.from1c.debt.total > 0) debtTotal++;
     if (c.from1c.agreement) agreementsTotal++;
   });
+  document.getElementById('modal-content').style.maxWidth = '420px';
   document.getElementById('modal-content').innerHTML = `
-    <div style="padding:32px; text-align:center; max-width:560px;">
-      <div style="font-size:48px; margin-bottom:8px;">🎉</div>
-      <h3 style="margin:0 0 6px;">Данные обновлены</h3>
-      <div style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Все справочники из 1С пересобраны и сохранены в браузере</div>
-      <div class="grid grid-3" style="margin-bottom:18px;">
-        <div><div style="font-size:24px; font-weight:700; color:var(--success);">+${stats.added}</div><div style="font-size:11px; color:var(--text-muted);">новых клиентов</div></div>
-        <div><div style="font-size:24px; font-weight:700; color:var(--info);">${stats.updated}</div><div style="font-size:11px; color:var(--text-muted);">обновлено</div></div>
-        <div><div style="font-size:24px; font-weight:700; color:var(--text-muted);">${stats.archived}</div><div style="font-size:11px; color:var(--text-muted);">в архив</div></div>
+    <div style="padding:22px; text-align:center;">
+      <div style="font-size:36px; margin-bottom:6px;">🎉</div>
+      <h3 style="margin:0 0 4px; font-size:18px;">Данные обновлены</h3>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">Справочники 1С пересобраны</div>
+      <div style="display:flex; gap:8px; justify-content:center; margin-bottom:14px;">
+        <span style="font-size:13px;"><b style="color:var(--success);">+${stats.added}</b> новых</span>
+        <span style="font-size:13px; color:var(--text-muted);">·</span>
+        <span style="font-size:13px;"><b style="color:var(--info);">${stats.updated}</b> обновлено</span>
+        ${stats.archived ? `<span style="font-size:13px; color:var(--text-muted);">·</span><span style="font-size:13px;"><b style="color:var(--text-muted);">${stats.archived}</b> в архив</span>` : ''}
       </div>
-      <div style="background:#F8FAFC; border:1px solid #E5E7EB; border-radius:10px; padding:14px; margin-bottom:20px; text-align:left;">
-        <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Что обновлено</div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; font-size:13px;">
-          <div>🏢 Партнёры: <b>${stats.total_incoming}</b></div>
-          <div>💰 Продажи: <b>${fmt.int(txnTotal)}</b> позиций</div>
-          <div>📝 Договоры: <b>${fmt.int(contractsTotal)}</b></div>
-          <div>⏱ Соглашения: <b>${fmt.int(agreementsTotal)}</b></div>
-          <div>💳 Долги: <b>${fmt.int(debtTotal)}</b> клиентов</div>
-        </div>
+      <div style="background:#F8FAFC; border:1px solid #E5E7EB; border-radius:8px; padding:10px 12px; margin-bottom:14px; text-align:center; font-size:12px; line-height:1.7;">
+        🏢 ${stats.total_incoming} партнёров &nbsp;·&nbsp;
+        💰 ${fmt.int(txnTotal)} продаж &nbsp;·&nbsp;
+        📝 ${fmt.int(contractsTotal)} договоров<br>
+        ⏱ ${fmt.int(agreementsTotal)} соглашений &nbsp;·&nbsp;
+        💳 ${fmt.int(debtTotal)} долгов
       </div>
-      <button class="btn btn-primary" onclick="closeModal(); renderView();">Открыть CRM</button>
+      <button class="btn btn-primary btn-sm" onclick="closeModal(); renderView();">Открыть CRM</button>
     </div>`;
 }
 
