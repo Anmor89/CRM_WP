@@ -2427,17 +2427,17 @@ function afterClients() {
         </div>
         ${neglected.length ? `
           <table class="data" style="font-size:13px;">
-            <thead><tr><th>Клиент</th><th class="num">Последнее событие</th><th class="num">Последняя продажа</th><th class="num">Выручка</th><th class="num">Долг</th></tr></thead>
+            <thead><tr><th>Клиент</th><th>Менеджер</th><th class="num">Последнее событие</th><th class="num">Последняя продажа</th><th class="num">Выручка</th></tr></thead>
             <tbody id="neglected-tbody">
               ${(open ? neglected.slice(0, 50) : neglected.slice(0, 3)).map(c => {
                 const lastSale = (c.from1c && c.from1c.sales && c.from1c.sales.last_date) || null;
                 const lastEv = lastEventDate(c.id);
                 return `<tr data-cid="${c.id}" style="cursor:pointer;">
                   <td class="fw-600">${escapeHtml(c.name)}</td>
+                  <td>${escapeHtml(c.manager||'—')}</td>
                   <td class="num">${lastEv ? fmt.date(lastEv) : '<span class="text-muted">никогда</span>'}</td>
                   <td class="num">${lastSale ? fmt.date(lastSale) : '<span class="text-muted">—</span>'}</td>
                   <td class="num">${(c.revenue||0) > 0 ? fmt.num(c.revenue) : '<span class="text-muted">—</span>'}</td>
-                  <td class="num" style="${(c.debt||0)>0?'color:var(--danger);':''}">${(c.debt||0)>0 ? fmt.num(c.debt) : '<span class="text-muted">—</span>'}</td>
                 </tr>`;
               }).join('')}
             </tbody>
