@@ -1774,7 +1774,7 @@ function renderDashboard() {
     ` : ''}
 
     ${(w.myday !== false) ? `
-    <div class="grid mb-4" style="display:grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; align-items: stretch;">
+    <div class="mb-4" style="display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr); gap: 16px; align-items: stretch;">
       <!-- 1) Что сделать -->
       <div class="card" style="border-left:4px solid ${overdueCnt ? 'var(--danger)' : (todayCnt ? 'var(--wp-yellow)' : 'var(--success)')}; display:flex; flex-direction:column; min-height:340px;">
         <div class="card-header" style="padding-bottom: 8px; flex-wrap:wrap;">
@@ -1825,98 +1825,8 @@ function renderDashboard() {
         </div>
       </div>
 
-      <!-- 3) ПДЗ — позвонить по оплате -->
-      <div class="card" style="border-left:4px solid ${overdueCallList.length ? 'var(--danger)' : 'var(--success)'}; display:flex; flex-direction:column; min-height:340px;">
-        <div class="card-header" style="padding-bottom: 6px;">
-          <div class="card-title">📞 ПДЗ — позвонить <span class="chip chip-danger" style="margin-left:6px;">${overdueCallList.length}</span></div>
-          ${overdueCallList.length ? `<button class="btn btn-ghost btn-sm" id="dash-go-pdz" style="padding:2px 8px; font-size:11px;">Все в Аналитике →</button>` : ''}
-        </div>
-        ${overdueCallList.length ? `
-          <div style="flex:1; overflow:auto; max-height:330px; min-width:0;">
-            <table class="data" style="font-size:12px; width:100%;">
-              <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);">
-                <tr>
-                  <th style="padding:6px 10px;">Клиент</th>
-                  <th class="num" style="padding:6px 10px;">Просрочено</th>
-                  <th class="num" style="padding:6px 10px;">Долг</th>
-                  <th style="padding:6px 10px;">Возраст</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${overdueCallList.map(o => {
-                  const worst = o.worst;
-                  return `<tr data-cid="${o.client.id}" style="cursor:pointer;">
-                    <td class="fw-600" style="padding:6px 10px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(o.client.name)}</td>
-                    <td class="num" style="padding:6px 10px; color:var(--danger); font-weight:700;">${fmt.num(o.overdueAmt)}</td>
-                    <td class="num" style="padding:6px 10px;">${fmt.num(o.debt)}</td>
-                    <td style="padding:6px 10px;">${worst ? `<span class="chip" style="background:${worst.color}; color:white; font-weight:600; font-size:10px; padding:2px 6px;">${worst.label}</span>` : '<span class="text-muted">—</span>'}</td>
-                  </tr>`;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        ` : `
-          <div class="empty-state" style="padding:24px; flex:1; display:flex; flex-direction:column; justify-content:center;">
-            <div class="empty-state-icon" style="font-size:32px;">🎉</div>
-            <div class="fw-700" style="color:var(--success); font-size:15px;">Все платят вовремя</div>
-            <div class="text-sm text-muted">Нет клиентов с просроченным долгом</div>
-          </div>
-        `}
-      </div>
-    </div>
-    ` : ''}
-
-    ${(w.funnel !== false) ? `
-    <div class="grid grid-2 mb-4" style="grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: stretch;">
-      <div class="card" style="display:flex; flex-direction:column;">
-        <div class="card-header">
-          <div class="card-title">Воронка по клиентам</div>
-          <a class="btn btn-ghost btn-sm" id="dash-go-funnel">Открыть воронку →</a>
-        </div>
-        <div class="funnel-viz">
-          ${STAGES.map(s => {
-            const cnt = stageCounts[s.id] || 0;
-            const pct = totalClients ? (cnt / totalClients * 100) : 0;
-            return `
-              <div class="funnel-stage funnel-stage-clickable" data-stage="${s.id}" title="Открыть «${escapeHtml(s.name)}» в Воронке">
-                <span class="chip" style="background:${s.soft}; color:${s.color}">
-                  <span class="chip-dot" style="background:${s.color}"></span>${escapeHtml(s.name)}
-                </span>
-                <div class="funnel-stage-bar">
-                  <div class="funnel-stage-bar-fill" style="background:#D1D5DB; width:${Math.max(pct, 1)}%"></div>
-                </div>
-                <div class="funnel-stage-count">${cnt}</div>
-                <div class="funnel-stage-pct">${pct.toFixed(0)}%</div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-        <div class="conv-strip" id="dash-conv-strip" title="Сколько % клиентов в работе дошли до этого этапа или прошли его. Чем правее этап — тем уже воронка. Клик — открыть подробную аналитику.">
-          <span class="conv-strip-label">Охват воронки</span>
-          ${(() => {
-            const flowStages = STAGES.filter(s => s.id !== 'reject');
-            const totalInFlow = flowStages.reduce((sum, s) => sum + (stageCounts[s.id]||0), 0);
-            let running = totalInFlow;
-            return flowStages.map((s, idx) => {
-              const cum = totalInFlow ? Math.round(running / totalInFlow * 100) : 0;
-              running -= (stageCounts[s.id] || 0);
-              const cls = cum >= 60 ? 'conv-good' : cum >= 30 ? 'conv-mid' : 'conv-low';
-              const shortName = s.name.length > 14 ? s.name.slice(0,12) + '…' : s.name;
-              const cell = `<span class="conv-cell" title="${escapeHtml(s.name)}: ${cum}% клиентов в работе дошли до этого этапа или прошли его"><span class="chip-dot" style="background:${s.color}"></span><span class="conv-pct ${cls}">${cum}%</span> <span class="text-muted" style="font-size:11px;">${escapeHtml(shortName)}</span></span>`;
-              if (idx === flowStages.length - 1) return cell;
-              return cell + `<span class="conv-divider">→</span>`;
-            }).join('');
-          })()}
-          <span class="conv-strip-link">подробнее в Аналитике →</span>
-        </div>
-        <div style="padding:10px 16px; display:flex; align-items:center; gap:24px; border-top:1px solid var(--border); background:#FAFBFC; flex-wrap:wrap;">
-          <div><span class="text-muted text-sm">Всего в работе:</span> <span class="fw-700">${fmt.int(inFunnel)}</span> <span class="text-sm text-muted">клиентов</span></div>
-          <div title="Сколько % обработанных лидов дошли до постоянного клиента (или хотя бы первого заказа)"><span class="text-muted text-sm">Конверсия:</span> <span class="fw-700" style="color:${winRate>=60?'var(--success)':winRate>=30?'var(--text)':'var(--danger)'}">${winRate}%</span> <span class="text-sm text-muted">(${won} из ${won+lost} обработанных)</span></div>
-        </div>
-      </div>
-
-      <!-- Высокая загрузка лимита — долг ≥ 80% от кредитного лимита -->
-      <div class="card" style="border-left:4px solid ${limitAlerts.length ? '#DC2626' : 'var(--success)'}; display:flex; flex-direction:column;">
+      <!-- 3) Высокая загрузка лимита (была внизу — перенесли наверх) -->
+      <div class="card" style="border-left:4px solid ${limitAlerts.length ? '#DC2626' : 'var(--success)'}; display:flex; flex-direction:column; min-height:340px;">
         <div class="card-header" style="padding-bottom: 6px;">
           <div class="card-title">💳 Высокая загрузка лимита <span class="chip chip-default" style="margin-left:6px;">${limitAlerts.length}</span></div>
           <span class="text-sm text-muted">долг ≥ 80% от лимита</span>
@@ -1941,6 +1851,73 @@ function renderDashboard() {
             </div>
           `}
         </div>
+      </div>
+    </div>
+    ` : ''}
+
+    ${(w.funnel !== false) ? `
+    <div class="mb-4" style="display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.5fr); gap: 16px; align-items: stretch;">
+      <div class="card" style="display:flex; flex-direction:column;">
+        <div class="card-header" style="padding-bottom: 6px;">
+          <div class="card-title">🗂 Воронка <span class="chip chip-default" style="margin-left:6px;">${fmt.int(inFunnel)}</span></div>
+          <a class="btn btn-ghost btn-sm" id="dash-go-funnel" style="padding:2px 8px; font-size:11px;">Открыть →</a>
+        </div>
+        <div style="padding: 8px 12px 12px; display:flex; flex-direction:column; gap:6px;">
+          ${STAGES.map(s => {
+            const cnt = stageCounts[s.id] || 0;
+            const pct = totalClients ? (cnt / totalClients * 100) : 0;
+            return `
+              <div class="funnel-stage-clickable" data-stage="${s.id}" title="Открыть «${escapeHtml(s.name)}» в Воронке" style="display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:6px; border:1px solid var(--border); cursor:pointer;">
+                <span class="chip-dot" style="background:${s.color}; width:8px; height:8px; border-radius:50%; flex-shrink:0;"></span>
+                <span class="text-sm fw-600" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.name)}</span>
+                <span class="fw-700 text-sm" style="font-variant-numeric: tabular-nums;">${cnt}</span>
+                <span class="text-sm text-muted" style="font-size:11px; min-width:32px; text-align:right;">${pct.toFixed(0)}%</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- 📞 ПДЗ — позвонить по оплате (растянут на 2 колонки: ширина = Без отгрузок + Высокая загрузка) -->
+      <div class="card" style="grid-column: span 2; border-left:4px solid ${overdueCallList.length ? 'var(--danger)' : 'var(--success)'}; display:flex; flex-direction:column;">
+        <div class="card-header" style="padding-bottom: 6px;">
+          <div class="card-title">📞 ПДЗ — позвонить по оплате <span class="chip chip-danger" style="margin-left:6px;">${overdueCallList.length}</span></div>
+          ${overdueCallList.length ? `<button class="btn btn-ghost btn-sm" id="dash-go-pdz" style="padding:2px 8px; font-size:11px;">Все в Аналитике →</button>` : ''}
+        </div>
+        ${overdueCallList.length ? `
+          <div style="flex:1; overflow:auto; max-height:330px; min-width:0;">
+            <table class="data" style="font-size:13px; width:100%;">
+              <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);">
+                <tr>
+                  <th>Клиент</th>
+                  <th class="num">Просрочено</th>
+                  <th class="num">Общий долг</th>
+                  <th class="num">% от долга</th>
+                  <th>Возраст</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${overdueCallList.map(o => {
+                  const pctOfDebt = o.debt > 0 ? Math.round(o.overdueAmt / o.debt * 100) : 0;
+                  const worst = o.worst;
+                  return `<tr data-cid="${o.client.id}" data-open-tab="debt" style="cursor:pointer;">
+                    <td class="fw-600">${escapeHtml(o.client.name)}</td>
+                    <td class="num" style="color:var(--danger); font-weight:700;">${fmt.num(o.overdueAmt)}</td>
+                    <td class="num">${fmt.num(o.debt)}</td>
+                    <td class="num"><span style="color:${pctOfDebt >= 80 ? 'var(--danger)' : pctOfDebt >= 50 ? '#D97706' : 'var(--text)'}; font-weight:600;">${pctOfDebt}%</span></td>
+                    <td>${worst ? `<span class="chip" style="background:${worst.color}; color:white; font-weight:600; font-size:11px;">${worst.label}</span>` : '<span class="text-muted">—</span>'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : `
+          <div class="empty-state" style="padding:24px; flex:1; display:flex; flex-direction:column; justify-content:center;">
+            <div class="empty-state-icon" style="font-size:32px;">🎉</div>
+            <div class="fw-700" style="color:var(--success); font-size:15px;">Все платят вовремя</div>
+            <div class="text-sm text-muted">Нет клиентов с просроченным долгом</div>
+          </div>
+        `}
       </div>
     </div>
     ` : ''}
