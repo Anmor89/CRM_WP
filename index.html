@@ -555,8 +555,15 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 .client-overview-left { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .client-overview-right { min-width: 0; }
 .client-block {
-  background: #F3F4F6; border: 1px solid #E5E7EB; border-radius: 10px;
+  background: #F8FAFC; border: 1px solid #E5E7EB; border-radius: 10px;
   padding: 14px 16px;
+}
+/* Поля ввода внутри блоков карточки — белый фон + чуть более заметный бордер чтобы не сливались */
+.client-block .field-row > input,
+.client-block .field-row > select,
+.client-block .field-row > textarea {
+  background: white; border-color: #CBD5E1;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
 }
 .client-block-title {
   font-weight: 700; font-size: 13px; margin: 0 0 12px;
