@@ -5316,7 +5316,8 @@ function openUserModal(username) {
       <button class="btn" id="u-cancel">Отмена</button>
       <button class="btn btn-primary" id="u-save">Сохранить</button>
     </div>
-  `, 'modal-wide');
+  `);
+  document.getElementById('modal-content').style.maxWidth = '640px';
   document.getElementById('u-cancel').onclick = closeModal;
   document.getElementById('m-close').onclick = closeModal;
   document.getElementById('u-gen-pwd').onclick = () => {
