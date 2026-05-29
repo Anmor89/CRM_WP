@@ -1774,7 +1774,7 @@ function renderDashboard() {
     ` : ''}
 
     ${(w.myday !== false) ? `
-    <div class="mb-4" style="display:grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.3fr) minmax(0, 1.3fr); gap: 16px; align-items: stretch;">
+    <div class="mb-4" style="display:grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.25fr) minmax(0, 1.25fr); gap: 16px; align-items: stretch;">
       <!-- 1) Что сделать -->
       <div class="card" style="border-left:4px solid ${overdueCnt ? 'var(--danger)' : (todayCnt ? 'var(--wp-yellow)' : 'var(--success)')}; display:flex; flex-direction:column; min-height:340px;">
         <div class="card-header" style="padding-bottom: 8px; flex-wrap:wrap;">
@@ -1856,7 +1856,7 @@ function renderDashboard() {
     ` : ''}
 
     ${(w.funnel !== false) ? `
-    <div class="mb-4" style="display:grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.3fr) minmax(0, 1.3fr); gap: 16px; align-items: stretch;">
+    <div class="mb-4" style="display:grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.25fr) minmax(0, 1.25fr); gap: 16px; align-items: stretch;">
       <div class="card" style="display:flex; flex-direction:column;">
         <div class="card-header" style="padding-bottom: 6px;">
           <div class="card-title">🗂 Воронка <span class="chip chip-default" style="margin-left:6px;">${fmt.int(inFunnel)}</span></div>
