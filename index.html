@@ -1299,6 +1299,20 @@ function initData() {
     state.tpClients = persisted.tpClients || bootstrapTpClients();
     state.tpVisits = persisted.tpVisits || bootstrapTpVisits();
     if (persisted.settings) Object.assign(state.settings, persisted.settings);
+    // Авто-миграция: добавляем недостающих DEFAULT_USERS (новые менеджеры из обновлений)
+    // Существующих не трогаем (пароли могли быть изменены админом).
+    const existingLogins = new Set(state.users.map(u => u.username));
+    let added = 0;
+    DEFAULT_USERS.forEach(d => {
+      if (!existingLogins.has(d.username)) {
+        state.users.push({...d});
+        added++;
+      }
+    });
+    if (added > 0) {
+      console.log(`[CRM] Авто-миграция: добавлено ${added} новых пользователей из DEFAULT_USERS`);
+      persist();
+    }
     applySettings();
     return;
   }
@@ -5135,7 +5149,10 @@ function renderAdmin() {
     <div class="card mb-4">
       <div class="card-header">
         <div class="card-title">Пользователи</div>
-        <button class="btn btn-primary btn-sm" id="add-user-btn">+ Пользователь</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-sm" id="sync-managers-btn" title="Найти менеджеров из state.clients которых нет в Пользователях и создать им учётки">🔄 Синхронизировать с 1С</button>
+          <button class="btn btn-primary btn-sm" id="add-user-btn">+ Пользователь</button>
+        </div>
       </div>
       <table class="data">
         <thead><tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Менеджер 1С</th><th>Статус</th><th style="width:160px;">Действия</th></tr></thead>
@@ -5165,6 +5182,45 @@ function afterAdmin() {
       localStorage.removeItem(LS_KEY);
       location.reload();
     }
+  };
+  // Синхронизация менеджеров из 1С: добавляем недостающих пользователей
+  // на основе реально присутствующих в state.clients менеджеров.
+  document.getElementById('sync-managers-btn').onclick = () => {
+    const existingMgrs = new Set(state.users.map(u => u.manager).filter(Boolean));
+    const mgrsInClients = [...new Set(state.clients.map(c => c.manager).filter(Boolean))];
+    const missing = mgrsInClients.filter(m => !existingMgrs.has(m));
+    if (!missing.length) {
+      alert('Все менеджеры из 1С уже есть в Пользователях. Ничего добавлять не нужно.');
+      return;
+    }
+    const list = missing.map(m => `• ${m}`).join('\n');
+    if (!confirm(`Найдено ${missing.length} менеджер(ов) из 1С которых нет в Пользователях:\n\n${list}\n\nСоздать им учётки?`)) return;
+    // Генерируем логины из ФИО
+    function makeLogin(fullName) {
+      const parts = fullName.trim().split(/\s+/);
+      const surname = parts[0] || '';
+      const transl = (s) => s.toLowerCase().replace(/[а-яё]/g, ch => {
+        const map = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'c','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'};
+        return map[ch] || ch;
+      }).replace(/[^a-z0-9]/g, '');
+      let base = transl(surname) || 'user';
+      let login = base, i = 2;
+      while (state.users.find(u => u.username === login)) login = base + i++;
+      return login;
+    }
+    missing.forEach(m => {
+      state.users.push({
+        username: makeLogin(m),
+        password: generatePassword(8),
+        name: m,
+        role: 'manager',
+        manager: m,
+        active: true
+      });
+    });
+    persist();
+    drawUsersTable();
+    onec_toast(`✓ Добавлено ${missing.length} пользователей. Пароли видны в таблице (👁).`, 'success', 6000);
   };
 }
 // Генерация пароля — 10 символов: буквы (без 0/O/1/l) и цифры
