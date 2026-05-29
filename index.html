@@ -2477,6 +2477,7 @@ function renderClients() {
         <thead>
           <tr>
             <th>Клиент</th>
+            <th style="width:32px; text-align:center;" title="Заполнены ли контакты: телефон, email или ЛПР">📞</th>
             <th>Город</th>
             <th>Вид деятельности</th>
             <th>Менеджер</th>
@@ -2649,7 +2650,7 @@ function drawClientsTable() {
   document.getElementById('f-count').textContent = list.length;
   const tbody = document.getElementById('clients-tbody');
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state">Клиенты не найдены</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state">Клиенты не найдены</div></td></tr>`;
     return;
   }
   const sorted = [...list].sort((a,b) => (b.revenue||0) - (a.revenue||0));
@@ -2670,12 +2671,13 @@ function drawClientsTable() {
     return `
     <tr data-cid="${c.id}" class="row-ev-${es}">
       <td>
-        <div class="fw-600" style="display:flex; align-items:center; gap:6px;">
-          ${escapeHtml(c.name)}
-          ${!hasContact ? '<span title="Не заполнены контактные данные (телефон, email, ЛПР)" style="display:inline-flex; align-items:center; padding:1px 6px; background:#FEF3C7; color:#92400E; border-radius:10px; font-size:11px; font-weight:600; white-space:nowrap;">⚠ нет контактов</span>' : ''}
-        </div>
+        <div class="fw-600">${escapeHtml(c.name)}</div>
         ${c.inn?`<div class="text-sm text-muted">ИНН ${escapeHtml(c.inn)}</div>`:''}
       </td>
+      <td style="text-align:center;">${hasContact
+        ? '<span title="Контакты заполнены" style="color:var(--success); font-size:14px;">✓</span>'
+        : '<span title="Не заполнены телефон / email / ЛПР" style="display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; background:#FEF3C7; color:#92400E; border-radius:50%; font-size:11px; font-weight:700;">⚠</span>'
+      }</td>
       <td>${c.city ? escapeHtml(c.city) : '<span class="text-muted">—</span>'}</td>
       <td>${c.activity ? `<span class="chip chip-activity">${escapeHtml(c.activity)}</span>` : '<span class="text-muted">—</span>'}</td>
       <td>${escapeHtml(c.manager||'—')}</td>
@@ -2688,7 +2690,7 @@ function drawClientsTable() {
     </tr>
   `;}).join('');
   if (sorted.length > 400) {
-    tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="10" class="muted text-sm" style="text-align:center;padding:14px;">Показано 400 из ${sorted.length}. Используйте фильтры для уточнения.</td></tr>`);
+    tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="11" class="muted text-sm" style="text-align:center;padding:14px;">Показано 400 из ${sorted.length}. Используйте фильтры для уточнения.</td></tr>`);
   }
   tbody.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
 }
