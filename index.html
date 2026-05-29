@@ -1430,7 +1430,9 @@ function renderApp() {
 
 // =================== HELPERS ===================
 function visibleClients() {
-  let list = state.clients;
+  // Архивные (помеченные на удаление) — никогда не попадают в рабочие списки.
+  // Их видно только в Настройках → Архив клиентов.
+  let list = state.clients.filter(c => !c.archived);
   if (state.user && state.user.role !== 'admin' && state.user.manager) {
     list = list.filter(c => c.manager === state.user.manager);
   } else if (state.user && state.user.role === 'admin' && state.adminViewMgr && state.adminViewMgr !== 'all') {
@@ -3918,6 +3920,35 @@ function renderSettings() {
       </div>
     </div>
 
+    <div class="card mb-4">
+      <div class="card-header">
+        <div class="card-title">🗑 Архив клиентов</div>
+        <span class="text-sm text-muted">${(state.clients||[]).filter(c => c.archived).length ? `${(state.clients||[]).filter(c => c.archived).length} в архиве` : 'архив пуст'}</span>
+      </div>
+      ${(() => {
+        const archived = (state.clients||[]).filter(c => c.archived);
+        if (!archived.length) return '<div class="empty-state" style="padding:20px;">Архив пуст — никто не удалял клиентов</div>';
+        return `
+          <p class="text-sm text-muted" style="padding: 10px 18px 0;">Клиенты, которые менеджеры пометили на удаление. В рабочих списках их нет. Можно восстановить или удалить окончательно.</p>
+          <table class="data">
+            <thead><tr><th>Клиент</th><th>Менеджер</th><th>Архивировал</th><th class="num">Когда</th><th style="width:180px;">Действия</th></tr></thead>
+            <tbody>
+              ${archived.map(c => `<tr>
+                <td class="fw-600">${escapeHtml(c.name)}</td>
+                <td>${escapeHtml(c.manager||'—')}</td>
+                <td>${escapeHtml(c.archivedBy||'—')}</td>
+                <td class="num">${c.archivedAt ? fmt.date(c.archivedAt) : '—'}</td>
+                <td>
+                  <button class="btn btn-sm" data-arch-restore="${c.id}" title="Вернуть клиента в работу">↩ Восстановить</button>
+                  <button class="btn btn-sm btn-danger" data-arch-purge="${c.id}" title="Удалить безвозвратно — со всеми событиями, комментариями и файлами">✕ Удалить навсегда</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        `;
+      })()}
+    </div>
+
     <div class="card">
       <div class="card-header"><div class="card-title">Системные действия</div></div>
       <div class="card-body">
@@ -4063,6 +4094,34 @@ function afterSettings() {
       persist();
       onec_toast('Настройка сохранена', 'success', 2000);
     }
+  });
+
+  // Архив клиентов: восстановить или удалить навсегда
+  document.querySelectorAll('[data-arch-restore]').forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.archRestore;
+      const c = state.clients.find(x => x.id === id);
+      if (!c) return;
+      if (!confirm(`Вернуть клиента «${c.name}» в работу?`)) return;
+      delete c.archived;
+      delete c.archivedAt;
+      delete c.archivedBy;
+      persist();
+      renderView();
+    };
+  });
+  document.querySelectorAll('[data-arch-purge]').forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.archPurge;
+      const c = state.clients.find(x => x.id === id);
+      if (!c) return;
+      if (!confirm(`Удалить «${c.name}» БЕЗВОЗВРАТНО?\n\nВместе с клиентом будут удалены ВСЕ его события, комментарии и файлы. Это действие нельзя отменить.`)) return;
+      state.clients = state.clients.filter(x => x.id !== id);
+      state.comments = state.comments.filter(x => x.clientId !== id);
+      state.events = state.events.filter(x => x.clientId !== id);
+      persist();
+      renderView();
+    };
   });
 }
 
@@ -4654,10 +4713,12 @@ function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
 
   if (mode === 'replace') {
     // Удаляем только клиентов из 1С (включая старых-филиалов после объединения).
-    // Вручную созданных в CRM клиентов (без from1c) — СОХРАНЯЕМ.
-    state.clients = state.clients.filter(c => !c.from1c);
+    // Сохраняем: вручную созданных в CRM (без from1c) И всех архивных (чтобы не воскресли при импорте).
+    state.clients = state.clients.filter(c => !c.from1c || c.archived);
   }
-  const localByName = new Map(state.clients.map(c => [(c.name||'').toLowerCase(), c]));
+  // Архивных не обновляем и не дублируем при импорте — они "заморожены"
+  const archivedNames = new Set(state.clients.filter(c => c.archived).map(c => (c.name||'').toLowerCase()));
+  const localByName = new Map(state.clients.filter(c => !c.archived).map(c => [(c.name||'').toLowerCase(), c]));
 
   // Выбирает «основной» договор для отображения в плоских полях карточки/раздела «Договоры»
   function pickPrimaryContract(contracts) {
@@ -4672,6 +4733,9 @@ function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
   // Обновить существующих или добавить новых
   newClients.forEach(nc => {
     const key = nc.name.toLowerCase();
+    // Если клиент в архиве — не трогаем его и не добавляем заново.
+    // Чтобы получить свежие данные 1С — нужно восстановить из Архива в Настройках.
+    if (archivedNames.has(key)) return;
     const local = localByName.get(key);
     const from1c = nc.from1c;
     const primary = pickPrimaryContract(from1c.contracts);
@@ -5267,21 +5331,43 @@ function openClientModal(clientId, initialTab = null) {
   }
   renderTab();
 
+  // Защита от потери несохранённых данных
+  // Каждый input/change в форме помечает state._modalDirty = true.
+  // При попытке закрыть — спрашиваем, если были изменения.
+  state._modalDirty = false;
+  document.getElementById('cm-body').addEventListener('input', (e) => {
+    if (e.target.matches('input, select, textarea')) state._modalDirty = true;
+  });
+  document.getElementById('cm-body').addEventListener('change', (e) => {
+    if (e.target.matches('input, select, textarea')) state._modalDirty = true;
+  });
+  function confirmClose() {
+    if (!state._modalDirty) return true;
+    return confirm('В карточке есть несохранённые изменения.\nЗакрыть без сохранения?');
+  }
+  // Переключение вкладок — тоже теряет несохранённые правки в форме
   document.querySelectorAll('.client-tab').forEach(b => b.onclick = () => {
+    if (b.classList.contains('active')) return;
+    if (state._modalDirty && !confirm('В текущей вкладке есть несохранённые изменения.\nПереключить вкладку без сохранения?')) return;
     document.querySelectorAll('.client-tab').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     activeTab = b.dataset.tab;
+    state._modalDirty = false;
     renderTab();
   });
-  document.getElementById('cm-cancel').onclick = closeModal;
-  document.getElementById('m-close').onclick = closeModal;
+  document.getElementById('cm-cancel').onclick = () => { if (confirmClose()) closeModal(); };
+  document.getElementById('m-close').onclick = () => { if (confirmClose()) closeModal(); };
+  // «Удалить» — теперь архивирует (не удаляет физически)
   if (!isNew && state.user.role==='admin' && document.getElementById('cm-del')) {
     document.getElementById('cm-del').onclick = () => {
-      if (!confirm('Удалить клиента?')) return;
-      state.clients = state.clients.filter(x => x.id !== c.id);
-      state.comments = state.comments.filter(x => x.clientId !== c.id);
-      state.events = state.events.filter(x => x.clientId !== c.id);
-      persist(); closeModal(); renderView();
+      if (!confirm('Перенести клиента в архив?\n\nКлиент исчезнет из всех рабочих списков. Восстановить его можно в Настройки → Архив клиентов.')) return;
+      c.archived = true;
+      c.archivedAt = new Date().toISOString();
+      c.archivedBy = state.user.name;
+      state._modalDirty = false;
+      persist();
+      closeModal();
+      renderView();
     };
   }
   document.getElementById('cm-save').onclick = () => {
@@ -5317,6 +5403,7 @@ function openClientModal(clientId, initialTab = null) {
 
     Object.assign(c, updates);
     if (isNew) state.clients.push(c);
+    state._modalDirty = false; // успешно сохранили
     persist(); closeModal(); renderView();
   };
 }
@@ -6857,14 +6944,26 @@ function openModal(html, extraClass='') {
   modal.className = 'modal' + (extraClass ? ' ' + extraClass : '');
   modal.innerHTML = html;
   layer.classList.remove('hidden');
-  layer.onclick = (e) => { if (e.target === layer) closeModal(); };
+  // Клик вне модала закрывает — но если есть несохранённые правки, спрашиваем
+  layer.onclick = (e) => {
+    if (e.target !== layer) return;
+    if (state._modalDirty && !confirm('В карточке есть несохранённые изменения.\nЗакрыть без сохранения?')) return;
+    closeModal();
+  };
   document.body.style.overflow = 'hidden';
 }
 function closeModal() {
   document.getElementById('modal-layer').classList.add('hidden');
   document.body.style.overflow = '';
+  state._modalDirty = false;
 }
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const layer = document.getElementById('modal-layer');
+  if (!layer || layer.classList.contains('hidden')) return;
+  if (state._modalDirty && !confirm('В карточке есть несохранённые изменения.\nЗакрыть без сохранения?')) return;
+  closeModal();
+});
 
 
 // =================== FIELD SALES (ТП) ===================
