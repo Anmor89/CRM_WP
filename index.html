@@ -5246,7 +5246,6 @@ function drawUsersTable() {
       <td>${u.active?'<span class="chip chip-success">Активен</span>':'<span class="chip chip-default">Отключён</span>'}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-sm" data-edit="${u.username}">Изменить</button>
-        <button class="btn btn-sm" data-reset-pwd="${u.username}" title="Сгенерировать новый пароль">🔑 Сбросить</button>
       </td>
     </tr>
   `).join('');
@@ -5266,17 +5265,6 @@ function drawUsersTable() {
       b.textContent = '🙈';
     }
   });
-  // Сброс пароля — генерация нового
-  t.querySelectorAll('[data-reset-pwd]').forEach(b => b.onclick = () => {
-    const u = state.users.find(x => x.username === b.dataset.resetPwd);
-    if (!u) return;
-    const newPwd = generatePassword(10);
-    if (!confirm(`Сбросить пароль для «${u.name}»?\n\nНовый пароль: ${newPwd}\n\nЗапишите его — после нажатия OK пользователь сможет войти только с новым паролем.`)) return;
-    u.password = newPwd;
-    persist();
-    drawUsersTable();
-    onec_toast(`✓ Пароль «${u.name}» сброшен. Новый: <code>${newPwd}</code>`, 'success', 8000);
-  });
 }
 function openUserModal(username) {
   const isEdit = !!username;
@@ -5287,29 +5275,27 @@ function openUserModal(username) {
       <div class="modal-title">${isEdit?'Изменить пользователя':'Новый пользователь'}</div>
       <button class="modal-close" id="m-close">✕</button>
     </div>
-    <div class="modal-body">
-      <div class="form-row">
+    <div class="modal-body" style="padding: 22px 28px;">
+      <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
         <label class="field"><span>Имя</span><input id="u-name" value="${escapeHtml(u.name)}" placeholder="Иванов Иван"></label>
         <label class="field"><span>Логин</span><input id="u-username" value="${escapeHtml(u.username)}" ${isEdit?'disabled':''} placeholder="ivanov"></label>
       </div>
-      <div class="form-row">
-        <label class="field"><span>Пароль ${isEdit?'(оставьте пустым — без изменений)':''}</span>
-          <div style="display:flex; gap:6px;">
+      <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;">
+        <label class="field" style="grid-column: 1 / -1;"><span>Пароль ${isEdit?'(оставьте пустым — без изменений)':''}</span>
+          <div style="display:flex; gap:6px; align-items:center;">
             <input id="u-password" type="text" value="" placeholder="${isEdit?'без изменений':'минимум 4 символа'}" style="flex:1; min-width:0;">
-            <button type="button" class="btn btn-sm" id="u-gen-pwd" title="Сгенерировать случайный пароль">🎲 Сгенерировать</button>
+            <button type="button" class="btn btn-sm" id="u-gen-pwd" title="Создать случайный пароль (10 символов)" style="white-space:nowrap;">🎲 Сгенерировать</button>
+            ${isEdit ? `<button type="button" class="btn btn-sm btn-danger" id="u-reset-pwd" title="Сбросить — сразу применить новый пароль и сохранить" style="white-space:nowrap;">🔑 Сбросить</button>` : ''}
           </div>
+          ${isEdit ? '<div class="text-sm text-muted" style="margin-top:6px; font-size:11px;">Текущий пароль: <code>' + escapeHtml(u.password||'(не задан)') + '</code></div>' : ''}
         </label>
+      </div>
+      <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;">
         <label class="field"><span>Роль</span>
           <select id="u-role">
             <option value="manager" ${u.role==='manager'?'selected':''}>Менеджер</option>
             <option value="admin" ${u.role==='admin'?'selected':''}>Администратор</option>
           </select>
-        </label>
-      </div>
-      <div class="form-row">
-        <label class="field"><span>Имя менеджера (как в 1С, для привязки клиентов)</span>
-          <input id="u-manager" list="manager-suggestions" value="${escapeHtml(u.manager||'')}" placeholder="Можно выбрать или ввести нового">
-          <datalist id="manager-suggestions">${managerOpts}</datalist>
         </label>
         <label class="field"><span>Статус</span>
           <select id="u-active">
@@ -5318,18 +5304,35 @@ function openUserModal(username) {
           </select>
         </label>
       </div>
+      <div class="form-row" style="margin-top:14px;">
+        <label class="field"><span>Имя менеджера (как в 1С, для привязки клиентов)</span>
+          <input id="u-manager" list="manager-suggestions" value="${escapeHtml(u.manager||'')}" placeholder="Можно выбрать или ввести нового">
+          <datalist id="manager-suggestions">${managerOpts}</datalist>
+        </label>
+      </div>
     </div>
     <div class="modal-footer">
       ${isEdit && u.username !== state.user.username ? `<button class="btn btn-danger" id="u-del">Удалить</button>` : ''}
       <button class="btn" id="u-cancel">Отмена</button>
       <button class="btn btn-primary" id="u-save">Сохранить</button>
     </div>
-  `);
+  `, 'modal-wide');
   document.getElementById('u-cancel').onclick = closeModal;
   document.getElementById('m-close').onclick = closeModal;
   document.getElementById('u-gen-pwd').onclick = () => {
     document.getElementById('u-password').value = generatePassword(10);
   };
+  if (isEdit) {
+    document.getElementById('u-reset-pwd').onclick = () => {
+      const newPwd = generatePassword(10);
+      if (!confirm(`Сбросить пароль для «${u.name}»?\n\nНовый пароль: ${newPwd}\n\nПосле OK пользователь сможет войти только с этим паролем.\nЗапишите его перед подтверждением.`)) return;
+      u.password = newPwd;
+      persist();
+      closeModal();
+      drawUsersTable();
+      onec_toast(`✓ Пароль «${u.name}» сброшен. Новый: <code>${newPwd}</code>`, 'success', 8000);
+    };
+  }
   if (isEdit && document.getElementById('u-del')) {
     document.getElementById('u-del').onclick = () => {
       if (!confirm('Удалить пользователя?')) return;
