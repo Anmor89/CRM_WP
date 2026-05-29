@@ -925,16 +925,26 @@ const TP_VISITS_RAW = [{"rep":"Теребенин","month":"Январь 2026","
 
 // =================== USERS & AUTH ===================
 // In a real app these would live on the server. Prototype = in-memory + localStorage persistence.
+// Менеджеры синхронизированы с реальными именами из 1С («Основной менеджер»
+// в Справочнике партнёров B2B). Сводка по выгрузке:
+//   Груздов Алексей — 104 клиента, Новак Вадим Анатольевич — 79,
+//   Кирилл Липинский — 58, Зайцева Юлия — 36, Смирнов Сергей — 28,
+//   Архипов Иван — 9, Дмитрий Муромцев — 4, Морочко Антон — 4 (админ),
+//   Бухарова Мария Александровна — 2, Двойрин Борис — 1, Главбух — 6.
+// Пароли по умолчанию — wp + 4 цифры. Админ может сбросить через Доступы.
 const DEFAULT_USERS = [
-  { username: 'admin', password: 'admin', name: 'Администратор', role: 'admin', manager: null, active: true },
-  { username: 'lipinsky', password: '123', name: 'Кирилл Липинский', role: 'manager', manager: 'Кирилл Липинский', active: true },
-  { username: 'novak', password: '123', name: 'Вадим Новак', role: 'manager', manager: 'Новак Вадим Анатольевич', active: true },
-  { username: 'gruzdov', password: '123', name: 'Алексей Груздов', role: 'manager', manager: 'Груздов Алексей', active: true },
-  { username: 'smirnov', password: '123', name: 'Сергей Смирнов', role: 'manager', manager: 'Смирнов Сергей', active: true },
-  { username: 'arkhipov', password: '123', name: 'Иван Архипов', role: 'manager', manager: 'Архипов Иван', active: true },
-  { username: 'muromtsev', password: '123', name: 'Дмитрий Муромцев', role: 'manager', manager: 'Дмитрий Муромцев', active: true },
-  { username: 'morochko', password: '123', name: 'Антон Морочко', role: 'admin', manager: 'Морочко Антон Викторович', active: true },
-  { username: 'glavbuh', password: '123', name: 'Главбух', role: 'manager', manager: 'Главбух', active: true },
+  { username: 'admin',    password: 'admin', name: 'Администратор',            role: 'admin',   manager: null,                              active: true  },
+  { username: 'morochko', password: 'wp1234', name: 'Антон Морочко',           role: 'admin',   manager: 'Морочко Антон Викторович',         active: true  },
+  { username: 'gruzdov',  password: 'wp2345', name: 'Алексей Груздов',         role: 'manager', manager: 'Груздов Алексей',                  active: true  },
+  { username: 'novak',    password: 'wp3456', name: 'Вадим Новак',             role: 'manager', manager: 'Новак Вадим Анатольевич',          active: true  },
+  { username: 'lipinsky', password: 'wp4567', name: 'Кирилл Липинский',        role: 'manager', manager: 'Кирилл Липинский',                 active: true  },
+  { username: 'zaitseva', password: 'wp5678', name: 'Юлия Зайцева',            role: 'manager', manager: 'Зайцева Юлия',                     active: true  },
+  { username: 'smirnov',  password: 'wp6789', name: 'Сергей Смирнов',          role: 'manager', manager: 'Смирнов Сергей',                   active: true  },
+  { username: 'arkhipov', password: 'wp7234', name: 'Иван Архипов',            role: 'manager', manager: 'Архипов Иван',                     active: true  },
+  { username: 'muromtsev',password: 'wp8345', name: 'Дмитрий Муромцев',        role: 'manager', manager: 'Дмитрий Муромцев',                 active: true  },
+  { username: 'buharova', password: 'wp9456', name: 'Мария Бухарова',          role: 'manager', manager: 'Бухарова Мария Александровна',     active: true  },
+  { username: 'dvoirin',  password: 'wp2567', name: 'Борис Двойрин',           role: 'manager', manager: 'Двойрин Борис',                    active: true  },
+  { username: 'glavbuh',  password: 'wp3678', name: 'Главбух',                 role: 'manager', manager: 'Главбух',                          active: true  },
 ];
 
 // =================== STATE ===================
@@ -3850,15 +3860,6 @@ function renderSettings() {
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header"><div class="card-title">Дашборд</div></div>
-        <div class="card-body">
-          <p class="text-sm text-muted mb-3">Какие блоки показывать на главной странице.</p>
-          <label class="setting-row"><input type="checkbox" id="w-kpis" ${widgets.kpis!==false?'checked':''}> <span>📊 Плашки KPI сверху (6 шт)</span></label>
-          <label class="setting-row"><input type="checkbox" id="w-myday" ${widgets.myday!==false?'checked':''}> <span>📋 «Что сделать» + «Без отгрузок» + «Близко к лимиту»</span></label>
-          <label class="setting-row"><input type="checkbox" id="w-funnel" ${widgets.funnel!==false?'checked':''}> <span>🗂 «Воронка» + «ПДЗ — позвонить»</span></label>
-        </div>
-      </div>
 
       <div class="card">
         <div class="card-header"><div class="card-title">Авто-логика и подсветка</div></div>
@@ -4055,16 +4056,6 @@ function afterSettings() {
       renderView();
     };
   })();
-
-  // Dashboard widgets toggles (актуальный список виджетов)
-  [['kpis','kpis'],['myday','myday'],['funnel','funnel']].forEach(([key, prop]) => {
-    const el = document.getElementById('w-' + key);
-    if (!el) return;
-    el.addEventListener('change', () => {
-      state.settings.dashboardWidgets[prop] = el.checked;
-      persist();
-    });
-  });
 
   document.getElementById('auto-cat').addEventListener('change', (e) => {
     state.settings.autoCategoryEnabled = e.target.checked;
