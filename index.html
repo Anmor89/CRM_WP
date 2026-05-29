@@ -6144,21 +6144,20 @@ function renderSalesTab(c) {
   const txnTotal = sales ? (sales.txn_count || txns.length) : txns.length;
   const truncatedAt = sales && sales._truncated_at;
   const txnsHtml = txns.length ? `
-    <details class="card mb-4">
+    <details class="card mb-4" open>
       <summary style="display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none; border-bottom:1px solid var(--border); background:white;">
         <div class="card-title" style="margin:0;">🛒 Что покупал</div>
         <span class="text-sm text-muted" style="font-weight:400;">
           — <b style="color:var(--text);">${txns.length}</b>${txnTotal > txns.length ? ` из ${txnTotal}` : ''} ${txns.length===1?'позиция':'позиций'}
           ${truncatedAt ? `<span style="color:var(--warning); margin-left:6px;" title="При сохранении в браузер часть данных пришлось обрезать.">⚠ обрезано до ${truncatedAt}</span>` : ''}
         </span>
-        <span style="margin-left:auto; font-size:12px; color:var(--text-muted);">кликните, чтобы развернуть</span>
       </summary>
       <div style="padding:0; background:white;">
         <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
           <input type="search" id="sales-search" placeholder="🔍 Поиск по артикулу / номенклатуре / бренду…" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; flex:1; max-width:400px; font-size:13px;">
-          <span class="text-sm text-muted" id="sales-page-info">показано ${Math.min(10, txns.length)} из ${txns.length}</span>
+          <span class="text-sm text-muted" id="sales-page-info">показано ${Math.min(5, txns.length)} из ${txns.length}</span>
         </div>
-        <div style="max-height: 480px; overflow-y: auto;">
+        <div style="max-height: 320px; overflow-y: auto;">
           <table class="data" id="sales-table" style="font-size:13px;">
             <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);"><tr>
               <th>Дата</th>
@@ -6171,7 +6170,7 @@ function renderSalesTab(c) {
               <th class="num">Маржа</th>
             </tr></thead>
             <tbody id="sales-tbody">
-              ${txns.slice(0, 10).map(t => {
+              ${txns.slice(0, 5).map(t => {
                 const isRefund = t.amount < 0;
                 const prof = t.profit != null ? t.profit : ((t.amount||0) - (t.cost||0));
                 const marg = t.margin != null ? t.margin : (t.amount > 0 ? (prof/t.amount*100) : 0);
@@ -6192,9 +6191,9 @@ function renderSalesTab(c) {
           </table>
           <div id="sales-table-empty" class="empty-state" style="padding:30px; display:none;">Ничего не найдено</div>
         </div>
-        ${txns.length > 10 ? `
+        ${txns.length > 5 ? `
           <div style="padding:10px 16px; text-align:center; border-top:1px solid var(--border); background:#FAFBFC;">
-            <button class="btn btn-ghost btn-sm" id="sales-show-more">Показать ещё (${txns.length - 10}) ↓</button>
+            <button class="btn btn-ghost btn-sm" id="sales-show-more">Показать ещё (${txns.length - 5}) ↓</button>
           </div>
         ` : ''}
       </div>
