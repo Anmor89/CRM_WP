@@ -2340,21 +2340,27 @@ function renderClients() {
   `;
 }
 function getNeglectedClients() {
-  const months = (state.settings && state.settings.neglectedMonths) || 2;
-  const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - months);
-  const cutoffMonth = cutoff.toISOString().slice(0, 7); // YYYY-MM
+  const defaultMonths = (state.settings && state.settings.neglectedMonths) || 2;
   return visibleClients().filter(c => {
     if (clientStage(c) === 'reject') return false;
     if (!c.revenue && !(c.from1c && c.from1c.sales && c.from1c.sales.total)) return false;
     // С долгом — не «упущен», менеджер обязан с ним работать (вопрос оплаты)
     if ((c.debt || 0) > 0) return false;
+    // Индивидуальное напоминание клиента имеет приоритет над общей настройкой
+    const useIndividual = c.reminder && c.reminder.enabled && c.reminder.days > 0;
+    const cutoff = new Date();
+    if (useIndividual) {
+      cutoff.setDate(cutoff.getDate() - c.reminder.days);
+    } else {
+      cutoff.setMonth(cutoff.getMonth() - defaultMonths);
+    }
+    const cutoffMonth = cutoff.toISOString().slice(0, 7); // YYYY-MM
     // Нет открытых событий (созданных/запланированных после cutoff)
     const hasRecentEvent = state.events.some(e =>
       e.clientId === c.id && !e.completed && new Date(e.date) >= cutoff
     );
     if (hasRecentEvent) return false;
-    // Нет продаж за последние N месяцев
+    // Нет продаж за последние N месяцев / дней
     const byMonth = (c.from1c && c.from1c.sales && c.from1c.sales.by_month) || {};
     const hasRecentSales = Object.keys(byMonth).some(m => m >= cutoffMonth && (byMonth[m] || 0) > 0);
     return !hasRecentSales;
@@ -4545,6 +4551,7 @@ function onec_parseSales(rows) {
       article: (r[3] || '').toString().trim(),
       nomenclature: (r[4] || '').toString().trim(),
       brand: (r[5] || '').toString().trim(),
+      order_no: (r[8] || '').toString().trim(),
       qty,
       amount,
       cost,
@@ -5395,6 +5402,15 @@ function openClientModal(clientId, initialTab = null) {
     if (val('ci-stage-manual') !== null) updates.stageManual = val('ci-stage-manual') || null;
     if (val('ci-cat-manual') !== null) updates.categoryManual = val('ci-cat-manual') || null;
     if (val('ci-manager') !== null) updates.manager = val('ci-manager');
+    // Напоминание о неактивности
+    const remEnabled = val('ci-reminder-enabled');
+    const remDays = val('ci-reminder-days');
+    if (remEnabled !== null) {
+      updates.reminder = {
+        enabled: remEnabled === '1',
+        days: parseInt(remDays, 10) || 30
+      };
+    }
     // Contract tab
     if (val('cc-no') !== null) updates.contract_no = val('cc-no');
     if (val('cc-date') !== null) updates.contract_date = val('cc-date');
@@ -5487,8 +5503,24 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
             <label class="field-row"><span>Должность</span><input id="ci-position" value="${escapeHtml(c.position||'')}" placeholder="Директор / Снабжение"></label>
             <label class="field-row"><span>Телефон</span><input id="ci-phone" value="${escapeHtml(c.phone||'')}" placeholder="+7 ..."></label>
             <label class="field-row"><span>Email</span><input id="ci-email" value="${escapeHtml(c.email||'')}" placeholder="info@..."></label>
-            <label class="field-row"><span>WhatsApp${waLink ? ` <a href="${escapeHtml(waLink)}" target="_blank" rel="noopener" title="Открыть в WhatsApp" style="margin-left:6px; display:inline-flex; vertical-align:middle; align-items:center; justify-content:center; width:18px; height:18px; background:#25D366; color:white; border-radius:4px; text-decoration:none; font-size:11px;">💬</a>` : ''}</span><input id="ci-wa" value="${escapeHtml(c.wa||'')}" placeholder="+7... или ссылка wa.me/..."></label>
-            <label class="field-row"><span>Telegram${tgLink ? ` <a href="${escapeHtml(tgLink)}" target="_blank" rel="noopener" title="Открыть в Telegram" style="margin-left:6px; display:inline-flex; vertical-align:middle; align-items:center; justify-content:center; width:18px; height:18px; background:#2AABEE; color:white; border-radius:4px; text-decoration:none; font-size:11px;">✈</a>` : ''}</span><input id="ci-tg" value="${escapeHtml(c.tg||'')}" placeholder="@username или ссылка t.me/..."></label>
+            <div class="field-row">
+              <span>WhatsApp</span>
+              <div style="display:flex; gap:6px;">
+                <input id="ci-wa" value="${escapeHtml(c.wa||'')}" placeholder="+7... или ссылка wa.me/..." style="flex:1; min-width:0;">
+                ${waLink
+                  ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener" title="Открыть чат в WhatsApp" style="display:inline-flex; align-items:center; gap:6px; padding:0 14px; background:#25D366; color:white; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap;">💬 Открыть</a>`
+                  : `<span title="Заполните номер или ссылку wa.me/..." style="display:inline-flex; align-items:center; gap:6px; padding:0 14px; background:#E5E7EB; color:var(--text-soft); border-radius:6px; font-size:13px; font-weight:600; white-space:nowrap; cursor:not-allowed;">💬 —</span>`}
+              </div>
+            </div>
+            <div class="field-row">
+              <span>Telegram</span>
+              <div style="display:flex; gap:6px;">
+                <input id="ci-tg" value="${escapeHtml(c.tg||'')}" placeholder="@username или ссылка t.me/..." style="flex:1; min-width:0;">
+                ${tgLink
+                  ? `<a href="${escapeHtml(tgLink)}" target="_blank" rel="noopener" title="Открыть в Telegram" style="display:inline-flex; align-items:center; gap:6px; padding:0 14px; background:#2AABEE; color:white; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap;">✈ Открыть</a>`
+                  : `<span title="Заполните @username или ссылку t.me/..." style="display:inline-flex; align-items:center; gap:6px; padding:0 14px; background:#E5E7EB; color:var(--text-soft); border-radius:6px; font-size:13px; font-weight:600; white-space:nowrap; cursor:not-allowed;">✈ —</span>`}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -5749,6 +5781,41 @@ function renderClientSettings(c, sgInfo, catInfo, managers) {
         ` : ''}
       </div>
 
+      <!-- Напоминание о неактивности -->
+      <div class="client-block">
+        <div class="client-block-title">🔔 Напоминание о неактивности</div>
+        <p class="text-sm text-muted" style="margin: -4px 0 10px;">Если по клиенту не было событий или продаж дольше N дней — CRM покажет напоминание в разделе «Упущенные клиенты».</p>
+        <div class="info-grid-2col">
+          <label class="field-row"><span>Включить напоминание</span>
+            <select id="ci-reminder-enabled">
+              <option value="0" ${!(c.reminder && c.reminder.enabled)?'selected':''}>Нет (общая настройка из «Параметры работы»)</option>
+              <option value="1" ${(c.reminder && c.reminder.enabled)?'selected':''}>Да — индивидуально для этого клиента</option>
+            </select>
+          </label>
+          <label class="field-row"><span>Через сколько дней без активности</span>
+            <input type="number" id="ci-reminder-days" min="1" max="365" value="${(c.reminder && c.reminder.days) || 30}" placeholder="30">
+          </label>
+        </div>
+      </div>
+
+      <!-- Метки/теги -->
+      <div class="client-block">
+        <div class="client-block-title">🏷 Метки / теги</div>
+        <p class="text-sm text-muted" style="margin: -4px 0 10px;">Свободные метки для группировки и поиска. Например: «требует личной встречи», «строитель», «отказы по цене».</p>
+        <div id="ci-tags-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; min-height:28px;">
+          ${(c.tags || []).length ? (c.tags || []).map(t => `
+            <span class="chip chip-default" style="display:inline-flex; align-items:center; gap:6px;">
+              ${escapeHtml(t)}
+              <button data-tag-remove="${escapeHtml(t)}" title="Удалить метку" style="background:none; border:none; cursor:pointer; padding:0; font-size:14px; line-height:1; color:var(--text-muted);">×</button>
+            </span>
+          `).join('') : '<span class="text-sm text-muted">пока меток нет</span>'}
+        </div>
+        <div style="display:flex; gap:6px;">
+          <input id="ci-tag-input" placeholder="Введите метку и нажмите Enter…" style="flex:1; min-width:0; padding:8px 12px; border:1px solid #CBD5E1; border-radius:6px; font-size:14px;">
+          <button class="btn btn-sm btn-primary" id="ci-tag-add">+ Добавить</button>
+        </div>
+      </div>
+
       ${hasOverrides ? `
         <button class="btn btn-sm" id="ci-reset-overrides" style="margin-top:10px;">↺ Сбросить все override-ы</button>
       ` : ''}
@@ -5779,12 +5846,46 @@ function bindClientSettings(c) {
     delete c.cityManual;
     delete c.contract_noManual;
     persist();
-    // Re-render settings tab
     const sgInfo = computeAutoStage(c);
     const catInfo = computeAutoCategory(c);
     document.getElementById('cm-body').innerHTML = renderClientSettings(c, sgInfo, catInfo, uniqueManagers());
     bindClientSettings(c);
   };
+
+  // Метки/теги — добавить и удалить
+  function reRenderTagsList() {
+    const list = document.getElementById('ci-tags-list');
+    if (!list) return;
+    const tags = c.tags || [];
+    list.innerHTML = tags.length ? tags.map(t => `
+      <span class="chip chip-default" style="display:inline-flex; align-items:center; gap:6px;">
+        ${escapeHtml(t)}
+        <button data-tag-remove="${escapeHtml(t)}" title="Удалить метку" style="background:none; border:none; cursor:pointer; padding:0; font-size:14px; line-height:1; color:var(--text-muted);">×</button>
+      </span>
+    `).join('') : '<span class="text-sm text-muted">пока меток нет</span>';
+    list.querySelectorAll('[data-tag-remove]').forEach(b => b.onclick = () => {
+      c.tags = (c.tags || []).filter(t => t !== b.dataset.tagRemove);
+      persist();
+      reRenderTagsList();
+    });
+  }
+  reRenderTagsList();
+  const addTag = () => {
+    const input = document.getElementById('ci-tag-input');
+    if (!input) return;
+    const v = input.value.trim();
+    if (!v) return;
+    if (!c.tags) c.tags = [];
+    if (c.tags.includes(v)) { input.value = ''; return; }
+    c.tags.push(v);
+    persist();
+    input.value = '';
+    reRenderTagsList();
+  };
+  document.getElementById('ci-tag-add')?.addEventListener('click', addTag);
+  document.getElementById('ci-tag-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addTag(); }
+  });
 }
 
 function renderEmbeddedTimeline(c) {
@@ -6161,6 +6262,7 @@ function renderSalesTab(c) {
           <table class="data" id="sales-table" style="font-size:13px;">
             <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);"><tr>
               <th>Дата</th>
+              <th>№ заказа</th>
               <th>Артикул</th>
               <th>Номенклатура</th>
               <th>Бренд</th>
@@ -6178,6 +6280,7 @@ function renderSalesTab(c) {
                 return `
                 <tr ${isRefund ? 'style="background:rgba(220,38,38,0.04);"' : ''} title="${isRefund ? 'Возврат / сторно' : ''}">
                   <td class="text-sm">${fmt.date(t.date)}</td>
+                  <td class="text-sm">${escapeHtml(t.order_no||'—')}</td>
                   <td class="text-sm fw-600">${escapeHtml(t.article||'—')}</td>
                   <td class="text-sm">${escapeHtml(t.nomenclature||'—')}</td>
                   <td>${t.brand ? `<span class="chip chip-default" style="font-size:11px;">${escapeHtml(t.brand)}</span>` : '<span class="text-muted">—</span>'}</td>
@@ -6516,6 +6619,7 @@ function initSalesChart(c) {
         const margColor = marg < 0 ? 'color:var(--danger);' : marg < 10 ? 'color:#D97706;' : '';
         return `<tr ${isRefund ? 'style="background:rgba(220,38,38,0.04);"' : ''} title="${isRefund ? 'Возврат / сторно' : ''}">
           <td class="text-sm">${fmt.date(t.date)}</td>
+          <td class="text-sm">${escapeHtml(t.order_no||'—')}</td>
           <td class="text-sm fw-600">${escapeHtml(t.article||'—')}</td>
           <td class="text-sm">${escapeHtml(t.nomenclature||'—')}</td>
           <td>${t.brand ? `<span class="chip chip-default" style="font-size:11px;">${escapeHtml(t.brand)}</span>` : '<span class="text-muted">—</span>'}</td>
@@ -7732,6 +7836,7 @@ function drawRawSales(wrap) {
       all.push({
         _cid: c.id,
         date: t.date, client: c.name, manager: c.manager,
+        order_no: t.order_no || '',
         article: t.article, nomenclature: t.nomenclature, brand: t.brand,
         qty: t.qty, amount: t.amount, cost: t.cost || 0,
         profit: t.profit != null ? t.profit : (t.amount - (t.cost||0)),
@@ -7748,6 +7853,7 @@ function drawRawSales(wrap) {
       { label: 'Дата', value: r => r.date, num: true, render: r => fmt.date(r.date) },
       { label: 'Клиент', value: r => r.client, render: r => `<span class="fw-600">${escapeHtml(r.client||'')}</span>` },
       { label: 'Менеджер', value: r => r.manager, render: r => escapeHtml(r.manager || '—') },
+      { label: '№ заказа', value: r => r.order_no, render: r => escapeHtml(r.order_no || '—') },
       { label: 'Артикул', value: r => r.article },
       { label: 'Номенклатура', value: r => r.nomenclature, render: r => `<span style="max-width:300px; display:inline-block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(r.nomenclature || '')}</span>` },
       { label: 'Бренд', value: r => r.brand, render: r => r.brand ? `<span class="chip chip-default" style="font-size:11px;">${escapeHtml(r.brand)}</span>` : '<span class="text-muted">—</span>' },
