@@ -337,6 +337,10 @@ table.data th.sort-asc .sort-ind, table.data th.sort-desc .sort-ind { opacity: 1
 table.data th.sort-asc .sort-ind::after { content: '▲'; }
 table.data th.sort-desc .sort-ind::after { content: '▼'; }
 table.data tbody tr:last-child td { border-bottom: none; }
+/* Компактная таблица «Что покупал» в карточке клиента */
+table.data.sales-table-compact { font-size: 12px; }
+table.data.sales-table-compact th, table.data.sales-table-compact td { padding: 6px 12px; font-size: 12px; }
+table.data.sales-table-compact th { font-size: 10px; }
 table.data tbody tr { transition: background 0.1s; }
 table.data tbody tr:hover { background: #FAFBFC; cursor: pointer; }
 /* Row highlighting by event status (Clients table) */
@@ -711,8 +715,14 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 
 .client-header {
   display: flex; align-items: flex-start; gap: 18px; padding: 24px 32px;
-  background: var(--wp-yellow);
+  /* лёгкий 3D-эффект: вертикальный gradient + двойная тень внутри */
+  background: linear-gradient(180deg, #FFE486 0%, var(--wp-yellow) 55%, #E5B027 100%);
   color: var(--wp-black);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset 0 -2px 6px rgba(120,72,0,0.18),
+    0 2px 4px rgba(0,0,0,0.06);
+  position: relative;
 }
 .client-header-avatar {
   width: 56px; height: 56px; border-radius: 12px;
@@ -5625,16 +5635,17 @@ function openClientModal(clientId, initialTab = null) {
   const overduePct = debt ? Math.round(overdue/debt*100) : 0;
   const deferralDays = c.from1c && c.from1c.agreement ? c.from1c.agreement.days : 0;
   const limit = c.from1c && c.from1c.contracts && c.from1c.contracts.length ? (c.from1c.contracts.find(x => x.status === 'Действует') || c.from1c.contracts[0]).limit : 0;
+  const priceType = (c.from1c && c.from1c.price_type) || c.price_type || null;
   const hdrKpiStyle = `display:inline-flex; align-items:center; gap:5px; padding:3px 9px; background:rgba(15,17,21,0.92); border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; color:white;`;
-  const headerKpis = (revenue || debt || deferralDays || limit) ? `
+  const headerKpis = (revenue || debt || deferralDays || limit || priceType) ? `
         <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
           ${revenue ? `<span style="${hdrKpiStyle}">💰 Выручка <b style="color:#FFC72C;">${fmt.num(revenue)}</b></span>` : ''}
           ${debt ? `<span style="${hdrKpiStyle}">🔴 Долг <b style="color:#FCA5A5;">${fmt.num(debt)}</b>${overduePct ? ` <span style="opacity:.7;">(${overduePct}% просрочено)</span>` : ''}</span>` : ''}
           ${deferralDays ? `<span style="${hdrKpiStyle}">⏱ Отсрочка <b style="color:#93C5FD;">${deferralDays} дн</b></span>` : ''}
           ${limit ? `<span style="${hdrKpiStyle}">💳 Лимит <b style="color:#C4B5FD;">${fmt.num(limit)}</b></span>` : ''}
+          ${priceType ? `<span style="${hdrKpiStyle}" title="Тип цены, по которому работает клиент">💲 Тип цены <b style="color:#FCD34D;">${escapeHtml(priceType)}</b></span>` : ''}
         </div>` : '';
 
-  const priceType = (c.from1c && c.from1c.price_type) || c.price_type || null;
   openModal(`
     <div class="client-header">
       <div class="client-header-avatar">${fmt.initials(c.name) || '?'}</div>
@@ -5644,14 +5655,11 @@ function openClientModal(clientId, initialTab = null) {
           <div class="client-header-name">${escapeHtml(c.name || 'Новый клиент')}</div>
           ${c.activity ? `<span style="background:rgba(15,17,21,0.85); color:#FFC72C; padding:4px 12px; border-radius:999px; font-size:13px; font-weight:700; white-space:nowrap;">🏭 ${escapeHtml(c.activity)}</span>` : ''}
         </div>
-        <!-- Мета: менеджер / дата / ИНН / город / вид цены -->
+        <!-- Мета: менеджер / дата / город -->
         <div class="client-header-meta">
           <span>👤 ${escapeHtml(c.manager||'—')}</span>
           <span>📅 в базе с ${fmt.dateLong(c.reg_date)}</span>
-          <span>⏱ ${fmt.daysAgo(c.reg_date)}</span>
-          ${c.inn ? `<span>🔢 ИНН ${escapeHtml(c.inn)}</span>` : ''}
           ${c.from1c && c.from1c.city ? `<span>📍 ${escapeHtml(c.from1c.city)}${c.from1c.region ? ', ' + escapeHtml(c.from1c.region) : ''}</span>` : ''}
-          ${priceType ? `<span>💲 ${escapeHtml(priceType)}</span>` : ''}
         </div>
         <!-- Чипы: этап, договор, архив (без категории — вид деятельности уже наверху) -->
         <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
@@ -6604,7 +6612,7 @@ function renderSalesTab(c) {
           <span class="text-sm text-muted" id="sales-page-info">показано ${Math.min(6, txns.length)} из ${txns.length}</span>
         </div>
         <div style="max-height: 320px; overflow-y: auto;">
-          <table class="data" id="sales-table" style="font-size:13px;">
+          <table class="data sales-table-compact" id="sales-table">
             <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);"><tr>
               <th>Дата</th>
               <th>№ заказа</th>
