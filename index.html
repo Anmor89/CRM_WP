@@ -1456,7 +1456,6 @@ const NAV = [
   { id: 'funnel',     label: 'Воронка',   icon: 'M3 4h18l-7 9v6l-4 2v-8L3 4z' },
   { id: 'clients',    label: 'Клиенты',   icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75' },
   { id: 'fieldsales', label: 'Полевые продажи', icon: 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z' },
-  { id: 'sales',      label: 'Продажи',   icon: 'M3 3v18h18 M19 9l-5 5-4-4-3 3' },
   { id: 'contracts',  label: 'Договоры',  icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8' },
   { id: 'analytics',  label: 'Аналитика', icon: 'M18 20V10 M12 20V4 M6 20v-6' },
   { id: 'export',     label: 'Выгрузки',  icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3' },
@@ -3481,6 +3480,7 @@ function renderAnalytics() {
   return `
     <div class="page-tabs">
       <button class="page-tab ${tab==='overview'?'active':''}" data-atab="overview">📊 Обзор базы</button>
+      <button class="page-tab ${tab==='sales'?'active':''}" data-atab="sales">💰 Продажи</button>
       <button class="page-tab ${tab==='winrate'?'active':''}" data-atab="winrate">🏆 Win Rate</button>
       <button class="page-tab ${tab==='pdz'?'active':''}" data-atab="pdz">⚠ ПДЗ</button>
     </div>
@@ -3497,6 +3497,12 @@ function afterAnalytics() {
   const wrap = document.getElementById('analytics-tab-content');
   if (tab === 'pdz') return drawAnalyticsPdz(wrap);
   if (tab === 'winrate') return drawAnalyticsWinRate(wrap);
+  if (tab === 'sales') {
+    // Используем существующий renderSales/afterSales — рендерим их в wrap аналитики
+    wrap.innerHTML = renderSales();
+    afterSales();
+    return;
+  }
   return drawAnalyticsOverview(wrap);
 }
 
@@ -7981,12 +7987,22 @@ function drawTpToday(wrap) {
   wrap.querySelectorAll('[data-tp-done-visit]').forEach(b => b.addEventListener('click', (e) => {
     e.stopPropagation();
     const v = state.tpVisits.find(x => x.id === b.dataset.tpDoneVisit);
-    if (v) {
-      v.completed = true;
-      v.completed_at = tpLocalDateStr();
-      persist();
-      drawTpToday(wrap);
+    if (!v) return;
+    // Правило: итоги встречи + следующее действие
+    const missing = [];
+    if (!v.result || !v.result.trim()) missing.push('• «Итоги встречи»');
+    if (!v.next_event_at) missing.push('• Следующее действие');
+    if (missing.length) {
+      alert('Чтобы отметить визит выполненным, откройте его и заполните:\n\n' + missing.join('\n'));
+      openTpVisitModal(v.id);
+      return;
     }
+    // Защита от случайного клика — confirm
+    if (!confirm(`Отметить визит «${v.client || '—'}» как выполненный?`)) return;
+    v.completed = true;
+    v.completed_at = tpLocalDateStr();
+    persist();
+    drawTpToday(wrap);
   }));
 }
 
@@ -8028,11 +8044,19 @@ function drawTpPlan(wrap) {
         const isPast = key < tpLocalDateStr();
         const dayName = d.toLocaleDateString('ru-RU', { weekday:'short' });
         const dateNum = d.getDate();
+        const doneCount = dayVisits.filter(v => v.completed).length;
+        const undoneCount = dayVisits.length - doneCount;
         return `<div class="card" style="display:flex; flex-direction:column; min-height:300px; ${isToday?'border:2px solid var(--wp-yellow);':''}">
           <div style="padding:10px 12px; border-bottom:1px solid var(--border); background:${isToday?'var(--wp-yellow-soft)':isPast?'#FAFAFA':'#fff'}; text-align:center;">
             <div class="text-sm text-muted" style="text-transform:uppercase;">${escapeHtml(dayName)}</div>
             <div class="fw-700" style="font-size:18px;">${dateNum}</div>
-            <div class="text-sm text-muted">${dayVisits.length} ${dayVisits.length===1?'визит':'визитов'}</div>
+            ${dayVisits.length ? `
+              <div class="text-sm" style="margin-top:2px;">
+                <span style="color:var(--text);">${dayVisits.length} ${dayVisits.length===1?'визит':'визитов'}</span>
+                ${undoneCount > 0 ? `<br><span style="color:${isPast?'#DC2626':'#D97706'}; font-weight:600;">${isPast ? '⚠ ' : ''}${undoneCount} не выполнен${undoneCount===1?'':'о'}</span>` : ''}
+                ${doneCount > 0 && undoneCount === 0 ? `<br><span style="color:var(--success); font-weight:600;">✓ всё выполнено</span>` : ''}
+              </div>
+            ` : '<div class="text-sm text-muted">нет визитов</div>'}
           </div>
           <div style="flex:1; padding:6px; display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height:340px;">
             ${dayVisits.length ? dayVisits.map(v => {
@@ -8680,6 +8704,8 @@ function openTpVisitModal(visitId, defaultDate) {
           <datalist id="tv-client-list">${myClients.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.address||'')}</option>`).join('')}</datalist>
         </label>
         <label class="field-row" style="grid-column:1/-1;"><span>Адрес</span><input id="tv-address" value="${escapeHtml(v.address||'')}" placeholder="заполняется автоматически по клиенту"></label>
+        <label class="field-row"><span>ФИО ЛПР</span><input id="tv-lpr" value="${escapeHtml(v.lpr_name||(linkedTp?linkedTp.contact_name:'')||'')}" placeholder="контактное лицо"></label>
+        <label class="field-row"><span>Телефон</span><input id="tv-lpr-phone" value="${escapeHtml(v.lpr_phone||(linkedTp?linkedTp.phone:'')||'')}" type="tel" placeholder="+7 (___) ___-__-__"></label>
       </div>
 
       <!-- Результат визита (зелёный блок) -->
@@ -8730,17 +8756,24 @@ function openTpVisitModal(visitId, defaultDate) {
   document.getElementById('cm-body').addEventListener('input', () => { state._modalDirty = true; });
   document.getElementById('cm-body').addEventListener('change', () => { state._modalDirty = true; });
 
+  // Маска телефона ЛПР
+  tpAttachPhoneMask(document.getElementById('tv-lpr-phone'));
+
   if (document.getElementById('tv-del')) document.getElementById('tv-del').onclick = () => {
     if (!confirm('Удалить визит?')) return;
     state.tpVisits = state.tpVisits.filter(x => x.id !== v.id);
     state._modalDirty = false; persist(); closeModal(); drawTpTab();
   };
 
-  // Авто-заполнение адреса и портрета при выборе клиента
+  // Авто-заполнение адреса, контактов и портрета при выборе клиента
   document.getElementById('tv-client').addEventListener('change', (e) => {
     const found = state.tpClients.find(c => c.name === e.target.value);
     if (found) {
       document.getElementById('tv-address').value = found.address || '';
+      const lprEl = document.getElementById('tv-lpr');
+      if (lprEl && !lprEl.value && found.contact_name) lprEl.value = found.contact_name;
+      const lprPhEl = document.getElementById('tv-lpr-phone');
+      if (lprPhEl && !lprPhEl.value && found.phone) { lprPhEl.value = found.phone; lprPhEl.dispatchEvent(new Event('input')); }
       // Подтянем поля портрета если они пустые
       ['fleet','spec','bparts','boil','supplier'].forEach(k => {
         const map = { fleet:'fleet', spec:'specialization', bparts:'brands_parts', boil:'brands_oil', supplier:'supplier_choice' };
@@ -8783,6 +8816,14 @@ function openTpVisitModal(visitId, defaultDate) {
 
   if (document.getElementById('tv-done')) document.getElementById('tv-done').onclick = () => {
     saveVisitFields();
+    // Правило выполнения: должны быть заполнены итоги встречи и запланировано следующее действие
+    const missing = [];
+    if (!v.result || !v.result.trim()) missing.push('• «Итоги встречи»');
+    if (!v.next_event_at) missing.push('• Следующее действие (кнопка 📌)');
+    if (missing.length) {
+      alert('Чтобы отметить визит выполненным, заполните:\n\n' + missing.join('\n'));
+      return;
+    }
     v.completed = true;
     v.completed_at = tpLocalDateStr();
     // Запись в visits клиента ТП
@@ -8804,6 +8845,8 @@ function openTpVisitModal(visitId, defaultDate) {
       rep: val('tv-rep') || v.rep,
       client: val('tv-client'),
       address: val('tv-address'),
+      lpr_name: val('tv-lpr'),
+      lpr_phone: val('tv-lpr-phone'),
       result: val('tv-result'),
       // поля портрета — кэшируем в визите
       fleet: val('tv-fleet'),
@@ -8817,6 +8860,9 @@ function openTpVisitModal(visitId, defaultDate) {
     const found = state.tpClients.find(c => c.name === v.client);
     if (found) {
       v.clientId = found.id;
+      // Переносим контакты в tpClient если пусто
+      if (!found.contact_name && v.lpr_name) found.contact_name = v.lpr_name;
+      if (!found.phone && v.lpr_phone) found.phone = v.lpr_phone;
       // Переносим портрет в tpClient (если поля визита заполнены)
       ['fleet','specialization','brands_parts','brands_oil','supplier_choice','warehouse'].forEach(k => {
         if (v[k] && v[k].trim && v[k].trim()) found[k] = v[k];
