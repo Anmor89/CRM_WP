@@ -1363,6 +1363,10 @@ function initData() {
         { url: _demoPhotoDataUrl(), caption: 'Фасад · 27.05.2026', taken_at: new Date().toISOString() }
       ];
     }
+    // Миграция: объединённый ТП «Завьялов/Теребенин» (и обратный порядок) → «Теребенин»
+    const _repMigrate = (r) => (r === 'Завьялов/Теребенин' || r === 'Теребенин/Завьялов') ? 'Теребенин' : r;
+    state.tpClients.forEach(c => { if (c.rep) c.rep = _repMigrate(c.rep); });
+    state.tpVisits.forEach(v => { if (v.rep) v.rep = _repMigrate(v.rep); });
     if (persisted.settings) Object.assign(state.settings, persisted.settings);
     // Авто-миграция: добавляем недостающих DEFAULT_USERS (новые менеджеры из обновлений)
     // Существующих не трогаем (пароли могли быть изменены админом).
@@ -1539,7 +1543,15 @@ function visibleClients() {
   if (state.user && state.user.role !== 'admin' && state.user.manager) {
     list = list.filter(c => c.manager === state.user.manager);
   } else if (state.user && state.user.role === 'admin' && state.adminViewMgr && state.adminViewMgr !== 'all') {
-    list = list.filter(c => c.manager === state.adminViewMgr);
+    // Если выбран ТП через topbar — показать клиентов из tpClients этого ТП,
+    // которые уже переданы в основную базу
+    if (state.adminViewMgr.startsWith('rep:')) {
+      const repName = state.adminViewMgr.slice(4);
+      const tpIds = new Set(state.tpClients.filter(t => t.rep === repName).map(t => t.id));
+      list = list.filter(c => c.from_tp && tpIds.has(c.from_tp_id));
+    } else {
+      list = list.filter(c => c.manager === state.adminViewMgr);
+    }
   }
   return list;
 }
@@ -1550,12 +1562,18 @@ function renderTopbarContext() {
   if (state.user.role === 'admin') {
     // Скрытых менеджеров (state.settings.hiddenManagers) в селекторе не показываем
     const mgrs = uniqueManagers();
+    const reps = (typeof tpUniqueReps === 'function') ? tpUniqueReps() : [];
     const cur = state.adminViewMgr || 'all';
     el.innerHTML = `
       <span class="topbar-context-icon">👤</span>
-      <select id="topbar-mgr-filter" title="Просмотр данных конкретного менеджера">
-        <option value="all" ${cur==='all'?'selected':''}>Все менеджеры</option>
-        ${mgrs.map(m => `<option value="${escapeHtml(m)}" ${cur===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
+      <select id="topbar-mgr-filter" title="Просмотр данных конкретного менеджера или ТП">
+        <option value="all" ${cur==='all'?'selected':''}>Все сотрудники</option>
+        <optgroup label="Менеджеры">
+          ${mgrs.map(m => `<option value="${escapeHtml(m)}" ${cur===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
+        </optgroup>
+        ${reps.length ? `<optgroup label="Торговые представители">
+          ${reps.map(r => `<option value="rep:${escapeHtml(r)}" ${cur==='rep:'+r?'selected':''}>${escapeHtml(r)}</option>`).join('')}
+        </optgroup>` : ''}
       </select>`;
     const sel = document.getElementById('topbar-mgr-filter');
     if (sel) sel.addEventListener('change', (e) => {
@@ -2531,8 +2549,10 @@ function renderClients() {
       </div>
     </div>
 
+    <div id="neglected-section"></div>
+
     ${(() => {
-      // Вкладка «От ТП» — клиенты, переданные торговыми представителями
+      // Вкладки «Все клиенты / От ТП» — над таблицей (под блоком «Категории / Упущенные»)
       const fromTpAll = visibleAll.filter(c => c.from_tp);
       const fromTpUnaccepted = fromTpAll.filter(c => !c.from_tp_accepted);
       const cTab = state._clientsTab || 'all';
@@ -2545,8 +2565,6 @@ function renderClients() {
       </div>
       `;
     })()}
-
-    <div id="neglected-section"></div>
 
     <div class="table-wrap">
       <table class="data">
@@ -5862,6 +5880,20 @@ function openClientModal(clientId, initialTab = null) {
     if (val('ci-comp') !== null) updates.competitor = val('ci-comp');
     const lawsuitEl = document.getElementById('ci-lawsuit');
     if (lawsuitEl) updates.lawsuit = lawsuitEl.checked;
+    // Портрет клиента (если блок отображается)
+    const portraitInputs = ['cp-fleet','cp-spec','cp-bparts','cp-boil','cp-supplier','cp-warehouse','cp-program','cp-hours'];
+    if (document.getElementById('cp-fleet')) {
+      updates.portrait = Object.assign({}, c.portrait || {}, {
+        fleet:          val('cp-fleet') || '',
+        specialization: val('cp-spec') || '',
+        brands_parts:   val('cp-bparts') || '',
+        brands_oil:     val('cp-boil') || '',
+        supplier_choice:val('cp-supplier') || '',
+        warehouse:      val('cp-warehouse') || '',
+        program:        val('cp-program') || '',
+        work_hours:     val('cp-hours') || '',
+      });
+    }
     // Settings tab — override-ы
     if (val('ci-stage-manual') !== null) updates.stageManual = val('ci-stage-manual') || null;
     if (val('ci-cat-manual') !== null) updates.categoryManual = val('ci-cat-manual') || null;
@@ -5975,6 +6007,24 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
             <label class="field-row"><span>Email</span><input id="ci-email" value="${escapeHtml(c.email||'')}" placeholder="info@..."></label>
           </div>
         </div>
+
+        <!-- BLOCK: Портрет клиента (от ТП) — показываем для клиентов от ТП или если есть данные -->
+        ${(c.from_tp || (c.portrait && Object.values(c.portrait).some(v => v))) ? `
+          <div class="client-block" style="background: linear-gradient(180deg, #F0F9FF 0%, #DBEAFE 100%); border:1.5px solid #93C5FD;">
+            <div class="client-block-title" style="color:#1E40AF;">🚛 Портрет клиента ${c.from_tp ? '<span class="chip chip-info" style="font-size:10px; margin-left:6px;">от ТП ' + escapeHtml(c.from_tp_rep||'') + '</span>' : ''}</div>
+            ${c.from_tp_note ? `<div style="padding:10px 12px; background:#FFFBEB; border:1px solid #FDE68A; border-radius:6px; margin-bottom:12px; font-size:13px; color:#92400E;">💬 <b>С чем передали:</b> ${escapeHtml(c.from_tp_note)}</div>` : ''}
+            <div class="info-grid-2col" style="gap: 8px 14px;">
+              <label class="field-row"><span>Парк / посты</span><input id="cp-fleet" value="${escapeHtml((c.portrait||{}).fleet||'')}" placeholder="20 машин, 5 прицепов..."></label>
+              <label class="field-row"><span>Специализация</span><input id="cp-spec" value="${escapeHtml((c.portrait||{}).specialization||'')}" placeholder="Сами / На стороне / ..."></label>
+              <label class="field-row"><span>Бренды з/ч</span><input id="cp-bparts" value="${escapeHtml((c.portrait||{}).brands_parts||'')}"></label>
+              <label class="field-row"><span>Бренды масла</span><input id="cp-boil" value="${escapeHtml((c.portrait||{}).brands_oil||'')}"></label>
+              <label class="field-row"><span>Как выбирают поставщика</span><input id="cp-supplier" value="${escapeHtml((c.portrait||{}).supplier_choice||'')}"></label>
+              <label class="field-row"><span>Склад</span><input id="cp-warehouse" value="${escapeHtml((c.portrait||{}).warehouse||'')}"></label>
+              <label class="field-row"><span>Программа работы</span><input id="cp-program" value="${escapeHtml((c.portrait||{}).program||'')}" placeholder="ГП / ЛП / ГП+ЛП"></label>
+              <label class="field-row"><span>Время работы</span><input id="cp-hours" value="${escapeHtml((c.portrait||{}).work_hours||'')}" placeholder="09:00 — 18:00"></label>
+            </div>
+          </div>
+        ` : ''}
 
         <!-- BLOCK: Флаги работы -->
         <div class="client-block">
@@ -7585,12 +7635,21 @@ function tpVisibleClients() {
     const my = tpCurrentRepName();
     return state.tpClients.filter(c => c.rep === my);
   }
+  // Админ переключился на ТП через topbar
+  if (state.adminViewMgr && state.adminViewMgr.startsWith('rep:')) {
+    const repName = state.adminViewMgr.slice(4);
+    return state.tpClients.filter(c => c.rep === repName);
+  }
   return state.tpClients;
 }
 function tpVisibleVisits() {
   if (tpIsRep()) {
     const my = tpCurrentRepName();
     return state.tpVisits.filter(v => v.rep === my);
+  }
+  if (state.adminViewMgr && state.adminViewMgr.startsWith('rep:')) {
+    const repName = state.adminViewMgr.slice(4);
+    return state.tpVisits.filter(v => v.rep === repName);
   }
   return state.tpVisits;
 }
@@ -7674,11 +7733,34 @@ async function tpCompressPhoto(file, maxSize = 1000, quality = 0.8) {
 function tpHandover(tpClient, managerName, handoverNote) {
   if (!managerName) { alert('Выберите менеджера'); return false; }
   if (!handoverNote || !handoverNote.trim()) { alert('Заполните комментарий «с чем передаём»'); return false; }
+  // Полный «портрет» клиента в виде структурированного текста для комментария
+  const portraitLines = [];
+  if (tpClient.fleet)           portraitLines.push(`• Парк / посты: ${tpClient.fleet}`);
+  if (tpClient.specialization)  portraitLines.push(`• Специализация: ${tpClient.specialization}`);
+  if (tpClient.brands_parts)    portraitLines.push(`• Бренды з/ч: ${tpClient.brands_parts}`);
+  if (tpClient.brands_oil)      portraitLines.push(`• Бренды масла: ${tpClient.brands_oil}`);
+  if (tpClient.supplier_choice) portraitLines.push(`• Как выбирают поставщика: ${tpClient.supplier_choice}`);
+  if (tpClient.warehouse)       portraitLines.push(`• Склад: ${tpClient.warehouse}`);
+  if (tpClient.program)         portraitLines.push(`• Программа работы: ${tpClient.program}`);
+  if (tpClient.work_terms)      portraitLines.push(`• Условия: ${tpClient.work_terms}${tpClient.deferral_days ? ` (${tpClient.deferral_days} дн отсрочки)` : ''}`);
+  if (tpClient.work_hours)      portraitLines.push(`• Время работы: ${tpClient.work_hours}`);
+  const portrait = portraitLines.length ? '\n\n🚛 Портрет клиента:\n' + portraitLines.join('\n') : '';
+  const fullComment = `📤 Передан ТП ${tpClient.rep || '—'} (${new Date().toLocaleDateString('ru-RU')}):\n${handoverNote}${portrait}`;
+  // Поля портрета для копирования в основную карточку (mc.portrait.*)
+  const portraitFields = {
+    fleet: tpClient.fleet || '',
+    specialization: tpClient.specialization || '',
+    brands_parts: tpClient.brands_parts || '',
+    brands_oil: tpClient.brands_oil || '',
+    supplier_choice: tpClient.supplier_choice || '',
+    warehouse: tpClient.warehouse || '',
+    work_hours: tpClient.work_hours || '',
+    program: tpClient.program || '',
+    work_terms: tpClient.work_terms || '',
+    deferral_days: tpClient.deferral_days || 0,
+  };
   // 1) Найти / создать клиента в основной базе
   let mc = tpMainMatch(tpClient);
-  const fullComment = `📤 Передан ТП ${tpClient.rep || '—'} (${new Date().toLocaleDateString('ru-RU')}):\n${handoverNote}` +
-                      (tpClient.fleet ? `\n\nПарк / СТО: ${tpClient.fleet}` : '') +
-                      (tpClient.brands_parts ? `\nИспользуют бренды: ${tpClient.brands_parts}` : '');
   if (!mc) {
     mc = {
       id: 'c_tp_' + uid(),
@@ -7689,6 +7771,7 @@ function tpHandover(tpClient, managerName, handoverNote) {
       address: tpClient.address || '',
       city: tpClient.city || '',
       contact_name: tpClient.contact_name || '',
+      position: tpClient.position || '',
       phone: tpClient.phone || '',
       email: tpClient.email || '',
       comment: fullComment,
@@ -7698,15 +7781,18 @@ function tpHandover(tpClient, managerName, handoverNote) {
       contract_signed: false,
       stageManual: 'contact',
       from_tp_id: tpClient.id,
-      from_tp: true,                // флаг для вкладки «От ТП»
+      from_tp: true,
       from_tp_rep: tpClient.rep || '',
       from_tp_at: new Date().toISOString(),
-      from_tp_accepted: false,       // менеджер ещё не принял
+      from_tp_accepted: false,
+      from_tp_note: handoverNote,           // отдельно — комментарий ТП
+      portrait: portraitFields,             // структурированный портрет
     };
     state.clients.push(mc);
   } else {
     mc.manager = managerName;
     if (!mc.contact_name && tpClient.contact_name) mc.contact_name = tpClient.contact_name;
+    if (!mc.position && tpClient.position) mc.position = tpClient.position;
     if (!mc.phone && tpClient.phone) mc.phone = tpClient.phone;
     if (!mc.email && tpClient.email) mc.email = tpClient.email;
     if (!mc.address && tpClient.address) mc.address = tpClient.address;
@@ -7716,15 +7802,19 @@ function tpHandover(tpClient, managerName, handoverNote) {
     mc.from_tp_rep = tpClient.rep || '';
     mc.from_tp_at = new Date().toISOString();
     if (mc.from_tp_accepted === undefined) mc.from_tp_accepted = false;
+    mc.from_tp_note = handoverNote;
+    mc.portrait = Object.assign({}, mc.portrait || {}, portraitFields);
     mc.comment = (mc.comment || '') + '\n\n' + fullComment;
   }
   // 2) Событие-задача для менеджера (выделяется цветом в Моём дне)
   const eventTitle = `📦 Клиент от ТП (${tpClient.rep || '—'}): ${tpClient.name}`;
   const eventBody = [
     `«С чем передаём»: ${handoverNote}`,
-    tpClient.contact_name ? `Контакт: ${tpClient.contact_name}` : '',
+    tpClient.contact_name ? `Контакт: ${tpClient.contact_name}${tpClient.position ? ' (' + tpClient.position + ')' : ''}` : '',
     tpClient.phone ? `Телефон: ${tpClient.phone}` : '',
-    tpClient.work_terms ? `Условия: ${tpClient.work_terms}${tpClient.deferral_days ? ' (' + tpClient.deferral_days + ' дн отсрочки)' : ''}` : '',
+    tpClient.email ? `Email: ${tpClient.email}` : '',
+    tpClient.address ? `Адрес: ${tpClient.address}` : '',
+    portraitLines.length ? '\nПортрет:\n' + portraitLines.join('\n') : '',
   ].filter(Boolean).join('\n');
   state.events.push({
     id: uid(), clientId: mc.id, kind: 'followup',
@@ -7978,11 +8068,16 @@ function drawTpBase(wrap) {
       <select id="tpf-city"><option value="all">Все города</option>${cities.map(c=>`<option ${_tpFilters.city===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select>
       <select id="tpf-type"><option value="all">Все типы</option>${types.map(t=>`<option ${_tpFilters.type===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}</select>
       <select id="tpf-status"><option value="all">Все статусы</option>${Object.keys(TP_STATUS_META).map(s=>`<option ${_tpFilters.status===s?'selected':''}>${escapeHtml(s)}</option>`).join('')}</select>
-      <input type="search" id="tpf-q" placeholder="🔍 Поиск..." value="${escapeHtml(_tpFilters.q)}" style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; min-width:160px;">
       <button class="btn btn-ghost btn-sm" id="tpf-reset">Сбросить</button>
       <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
         <span class="text-sm text-muted">Найдено: <b>${list.length}</b> из ${total}</span>
         <button class="btn btn-primary btn-sm" id="tp-add">+ Клиент ТП</button>
+      </div>
+    </div>
+    <div style="margin: 10px 0 14px; display:flex; gap:10px; align-items:center;">
+      <div style="position:relative; flex:1; max-width: 500px;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:14px; color:var(--text-muted);">🔍</span>
+        <input type="search" id="tpf-q" placeholder="Поиск по клиенту, адресу, контактному лицу..." value="${escapeHtml(_tpFilters.q)}" style="width:100%; padding:9px 14px 9px 36px; border:1.5px solid var(--border); border-radius:10px; font-size:14px;">
       </div>
     </div>
     <div class="table-wrap">
@@ -8149,6 +8244,29 @@ function drawTpReport(wrap) {
 }
 
 // === Модальное окно: карточка ТП-клиента (по шаблону xlsx) ===
+// === Помощник: маска ввода телефона ===
+function tpAttachPhoneMask(input) {
+  if (!input || input._maskAttached) return;
+  input._maskAttached = true;
+  const format = (raw) => {
+    let v = (raw || '').replace(/\D/g, '');
+    if (v.startsWith('8')) v = '7' + v.slice(1);
+    if (v.length && !v.startsWith('7')) v = '7' + v;
+    v = v.slice(0, 11);
+    let out = '+7';
+    if (v.length > 1) out += ' (' + v.slice(1, 4);
+    if (v.length >= 4) out += ') ' + v.slice(4, 7);
+    if (v.length >= 7) out += '-' + v.slice(7, 9);
+    if (v.length >= 9) out += '-' + v.slice(9, 11);
+    return out;
+  };
+  // Применить маску к начальному значению
+  if (input.value) input.value = format(input.value);
+  input.addEventListener('input', () => { input.value = format(input.value); });
+  input.addEventListener('focus', () => { if (!input.value) input.value = '+7 ('; });
+  input.addEventListener('blur', () => { if (input.value === '+7 (' || input.value === '+7') input.value = ''; });
+}
+
 function openTpClientModal(tpId) {
   const isNew = !tpId;
   const c = isNew ? {
@@ -8163,121 +8281,126 @@ function openTpClientModal(tpId) {
   const match = tpMainMatch(c);
   const reps = tpUniqueReps();
   const cities = tpUniqueCities();
-  const isServiceType = c.type === 'СТО' || c.type === 'АТП';
-  const statusMeta = TP_STATUS_META[c.work_status] || TP_STATUS_META['Свежий'];
+  // После передачи поля заполняются менеджером — ТП их не правит
+  const isPassed = !!c.passed_at;
+  const ro = isPassed ? 'readonly' : '';
+  const roSel = isPassed ? 'disabled' : '';
+  const grayedBg = isPassed ? 'style="background:#F9FAFB;"' : '';
+  // Защита от случайного закрытия — флаг изменений
+  state._modalDirty = false;
 
   openModal(`
-    <div class="client-header" style="background: linear-gradient(180deg, #FFE486 0%, var(--wp-yellow) 55%, #E5B027 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 6px rgba(120,72,0,0.18); padding: 18px 28px;">
-      <div class="client-header-avatar">${fmt.initials(c.name) || '?'}</div>
+    <div class="client-header" style="background: linear-gradient(180deg, #BAE6FD 0%, #7DD3FC 55%, #38BDF8 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), inset 0 -2px 6px rgba(7,89,133,0.18); color: #0F172A; padding: 18px 28px;">
+      <div class="client-header-avatar" style="background:#0C4A6E; color:#7DD3FC;">${fmt.initials(c.name) || '?'}</div>
       <div class="client-header-info">
         <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;">
-          <div class="client-header-name">${escapeHtml(c.name || 'Новый клиент ТП')}</div>
-          ${c.type ? `<span style="background:rgba(15,17,21,0.85); color:#FFC72C; padding:4px 12px; border-radius:999px; font-size:13px; font-weight:700;">🏭 ${escapeHtml(c.type)}</span>` : ''}
+          <div class="client-header-name" style="color:#0F172A;">${escapeHtml(c.name || 'Новый клиент ТП')}</div>
+          ${c.type ? `<span style="background:rgba(12,74,110,0.9); color:#7DD3FC; padding:4px 12px; border-radius:999px; font-size:13px; font-weight:700;">🏭 ${escapeHtml(c.type)}</span>` : ''}
         </div>
-        <div class="client-header-meta">
+        <div class="client-header-meta" style="color:#0F172A;">
           ${c.rep ? `<span>👤 ТП: ${escapeHtml(c.rep)}</span>` : ''}
           ${c.city ? `<span>📍 ${escapeHtml(c.city)}</span>` : ''}
         </div>
       </div>
-      <button class="modal-close" id="m-close" style="color:var(--wp-black);">✕</button>
+      <button class="modal-close" id="m-close" style="color:#0F172A;">✕</button>
     </div>
 
-    <!-- БОЛЬШОЙ статус-блок прямо под шапкой -->
-    <div id="tp-status-banner" style="padding: 14px 28px; background:#FFFBEB; border-bottom:1px solid #FDE68A; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-      <div style="font-size:11px; font-weight:600; color:#92400E; text-transform:uppercase; letter-spacing:0.05em;">Статус работы:</div>
-      <select id="tp-status" style="font-size:15px; font-weight:700; padding:8px 14px; border:2px solid #D97706; border-radius:8px; background:white; cursor:pointer; min-width:240px;">
+    <!-- Статус-блок -->
+    <div id="tp-status-banner" style="padding: 14px 28px; background:${c.work_status==='Работаем'?'#DCFCE7':'#E0F2FE'}; border-bottom:1px solid ${c.work_status==='Работаем'?'#86EFAC':'#7DD3FC'}; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <div style="font-size:11px; font-weight:600; color:#0C4A6E; text-transform:uppercase; letter-spacing:0.05em;">Статус работы:</div>
+      <select id="tp-status" ${roSel} style="font-size:15px; font-weight:700; padding:8px 14px; border:2px solid #0284C7; border-radius:8px; background:white; cursor:pointer; min-width:240px;">
         ${Object.keys(TP_STATUS_META).map(s => `<option ${c.work_status===s?'selected':''}>${TP_STATUS_META[s].label}</option>`).join('')}
       </select>
       ${match ? `<span class="chip chip-success" title="Менеджер: ${escapeHtml(match.manager||'—')}">🔗 В основной базе</span>` : ''}
-      ${c.passed_at ? `<span class="chip chip-info">📤 Передан ${escapeHtml(c.passed_to_manager||'—')} · ${fmt.date(c.passed_at)}</span>` : ''}
-      ${!c.passed_at ? `<button class="btn btn-sm" id="tp-handover-open" style="margin-left:auto; background:var(--success); color:white; font-weight:600;" title="Передать клиента менеджеру">📤 Передать менеджеру</button>` : ''}
+      ${isPassed ? `<span class="chip chip-info">📤 Передан ${escapeHtml(c.passed_to_manager||'—')} · ${fmt.date(c.passed_at)}</span>` : ''}
+      ${!isPassed ? `<button class="btn btn-sm" id="tp-handover-open" style="margin-left:auto; background:var(--success); color:white; font-weight:600;" title="Передать клиента менеджеру">📤 Передать менеджеру</button>` : ''}
     </div>
 
-    <div class="modal-body" style="max-height: calc(100vh - 290px); overflow-y: auto; padding: 20px 28px;">
-      <!-- Идентификация -->
-      <div class="card-section-h" style="margin-top:0;">🪪 Идентификация</div>
-      <div class="info-grid-2col">
-        <label class="field-row"><span>Наименование *</span><input id="tp-name" value="${escapeHtml(c.name||'')}"></label>
-        <label class="field-row"><span>ИНН ${match?'<span class="chip chip-success" style="margin-left:4px; font-size:10px;">✓ в 1С</span>':''}</span><input id="tp-inn" value="${escapeHtml(c.inn||'')}" placeholder="для связи с базой CRM"></label>
-        <label class="field-row"><span>Торговый представитель ${tpIsRep() ? '(вы)' : ''}</span>
-          <input id="tp-rep" list="tp-rep-list" value="${escapeHtml(c.rep||'')}" ${tpIsRep()?'readonly':''}>
-          <datalist id="tp-rep-list">${reps.map(r=>`<option value="${escapeHtml(r)}">`).join('')}</datalist>
-        </label>
-        <label class="field-row"><span>Тип клиента</span><select id="tp-type">${['Магазин','СТО','АТП','Интернет магазин','Опт','Другое'].map(t=>`<option ${c.type===t?'selected':''}>${t}</option>`).join('')}</select></label>
-        <label class="field-row"><span>Город</span><input id="tp-city" list="tp-city-list" value="${escapeHtml(c.city||'')}"><datalist id="tp-city-list">${cities.map(x=>`<option value="${escapeHtml(x)}">`).join('')}</datalist></label>
-        <label class="field-row"><span>Время работы</span><input id="tp-hours" value="${escapeHtml(c.work_hours||'')}" placeholder="09:00 — 18:00"></label>
-        <label class="field-row" style="grid-column:1/-1;"><span>Адрес</span><input id="tp-address" value="${escapeHtml(c.address||'')}"></label>
+    ${isPassed ? `<div style="padding:10px 28px; background:#F1F5F9; border-bottom:1px solid var(--border); font-size:12px; color:var(--text-muted);">🔒 Клиент уже передан менеджеру. Поля доступны только для просмотра. Изменения теперь делает менеджер в основной карточке клиента.</div>` : ''}
+
+    <div class="modal-body" id="cm-body" style="max-height: calc(100vh - 310px); overflow-y: auto; padding: 20px 28px;">
+      <!-- Идентификация — выделенный блок -->
+      <div style="background: linear-gradient(180deg, #F0F9FF 0%, #E0F2FE 100%); border: 1.5px solid #7DD3FC; border-radius: 12px; padding: 16px 18px; box-shadow: 0 2px 6px rgba(56, 189, 248, 0.12); margin-bottom: 16px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size: 14px; font-weight:700; color:#0C4A6E;">
+          <span>🪪 Идентификация</span>
+        </div>
+        <div class="info-grid-2col" style="gap: 8px 14px;">
+          <label class="field-row"><span>Наименование *</span><input id="tp-name" value="${escapeHtml(c.name||'')}" ${ro} ${grayedBg}></label>
+          <label class="field-row"><span>ИНН ${match?'<span class="chip chip-success" style="margin-left:4px; font-size:10px;">✓ в 1С</span>':''}</span><input id="tp-inn" value="${escapeHtml(c.inn||'')}" placeholder="для связи с 1С" ${ro} ${grayedBg}></label>
+          <label class="field-row"><span>Вид деятельности клиента</span>
+            <select id="tp-type" ${roSel}>${['Магазин','СТО','АТП','Интернет магазин','Опт','Другое'].map(t=>`<option ${c.type===t?'selected':''}>${t}</option>`).join('')}</select>
+          </label>
+          <label class="field-row"><span>Город</span><input id="tp-city" list="tp-city-list" value="${escapeHtml(c.city||'')}" ${ro} ${grayedBg}><datalist id="tp-city-list">${cities.map(x=>`<option value="${escapeHtml(x)}">`).join('')}</datalist></label>
+          <label class="field-row" style="grid-column:1/-1;"><span>Фактический адрес</span><input id="tp-address" value="${escapeHtml(c.address||'')}" ${ro} ${grayedBg}></label>
+          <label class="field-row" style="grid-column:1/-1;"><span>Торговый представитель ${tpIsRep() ? '(вы)' : ''}</span>
+            <input id="tp-rep" list="tp-rep-list" value="${escapeHtml(c.rep||'')}" ${tpIsRep()||isPassed?'readonly':''} ${grayedBg}>
+            <datalist id="tp-rep-list">${reps.map(r=>`<option value="${escapeHtml(r)}">`).join('')}</datalist>
+          </label>
+        </div>
       </div>
 
       <!-- Контакты -->
-      <div class="card-section-h">📞 Контакты ЛПР</div>
+      <div class="card-section-h" style="margin-top:0;">📞 Контакты ЛПР</div>
       <div class="info-grid-2col">
-        <label class="field-row"><span>ФИО ЛПР</span><input id="tp-contact" value="${escapeHtml(c.contact_name||'')}"></label>
-        <label class="field-row"><span>Должность</span><input id="tp-position" value="${escapeHtml(c.position||'')}" placeholder="Директор / Снабжение"></label>
-        <label class="field-row"><span>Телефон ЛПР</span><input id="tp-phone" value="${escapeHtml(c.phone||'')}" type="tel" placeholder="+7 ..."></label>
-        <label class="field-row"><span>Email</span><input id="tp-email" value="${escapeHtml(c.email||'')}" type="email"></label>
-      </div>
-
-      <!-- Профиль покупателя -->
-      <div class="card-section-h">🎯 Профиль покупателя</div>
-      <div class="info-grid-2col">
-        <label class="field-row"><span>Программа работы</span>
-          <select id="tp-program">${['','ГП','ЛП','ГП/ЛП'].map(p=>`<option ${c.program===p?'selected':''}>${p||'—'}</option>`).join('')}</select>
-        </label>
-        <label class="field-row"><span>Что важно (приоритет)</span><input id="tp-priority" value="${escapeHtml(c.priority||'')}" placeholder="Цена / Сроки / Качество / Бренд"></label>
-        <label class="field-row" style="grid-column:1/-1;"><span>Группы товаров клиента</span><input id="tp-groups" value="${escapeHtml(c.groups||'')}" placeholder="Тормозная, Подвеска, Кузов..."></label>
+        <label class="field-row"><span>ФИО ЛПР</span><input id="tp-contact" value="${escapeHtml(c.contact_name||'')}" ${ro} ${grayedBg}></label>
+        <label class="field-row"><span>Должность</span><input id="tp-position" value="${escapeHtml(c.position||'')}" placeholder="Директор / Снабжение" ${ro} ${grayedBg}></label>
+        <label class="field-row"><span>Телефон</span><input id="tp-phone" value="${escapeHtml(c.phone||'')}" type="tel" placeholder="+7 (___) ___-__-__" ${ro} ${grayedBg}></label>
+        <label class="field-row"><span>Почта</span><input id="tp-email" value="${escapeHtml(c.email||'')}" type="email" ${ro} ${grayedBg}></label>
       </div>
 
       <!-- Портрет — выделенный блок -->
       <div style="margin: 20px 0 0; background: linear-gradient(180deg, #FFFBEB 0%, #FEF3C7 100%); border: 1.5px solid #FBBF24; border-radius: 12px; padding: 16px 18px; box-shadow: 0 2px 6px rgba(245, 158, 11, 0.12);">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size: 14px; font-weight:700; color:#92400E;">
           <span>🚛 Портрет клиента</span>
-          ${isServiceType ? '<span class="chip chip-success" style="font-size:10px;">актуально для СТО / АТП</span>' : '<span class="text-sm" style="color:#92400E; opacity:0.7; font-weight:500;">(заполняется для СТО / АТП)</span>'}
+          ${(c.type==='СТО'||c.type==='АТП') ? '<span class="chip chip-success" style="font-size:10px;">актуально для СТО / АТП</span>' : '<span class="text-sm" style="color:#92400E; opacity:0.7; font-weight:500;">(особенно важно для СТО / АТП)</span>'}
         </div>
         <div class="info-grid-2col" style="gap: 8px 14px;">
-          <label class="field-row"><span>Парк / Кол-во постов</span><input id="tp-fleet" value="${escapeHtml(c.fleet||'')}" placeholder="20 машин, 5 прицепов. Scania-10..."></label>
-          <label class="field-row"><span>Специализация / Сами ремонтируют?</span><input id="tp-spec" value="${escapeHtml(c.specialization||'')}" placeholder="Сами. Тормозная система, подвеска"></label>
-          <label class="field-row"><span>Бренды з/ч</span><input id="tp-bparts" value="${escapeHtml(c.brands_parts||'')}" placeholder="Marshall, Bremhof, OEM..."></label>
-          <label class="field-row"><span>Бренды масла</span><input id="tp-boil" value="${escapeHtml(c.brands_oil||'')}" placeholder="Shell 10w-40, Total..."></label>
-          <label class="field-row"><span>Как выбирают поставщика</span><input id="tp-supplier" value="${escapeHtml(c.supplier_choice||'')}" placeholder="цена, ассортимент, наличие"></label>
+          <label class="field-row"><span>Парк / Кол-во постов</span><input id="tp-fleet" value="${escapeHtml(c.fleet||'')}" placeholder="20 машин, 5 прицепов. Scania-10..." ${ro} ${grayedBg}></label>
+          <label class="field-row"><span>Специализация / Сами ремонтируют?</span><input id="tp-spec" value="${escapeHtml(c.specialization||'')}" placeholder="Сами. Тормозная система, подвеска" ${ro} ${grayedBg}></label>
+          <label class="field-row"><span>Бренды з/ч</span><input id="tp-bparts" value="${escapeHtml(c.brands_parts||'')}" placeholder="Marshall, Bremhof, OEM..." ${ro} ${grayedBg}></label>
+          <label class="field-row"><span>Бренды масла</span><input id="tp-boil" value="${escapeHtml(c.brands_oil||'')}" placeholder="Shell 10w-40, Total..." ${ro} ${grayedBg}></label>
+          <label class="field-row"><span>Как выбирают поставщика</span><input id="tp-supplier" value="${escapeHtml(c.supplier_choice||'')}" placeholder="цена, ассортимент, наличие" ${ro} ${grayedBg}></label>
           <label class="field-row"><span>Склад</span>
-            <select id="tp-warehouse">${['','да','нет','небольшой'].map(x=>`<option ${(c.warehouse||'')===x?'selected':''}>${x||'—'}</option>`).join('')}</select>
+            <select id="tp-warehouse" ${roSel}>${['','да','нет','небольшой'].map(x=>`<option ${(c.warehouse||'')===x?'selected':''}>${x||'—'}</option>`).join('')}</select>
           </label>
         </div>
       </div>
 
-      <!-- Условия -->
-      <div class="card-section-h">🤝 Условия работы</div>
+      <!-- Дополнительно -->
+      <div class="card-section-h">⚙ Дополнительно</div>
       <div class="info-grid-2col">
-        <label class="field-row"><span>Условия</span>
-          <select id="tp-terms">${['','Отсрочка','ОТХ','Предоплата','Частичная предоплата','Не определено'].map(x=>`<option ${(c.work_terms||'')===x?'selected':''}>${x||'—'}</option>`).join('')}</select>
+        <label class="field-row"><span>Программа работы</span>
+          <select id="tp-program" ${roSel}>${['','ГП','ЛП','ГП/ЛП'].map(p=>`<option ${c.program===p?'selected':''}>${p||'—'}</option>`).join('')}</select>
         </label>
-        <label class="field-row"><span>Дней отсрочки</span><input id="tp-defer" type="number" min="0" max="365" value="${c.deferral_days||''}"></label>
+        <label class="field-row"><span>Условия работы</span>
+          <select id="tp-terms" ${roSel}>${['','Отсрочка','ОТХ','Предоплата','Частичная предоплата','Не определено'].map(x=>`<option ${(c.work_terms||'')===x?'selected':''}>${x||'—'}</option>`).join('')}</select>
+        </label>
+        <label class="field-row"><span>Дней отсрочки</span><input id="tp-defer" type="number" min="0" max="365" value="${c.deferral_days||''}" ${ro} ${grayedBg}></label>
+        <label class="field-row"><span>Время работы</span><input id="tp-hours" value="${escapeHtml(c.work_hours||'')}" placeholder="09:00 — 18:00" ${ro} ${grayedBg}></label>
       </div>
 
-      <!-- Комментарий — полная ширина -->
+      <!-- Комментарий -->
       <div style="margin-top: 16px;">
         <div style="font-weight:600; font-size:13px; color:var(--text); margin-bottom:6px;">💬 Комментарий — что важно знать</div>
-        <textarea id="tp-comment" rows="4" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-family:inherit; font-size:13px; resize:vertical;" placeholder="Договорённости, гарантии, объёмы, причины отказа...">${escapeHtml(c.comment||'')}</textarea>
+        <textarea id="tp-comment" rows="4" ${ro} style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-family:inherit; font-size:13px; resize:vertical; ${isPassed?'background:#F9FAFB;':''}" placeholder="Договорённости, гарантии, объёмы, причины отказа...">${escapeHtml(c.comment||'')}</textarea>
       </div>
 
-      <!-- Фотографии -->
+      <!-- Фото -->
       <div class="card-section-h">📷 Фото с визитов <span class="text-sm text-muted">(${c.photos.length})</span></div>
       <div id="tp-photos-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap:8px; margin-bottom:10px;">
         ${c.photos.map((p, i) => `<div style="position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden; cursor:pointer; border:1px solid var(--border); background:#F3F4F6;" data-tp-photo-open="${i}">
           <img src="${p.url}" style="width:100%; height:100%; object-fit:cover; display:block;" loading="lazy">
-          <button data-tp-photo-del="${i}" title="Удалить" style="position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; background:rgba(220,38,38,0.9); color:white; border:none; cursor:pointer; font-size:14px; line-height:18px; padding:0; z-index:2;">×</button>
+          ${!isPassed ? `<button data-tp-photo-del="${i}" title="Удалить" style="position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; background:rgba(220,38,38,0.9); color:white; border:none; cursor:pointer; font-size:14px; line-height:18px; padding:0; z-index:2;">×</button>` : ''}
           ${p.caption ? `<div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.65); color:white; padding:3px 6px; font-size:10px; text-align:center; pointer-events:none;">${escapeHtml(p.caption)}</div>` : ''}
         </div>`).join('')}
         ${!c.photos.length ? '<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--text-muted); font-size:13px;">Фото пока нет. Нажмите «Добавить фото».</div>' : ''}
       </div>
-      <div style="display:flex; gap:6px; align-items:center;">
+      ${!isPassed ? `<div style="display:flex; gap:6px; align-items:center;">
         <input type="file" id="tp-photo-input" accept="image/*" capture="environment" style="display:none;">
         <button class="btn btn-sm" id="tp-photo-add">📷 Добавить фото</button>
         <span class="text-sm text-muted">сжимаются до 1000px, JPEG</span>
-      </div>
+      </div>` : ''}
 
-      <!-- История визитов -->
       ${c.visits.length ? `
         <div class="card-section-h">📋 История визитов (${c.visits.length})</div>
         <div style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:8px;">
@@ -8292,109 +8415,119 @@ function openTpClientModal(tpId) {
 
     <div class="modal-footer">
       ${!isNew && state.user.role === 'admin' ? `<button class="btn btn-danger" id="tp-del">Удалить</button>` : ''}
-      <button class="btn" id="tp-cancel">Закрыть</button>
-      <button class="btn btn-primary" id="tp-save">Сохранить</button>
+      <button class="btn" id="tp-cancel">${isPassed ? 'Закрыть' : 'Отмена'}</button>
+      ${!isPassed ? `<button class="btn btn-primary" id="tp-save">Сохранить</button>` : ''}
     </div>
   `, 'modal-wide');
 
-  document.getElementById('m-close').onclick = closeModal;
-  document.getElementById('tp-cancel').onclick = closeModal;
+  // === Защита от закрытия без сохранения ===
+  const safeClose = () => {
+    if (state._modalDirty && !isPassed) {
+      if (!confirm('В карточке есть несохранённые изменения.\nЗакрыть без сохранения?')) return;
+    }
+    state._modalDirty = false;
+    closeModal();
+  };
+  document.getElementById('m-close').onclick = safeClose;
+  document.getElementById('tp-cancel').onclick = safeClose;
 
-  // Динамическое обновление цвета статус-баннера при изменении статуса
+  // Трекинг изменений
+  if (!isPassed) {
+    document.getElementById('cm-body').addEventListener('input', () => { state._modalDirty = true; });
+    document.getElementById('cm-body').addEventListener('change', () => { state._modalDirty = true; });
+    document.getElementById('tp-status').addEventListener('change', () => { state._modalDirty = true; });
+  }
+
+  // Маска телефона
+  tpAttachPhoneMask(document.getElementById('tp-phone'));
+
+  // Подсветка статус-баннера
   document.getElementById('tp-status').addEventListener('change', (e) => {
     const banner = document.getElementById('tp-status-banner');
     const newSt = e.target.value;
-    // подсветка только когда «Работаем» — призываем передать менеджеру
-    if (newSt === 'Работаем') {
-      banner.style.background = '#DCFCE7';
-      banner.style.borderBottomColor = '#86EFAC';
-    } else {
-      banner.style.background = '#FFFBEB';
-      banner.style.borderBottomColor = '#FDE68A';
-    }
+    const isWorking = newSt === TP_STATUS_META['Работаем'].label;
+    banner.style.background = isWorking ? '#DCFCE7' : '#E0F2FE';
+    banner.style.borderBottomColor = isWorking ? '#86EFAC' : '#7DD3FC';
   });
-  // Начальная подсветка
-  if (c.work_status === 'Работаем') {
-    const b = document.getElementById('tp-status-banner');
-    b.style.background = '#DCFCE7';
-    b.style.borderBottomColor = '#86EFAC';
-  }
 
   // Удаление
   if (document.getElementById('tp-del')) document.getElementById('tp-del').onclick = () => {
     if (!confirm('Удалить клиента ТП? Действие необратимо.')) return;
     state.tpClients = state.tpClients.filter(x => x.id !== c.id);
-    persist(); closeModal(); renderView();
+    state._modalDirty = false; persist(); closeModal(); renderView();
   };
 
-  // Фото — добавление
-  document.getElementById('tp-photo-add').onclick = () => document.getElementById('tp-photo-input').click();
-  document.getElementById('tp-photo-input').onchange = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    try {
-      const dataUrl = await tpCompressPhoto(file, 1000, 0.8);
-      const caption = prompt('Подпись фото (необязательно):', '') || '';
-      c.photos.push({ url: dataUrl, caption, taken_at: new Date().toISOString() });
-      persist(); closeModal(); openTpClientModal(c.id);
-    } catch (err) { alert('Не удалось обработать фото: ' + err.message); }
-  };
-
-  // Фото — удаление
-  document.querySelectorAll('[data-tp-photo-del]').forEach(b => b.onclick = (e) => {
-    e.stopPropagation();
-    const idx = +b.dataset.tpPhotoDel;
-    if (!confirm('Удалить фото?')) return;
-    c.photos.splice(idx, 1);
-    persist(); closeModal(); openTpClientModal(c.id);
-  });
-  // Фото — лайтбокс
+  // Фото
+  if (!isPassed) {
+    document.getElementById('tp-photo-add').onclick = () => document.getElementById('tp-photo-input').click();
+    document.getElementById('tp-photo-input').onchange = async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        const dataUrl = await tpCompressPhoto(file, 1000, 0.8);
+        const caption = prompt('Подпись фото (необязательно):', '') || '';
+        c.photos.push({ url: dataUrl, caption, taken_at: new Date().toISOString() });
+        persist();
+        state._modalDirty = false; // фото уже сохранили отдельно
+        closeModal(); openTpClientModal(c.id);
+      } catch (err) { alert('Не удалось обработать фото: ' + err.message); }
+    };
+    document.querySelectorAll('[data-tp-photo-del]').forEach(b => b.onclick = (e) => {
+      e.stopPropagation();
+      const idx = +b.dataset.tpPhotoDel;
+      if (!confirm('Удалить фото?')) return;
+      c.photos.splice(idx, 1);
+      persist();
+      state._modalDirty = false;
+      closeModal(); openTpClientModal(c.id);
+    });
+  }
   document.querySelectorAll('[data-tp-photo-open]').forEach(el => el.onclick = (e) => {
     if (e.target.matches('[data-tp-photo-del]')) return;
     openLightbox(c.photos, +el.dataset.tpPhotoOpen);
   });
 
-  // Передача менеджеру — отдельное модальное окно
+  // Передача менеджеру
   document.getElementById('tp-handover-open')?.addEventListener('click', () => {
-    saveTpFromForm(); // сохраним текущие правки перед открытием
+    saveTpFromForm();
     openTpHandoverModal(c);
   });
 
   function saveTpFromForm() {
+    if (isPassed) return;
     const v = id => (document.getElementById(id)?.value || '').trim();
     Object.assign(c, {
       name: v('tp-name'), inn: v('tp-inn'),
       rep: v('tp-rep'),
       type: document.getElementById('tp-type').value,
       city: v('tp-city'), address: v('tp-address'),
-      work_hours: v('tp-hours'),
       contact_name: v('tp-contact'), position: v('tp-position'),
       phone: v('tp-phone'), email: v('tp-email'),
-      program: document.getElementById('tp-program').value === '—' ? '' : document.getElementById('tp-program').value,
-      priority: v('tp-priority'), groups: v('tp-groups'),
       fleet: v('tp-fleet'), specialization: v('tp-spec'),
       brands_parts: v('tp-bparts'), brands_oil: v('tp-boil'),
       supplier_choice: v('tp-supplier'),
       warehouse: document.getElementById('tp-warehouse').value === '—' ? '' : document.getElementById('tp-warehouse').value,
-      work_status: document.getElementById('tp-status').value.replace(/^[^а-яА-Я]+/, '').trim() ||
-                   Object.keys(TP_STATUS_META).find(k => TP_STATUS_META[k].label === document.getElementById('tp-status').value) || c.work_status,
+      program: document.getElementById('tp-program').value === '—' ? '' : document.getElementById('tp-program').value,
       work_terms: document.getElementById('tp-terms').value === '—' ? '' : document.getElementById('tp-terms').value,
       deferral_days: parseInt(v('tp-defer'), 10) || 0,
+      work_hours: v('tp-hours'),
       comment: v('tp-comment'),
     });
-    // Поскольку в select лежит label, а не key — найдём key по совпадению
+    // Статус из label → key
     const labelToKey = {};
     Object.keys(TP_STATUS_META).forEach(k => labelToKey[TP_STATUS_META[k].label] = k);
     const selVal = document.getElementById('tp-status').value;
     if (labelToKey[selVal]) c.work_status = labelToKey[selVal];
   }
 
-  document.getElementById('tp-save').onclick = () => {
+  if (document.getElementById('tp-save')) document.getElementById('tp-save').onclick = () => {
     if (!document.getElementById('tp-name').value.trim()) { alert('Укажите наименование клиента'); return; }
     saveTpFromForm();
     if (isNew) state.tpClients.push(c);
+    state._modalDirty = false;
     persist(); closeModal(); renderView();
   };
 }
+
 
 // === Лайтбокс для фото ===
 function openLightbox(photos, startIdx) {
