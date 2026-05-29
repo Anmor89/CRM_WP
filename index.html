@@ -5281,6 +5281,7 @@ function openClientModal(clientId, initialTab = null) {
       body.innerHTML = renderClientOverview(c, sgInfo, catInfo, managers, acts);
       bindEmbeddedTimeline(c);
       bindClientFiles(c);
+      bindClientFlags(c);
     } else if (activeTab === 'sales') {
       body.innerHTML = renderSalesTab(c);
       setTimeout(() => initSalesChart(c), 0);
@@ -5361,6 +5362,26 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
   const f1c = c.from1c || {};
   const flagYes = (v) => v === true || v === 'Да' ? '✅' : '➖';
 
+  // Текущее значение флага: manual override приоритетнее, иначе 1С
+  const flagVal = (key, from1cValue) => {
+    const manual = c[key + 'Manual'];
+    if (manual === true) return true;
+    if (manual === false) return false;
+    return from1cValue === true || from1cValue === 'Да';
+  };
+  const flagSource = (key) => c[key + 'Manual'] !== undefined && c[key + 'Manual'] !== null ? 'manual' : '1c';
+  // Helper: рендер редактируемого флага (чекбокс + источник + reset)
+  const editFlag = (key, from1cValue, label, title) => {
+    const checked = flagVal(key, from1cValue);
+    const src = flagSource(key);
+    return `<label class="client-flag client-flag-edit" title="${escapeHtml(title)}" data-flag-key="${key}">
+      <input type="checkbox" data-flag-cb="${key}" ${checked ? 'checked' : ''} style="cursor:pointer; margin-right:6px;">
+      <span style="flex:1;">${escapeHtml(label)}</span>
+      <span class="flag-src text-sm text-muted" style="font-size:10px; opacity:0.7;">${src === 'manual' ? '✎ вручную' : 'из 1С'}</span>
+      ${src === 'manual' ? `<button class="flag-reset" data-flag-reset="${key}" title="Сбросить к 1С" style="margin-left:4px; background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:14px; padding:0 4px;">×</button>` : ''}
+    </label>`;
+  };
+
   return `
     <div class="client-overview-grid">
       <!-- LEFT COLUMN — 55% -->
@@ -5417,11 +5438,11 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
             <label class="field-row" style="grid-column: 1 / -1;"><span>Основной конкурент</span><input id="ci-comp" value="${escapeHtml(c.competitor||f1c.main_competitor||'')}" placeholder="чьим клиентом был / у кого покупает сейчас"></label>
           </div>
           <div class="client-flags-grid">
-            <div class="client-flag" title="Подключён ли клиент к нашему B2B-порталу"><span>${flagYes(f1c.wpart_connected)}</span> Подключён на w-part.ru</div>
-            <div class="client-flag" title="Работа по схеме «обмен на товар-сырьё»"><span>${flagYes(f1c.otkh)}</span> Работа по ОТХ</div>
-            <div class="client-flag" title="Есть соглашение на ретро-бонус"><span>${flagYes(f1c.retro_bonus)}</span> Ретро-бонус</div>
+            ${editFlag('wpart_connected', f1c.wpart_connected, 'Подключён на w-part.ru', 'Подключён ли клиент к нашему B2B-порталу')}
+            ${editFlag('otkh', f1c.otkh, 'Работа по ОТХ', 'Работа по схеме «обмен на товар-сырьё»')}
+            ${editFlag('retro_bonus', f1c.retro_bonus, 'Ретро-бонус', 'Есть соглашение на ретро-бонус')}
+            ${editFlag('tested_product', f1c.tested_product, 'Тест нашей продукции', 'Клиент тестировал нашу продукцию')}
             <div class="client-flag" title="Активна программа кэшбека"><span>${f1c.cashback ? '✅' : '➖'}</span> Кэшбек${f1c.cashback ? ': ' + escapeHtml(f1c.cashback) : ''}</div>
-            <div class="client-flag" title="Клиент тестировал нашу продукцию"><span>${flagYes(f1c.tested_product)}</span> Тест нашей продукции</div>
             <div class="client-flag" title="Бренд-конкурент">${f1c.brand_competitor ? `🏷 Бренд-конкурент: <b>${escapeHtml(f1c.brand_competitor)}</b>` : '<span>➖</span> Бренд-конкурент не указан'}</div>
           </div>
         </div>
@@ -5730,45 +5751,148 @@ function renderEmbeddedTimeline(c) {
         ${[...events.map(e => ({ kind:'event', date: e.date, data: e })),
             ...comments.map(c => ({ kind:'comment', date: c.date, data: c }))]
           .sort((a,b) => new Date(b.date) - new Date(a.date))
-          .map(it => it.kind === 'event' ? `
-            <div class="timeline-item">
-              <div class="timeline-dot">📅</div>
-              <div class="timeline-content">
-                <div class="timeline-head">
-                  <span class="timeline-kind">${eventKindLabel(it.data.kind)}</span>
-                  <span class="timeline-author">${escapeHtml(it.data.author||'')}</span>
-                  <span class="timeline-date">${fmt.dateLong(it.date)} • ${fmt.daysAgo(it.date)}</span>
-                  ${it.data.completed
-                    ? '<span class="chip chip-success" style="margin-left:auto;">Выполнено</span>'
-                    : `<button class="btn btn-sm btn-done" style="margin-left:auto;" data-tl-done="${it.data.id}">Готово</button>`}
+          .map(it => {
+            if (it.kind === 'event') {
+              // Подсветка: просрочено / сегодня / будущее (только для незавершённых)
+              let itemStyle = '', dotEmoji = '📅', urgencyChip = '';
+              if (!it.data.completed) {
+                const evDate = new Date(it.date);
+                const todayStart = new Date(new Date().toDateString());
+                const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+                if (evDate < todayStart) {
+                  itemStyle = 'background:rgba(220,38,38,0.05); border-left:3px solid var(--danger);';
+                  dotEmoji = '⚠️';
+                  urgencyChip = '<span class="chip chip-danger" style="margin-right:6px;">Просрочено</span>';
+                } else if (evDate < tomorrowStart) {
+                  itemStyle = 'background:#FFFBEB; border-left:3px solid var(--wp-yellow);';
+                  dotEmoji = '🔔';
+                  urgencyChip = '<span class="chip" style="background:#FEF3C7; color:#92400E; margin-right:6px;">Сегодня</span>';
+                }
+              }
+              return `
+                <div class="timeline-item" style="${itemStyle}">
+                  <div class="timeline-dot">${dotEmoji}</div>
+                  <div class="timeline-content">
+                    <div class="timeline-head">
+                      <span class="timeline-kind">${eventKindLabel(it.data.kind)}</span>
+                      <span class="timeline-author">${escapeHtml(it.data.author||'')}</span>
+                      <span class="timeline-date">${fmt.dateLong(it.date)} • ${fmt.daysAgo(it.date)}</span>
+                      <span style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+                        ${urgencyChip}
+                        ${it.data.completed
+                          ? '<span class="chip chip-success">Выполнено</span>'
+                          : `<button class="btn btn-sm btn-done" data-tl-done="${it.data.id}">Готово</button>`}
+                      </span>
+                    </div>
+                    <div class="timeline-body">${escapeHtml(it.data.title||'')}</div>
+                  </div>
                 </div>
-                <div class="timeline-body">${escapeHtml(it.data.title||'')}</div>
-              </div>
-            </div>
-          ` : `
-            <div class="timeline-item">
-              <div class="timeline-dot">${({note:'📝',call:'📞',meeting:'🤝',email:'✉️',other:'•'})[it.data.kind]||'•'}</div>
-              <div class="timeline-content">
-                <div class="timeline-head">
-                  <span class="timeline-author">${escapeHtml(it.data.author||'')}</span>
-                  <span class="timeline-date">${fmt.dateLong(it.date)} • ${fmt.daysAgo(it.date)}</span>
+              `;
+            }
+            return `
+              <div class="timeline-item">
+                <div class="timeline-dot">${({note:'📝',call:'📞',meeting:'🤝',email:'✉️',other:'•'})[it.data.kind]||'•'}</div>
+                <div class="timeline-content">
+                  <div class="timeline-head">
+                    <span class="timeline-author">${escapeHtml(it.data.author||'')}</span>
+                    <span class="timeline-date">${fmt.dateLong(it.date)} • ${fmt.daysAgo(it.date)}</span>
+                  </div>
+                  <div class="timeline-body">${escapeHtml(it.data.text||'')}</div>
                 </div>
-                <div class="timeline-body">${escapeHtml(it.data.text||'')}</div>
               </div>
-            </div>
-          `).join('')}
+            `;
+          }).join('')}
       </div>
     ` : '<div class="empty-state" style="padding: 30px 20px;"><div class="empty-state-icon">💬</div>Пока нет комментариев и событий.<br><span class="text-sm">Добавьте первую запись или запланируйте событие.</span></div>'}
   `;
 }
+function bindClientFlags(c) {
+  // Чекбоксы параметров работы — ручной override (manual-поля приоритетнее 1С)
+  document.querySelectorAll('[data-flag-cb]').forEach(cb => {
+    cb.onchange = (e) => {
+      const key = cb.dataset.flagCb;
+      c[key + 'Manual'] = cb.checked;
+      persist();
+      // Перерисуем только блок флагов (через перерисовку Overview)
+      const body = document.getElementById('cm-body');
+      if (body) {
+        const sgInfo = computeAutoStage(c);
+        const catInfo = computeAutoCategory(c);
+        body.innerHTML = renderClientOverview(c, sgInfo, catInfo, uniqueManagers(), uniqueActivities());
+        bindEmbeddedTimeline(c);
+        bindClientFiles(c);
+        bindClientFlags(c);
+      }
+    };
+  });
+  // Кнопки «×» — сброс к 1С
+  document.querySelectorAll('[data-flag-reset]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = btn.dataset.flagReset;
+      delete c[key + 'Manual'];
+      persist();
+      const body = document.getElementById('cm-body');
+      if (body) {
+        const sgInfo = computeAutoStage(c);
+        const catInfo = computeAutoCategory(c);
+        body.innerHTML = renderClientOverview(c, sgInfo, catInfo, uniqueManagers(), uniqueActivities());
+        bindEmbeddedTimeline(c);
+        bindClientFiles(c);
+        bindClientFlags(c);
+      }
+    };
+  });
+}
+
 function bindEmbeddedTimeline(c) {
   const wrap = document.getElementById('cm-activity');
   if (!wrap) return;
   wrap.innerHTML = renderEmbeddedTimeline(c);
-  wrap.querySelectorAll('[data-tl-done]').forEach(b => b.onclick = (e) => {
-    e.stopPropagation();
-    const ev = state.events.find(x => x.id === b.dataset.tlDone);
-    if (ev) { ev.completed = true; persist(); bindEmbeddedTimeline(c); renderNav(); }
+  // Кнопка «Готово» — двушаговое подтверждение (как в дашборде «Что сделать»)
+  wrap.querySelectorAll('[data-tl-done]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const evId = btn.dataset.tlDone;
+      if (btn.dataset.confirm === '1') {
+        // Второй клик — подтверждаем, реально завершаем
+        const ev = state.events.find(x => x.id === evId);
+        if (ev) {
+          ev.completed = true;
+          ev.completedAt = new Date().toISOString();
+          persist();
+          bindEmbeddedTimeline(c);
+          renderNav();
+        }
+        return;
+      }
+      // Первый клик — морфим в «✓ Подтвердить» + появляется «✕»
+      btn.dataset.confirm = '1';
+      btn.innerHTML = '✓ Подтвердить';
+      btn.style.background = 'var(--success)';
+      btn.style.color = 'white';
+      btn.style.borderColor = 'var(--success)';
+      const cancel = document.createElement('button');
+      cancel.className = 'btn btn-sm';
+      cancel.innerHTML = '✕';
+      cancel.title = 'Отменить';
+      cancel.style.cssText = 'margin-left:4px; padding:4px 8px; background:#F3F4F6; color:#374151; border:1px solid var(--border); font-size:12px;';
+      cancel.addEventListener('click', (cev) => {
+        cev.stopPropagation();
+        cancel.remove();
+        delete btn.dataset.confirm;
+        btn.innerHTML = 'Готово';
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+      });
+      btn.parentElement.appendChild(cancel);
+      // Авто-сброс через 5 сек
+      setTimeout(() => {
+        if (btn.dataset.confirm === '1' && document.body.contains(cancel)) cancel.click();
+      }, 5000);
+    });
   });
   document.getElementById('tl-add').onclick = () => {
     const text = document.getElementById('tl-text').value.trim();
