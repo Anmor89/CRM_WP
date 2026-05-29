@@ -1660,7 +1660,7 @@ function renderDashboard() {
     if (load < 80) return null;
     const overdueAmt = c.overdue || 0;
     return { client: c, limit, debt, load, overdueAmt };
-  }).filter(x => x).sort((a,b) => b.load - a.load).slice(0, 5);
+  }).filter(x => x).sort((a,b) => b.load - a.load);
 
   // 📞 ПДЗ — позвонить по оплате: клиенты с просрочкой, отсортированы по сумме просроченного
   // Для каждого — максимальная корзина aging с деньгами (показывает «возраст» долга)
@@ -1686,7 +1686,7 @@ function renderDashboard() {
       }
     }
     return { client: c, overdueAmt: od, debt, worst };
-  }).filter(x => x).sort((a,b) => b.overdueAmt - a.overdueAmt).slice(0, 8);
+  }).filter(x => x).sort((a,b) => b.overdueAmt - a.overdueAmt);
 
   // 📉 ОСТЫВАЮЩИЕ: покупал в прошлом ИЛИ позапрошлом месяце, но НЕ покупает в текущем
   const _now = new Date();
@@ -1707,7 +1707,7 @@ function renderDashboard() {
       return { client: c, lastDate: sales.last_date, lastAmt, prevAmt, prev2Amt, total: sales.total || 0 };
     }
     return null;
-  }).filter(x => x).sort((a,b) => b.lastAmt - a.lastAmt).slice(0, 5);
+  }).filter(x => x).sort((a,b) => b.lastAmt - a.lastAmt);
 
   // "My Day" — events split into 4 baskets: overdue, today, tomorrow, week
   const _todayStart = new Date(new Date().toDateString());
@@ -1774,52 +1774,92 @@ function renderDashboard() {
     ` : ''}
 
     ${(w.myday !== false) ? `
-    <div class="grid grid-2 mb-4" style="grid-template-columns: 1.6fr 1fr; align-items: stretch;">
-      <div class="card" style="border-left:4px solid ${overdueCnt ? 'var(--danger)' : (todayCnt ? 'var(--wp-yellow)' : 'var(--success)')};">
-        <div class="card-header" style="padding-bottom: 8px;">
+    <div class="grid mb-4" style="display:grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 16px; align-items: stretch;">
+      <!-- 1) Что сделать -->
+      <div class="card" style="border-left:4px solid ${overdueCnt ? 'var(--danger)' : (todayCnt ? 'var(--wp-yellow)' : 'var(--success)')}; display:flex; flex-direction:column; min-height:340px;">
+        <div class="card-header" style="padding-bottom: 8px; flex-wrap:wrap;">
           <div style="display:flex; align-items:center; gap:10px; flex:1; flex-wrap:wrap;">
             <div class="card-title">📋 Что сделать</div>
-            <div class="myday-tabs" role="tablist">
-              <button class="myday-tab ${myDayTab==='overdue'?'active':''} ${overdueCnt?'myday-tab-danger':''}" data-myday-tab="overdue" ${!overdueCnt?'disabled':''}>⚠️ Просрочено${overdueCnt?` <span class="myday-tab-count">${overdueCnt}</span>`:''}</button>
-              <button class="myday-tab ${myDayTab==='today'?'active':''}" data-myday-tab="today">Сегодня${evToday.length?` <span class="myday-tab-count">${evToday.length}</span>`:''}</button>
-              <button class="myday-tab ${myDayTab==='tomorrow'?'active':''}" data-myday-tab="tomorrow">Завтра${evTomorrow.length?` <span class="myday-tab-count">${evTomorrow.length}</span>`:''}</button>
-              <button class="myday-tab ${myDayTab==='week'?'active':''}" data-myday-tab="week">На неделе${evWeek.length?` <span class="myday-tab-count">${evWeek.length}</span>`:''}</button>
-            </div>
           </div>
-          <button class="btn btn-sm" id="dash-plan-event" style="background:var(--wp-yellow); color:#5C4914; font-weight:600; border:none;">+ Запланировать</button>
+          <button class="btn btn-sm" id="dash-plan-event" style="background:var(--wp-yellow); color:#5C4914; font-weight:600; border:none; padding:4px 10px;">+ Запланировать</button>
         </div>
-        <div>
-          ${tabListAll.length ? tabList.map(renderTaskRow).join('') : `
+        <div class="myday-tabs" role="tablist" style="padding:0 14px 8px; display:flex; flex-wrap:wrap; gap:4px;">
+          <button class="myday-tab ${myDayTab==='overdue'?'active':''} ${overdueCnt?'myday-tab-danger':''}" data-myday-tab="overdue" ${!overdueCnt?'disabled':''}>⚠️ Просрочено${overdueCnt?` <span class="myday-tab-count">${overdueCnt}</span>`:''}</button>
+          <button class="myday-tab ${myDayTab==='today'?'active':''}" data-myday-tab="today">Сегодня${evToday.length?` <span class="myday-tab-count">${evToday.length}</span>`:''}</button>
+          <button class="myday-tab ${myDayTab==='tomorrow'?'active':''}" data-myday-tab="tomorrow">Завтра${evTomorrow.length?` <span class="myday-tab-count">${evTomorrow.length}</span>`:''}</button>
+          <button class="myday-tab ${myDayTab==='week'?'active':''}" data-myday-tab="week">Неделя${evWeek.length?` <span class="myday-tab-count">${evWeek.length}</span>`:''}</button>
+        </div>
+        <div style="flex:1; overflow-y:auto; max-height:280px;">
+          ${tabListAll.length ? tabListAll.map(renderTaskRow).join('') : `
             <div class="empty-state" style="padding:18px;">
               <div class="empty-state-icon" style="font-size:28px;">${myDayTab==='overdue'?'✨':myDayTab==='today'?'🎉':'📭'}</div>
-              <div class="fw-600">${myDayTab==='overdue'?'Просроченных задач нет':myDayTab==='today'?'Дел на сегодня нет':myDayTab==='tomorrow'?'На завтра ничего не запланировано':'На неделе пусто'}</div>
-              <div class="text-sm text-muted">${myDayTab==='overdue'?'Отлично, всё под контролем!':'Запланируйте звонок или встречу — откройте клиента и добавьте событие'}</div>
+              <div class="fw-600">${myDayTab==='overdue'?'Просроченных нет':myDayTab==='today'?'Дел на сегодня нет':myDayTab==='tomorrow'?'На завтра пусто':'На неделе пусто'}</div>
             </div>
           `}
-          ${tabListAll.length > myDayDefaultLimit ? `<div style="padding:10px 16px; text-align:center; border-top:1px solid var(--border);">${myDayExpanded ? `<a class="btn btn-ghost btn-sm" id="dash-myday-collapse">Свернуть ↑</a>` : `<a class="btn btn-ghost btn-sm" id="dash-myday-expand">Показать ещё ${tabListAll.length - myDayDefaultLimit} ↓</a>`}</div>` : ''}
         </div>
       </div>
 
-      <!-- Без отгрузок в этом месяце — раньше «Остывающие». Покупал в пред/позапр. мес, в текущем — 0 -->
-      <div class="card" style="border-left:4px solid ${coolingDown.length ? '#F59E0B' : 'var(--success)'};">
+      <!-- 2) Без отгрузок в этом месяце -->
+      <div class="card" style="border-left:4px solid ${coolingDown.length ? '#F59E0B' : 'var(--success)'}; display:flex; flex-direction:column; min-height:340px;">
         <div class="card-header" style="padding-bottom: 6px;">
-          <div class="card-title">📭 Без отгрузок в этом мес</div>
+          <div class="card-title">📭 Без отгрузок в этом месяце <span class="chip chip-default" style="margin-left:6px;">${coolingDown.length}</span></div>
           <span class="text-sm text-muted">покупал в пред. — пора связаться</span>
         </div>
-        ${coolingDown.length ? coolingDown.map(a => {
-          const lastMonth = a.prevAmt > 0 ? 'в прошлом мес' : 'в позапр. мес';
-          return `<div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
-            <div style="flex:1; min-width:0;">
-              <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
-              <div class="text-sm text-muted">${fmt.num(a.lastAmt)} ${lastMonth} · в этом — 0</div>
+        <div style="flex:1; overflow-y:auto; max-height:330px;">
+          ${coolingDown.length ? coolingDown.map(a => {
+            const lastMonth = a.prevAmt > 0 ? 'в прошлом мес' : 'в позапр. мес';
+            return `<div class="card-row" data-cid="${a.client.id}" data-open-tab="sales" style="cursor:pointer; padding:8px 14px;">
+              <div style="flex:1; min-width:0;">
+                <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
+                <div class="text-sm text-muted">${fmt.num(a.lastAmt)} ${lastMonth} · в этом — 0</div>
+              </div>
+              <span class="chip chip-default" style="flex-shrink:0; font-size:11px;">${fmt.num(a.total)}</span>
+            </div>`;
+          }).join('') : `
+            <div class="empty-state" style="padding:18px;">
+              <div class="empty-state-icon" style="font-size:28px;">✨</div>
+              <div class="fw-600">Все активны</div>
+              <div class="text-sm text-muted">Все клиенты с заказами в прошлом купили и в этом</div>
             </div>
-            <span class="chip chip-default" style="flex-shrink:0;">всего ${fmt.num(a.total)}</span>
-          </div>`;
-        }).join('') : `
-          <div class="empty-state" style="padding:18px;">
-            <div class="empty-state-icon" style="font-size:28px;">✨</div>
-            <div class="fw-600">Все активны</div>
-            <div class="text-sm text-muted">Все клиенты с заказами в прошлом месяце купили и в этом</div>
+          `}
+        </div>
+      </div>
+
+      <!-- 3) ПДЗ — позвонить по оплате -->
+      <div class="card" style="border-left:4px solid ${overdueCallList.length ? 'var(--danger)' : 'var(--success)'}; display:flex; flex-direction:column; min-height:340px;">
+        <div class="card-header" style="padding-bottom: 6px;">
+          <div class="card-title">📞 ПДЗ — позвонить <span class="chip chip-danger" style="margin-left:6px;">${overdueCallList.length}</span></div>
+          ${overdueCallList.length ? `<button class="btn btn-ghost btn-sm" id="dash-go-pdz" style="padding:2px 8px; font-size:11px;">Все в Аналитике →</button>` : ''}
+        </div>
+        ${overdueCallList.length ? `
+          <div style="flex:1; overflow-y:auto; max-height:330px;">
+            <table class="data" style="font-size:12px;">
+              <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);">
+                <tr>
+                  <th style="padding:6px 10px;">Клиент</th>
+                  <th class="num" style="padding:6px 10px;">Просрочено</th>
+                  <th class="num" style="padding:6px 10px;">Долг</th>
+                  <th style="padding:6px 10px;">Возраст</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${overdueCallList.map(o => {
+                  const worst = o.worst;
+                  return `<tr data-cid="${o.client.id}" style="cursor:pointer;">
+                    <td class="fw-600" style="padding:6px 10px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(o.client.name)}</td>
+                    <td class="num" style="padding:6px 10px; color:var(--danger); font-weight:700;">${fmt.num(o.overdueAmt)}</td>
+                    <td class="num" style="padding:6px 10px;">${fmt.num(o.debt)}</td>
+                    <td style="padding:6px 10px;">${worst ? `<span class="chip" style="background:${worst.color}; color:white; font-weight:600; font-size:10px; padding:2px 6px;">${worst.label}</span>` : '<span class="text-muted">—</span>'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : `
+          <div class="empty-state" style="padding:24px; flex:1; display:flex; flex-direction:column; justify-content:center;">
+            <div class="empty-state-icon" style="font-size:32px;">🎉</div>
+            <div class="fw-700" style="color:var(--success); font-size:15px;">Все платят вовремя</div>
+            <div class="text-sm text-muted">Нет клиентов с просроченным долгом</div>
           </div>
         `}
       </div>
@@ -1827,8 +1867,8 @@ function renderDashboard() {
     ` : ''}
 
     ${(w.funnel !== false) ? `
-    <div class="grid grid-2 mb-4" style="grid-template-columns: 1.6fr 1fr; align-items: stretch;">
-      <div class="card">
+    <div class="grid grid-2 mb-4" style="grid-template-columns: 1.4fr 1fr; align-items: stretch;">
+      <div class="card" style="display:flex; flex-direction:column;">
         <div class="card-header">
           <div class="card-title">Воронка по клиентам</div>
           <a class="btn btn-ghost btn-sm" id="dash-go-funnel">Открыть воронку →</a>
@@ -1876,82 +1916,42 @@ function renderDashboard() {
       </div>
 
       <!-- Высокая загрузка лимита — долг ≥ 80% от кредитного лимита -->
-      <div class="card" style="border-left:4px solid ${limitAlerts.length ? '#DC2626' : 'var(--success)'};">
+      <div class="card" style="border-left:4px solid ${limitAlerts.length ? '#DC2626' : 'var(--success)'}; display:flex; flex-direction:column;">
         <div class="card-header" style="padding-bottom: 6px;">
-          <div class="card-title">💳 Высокая загрузка лимита</div>
+          <div class="card-title">💳 Высокая загрузка лимита <span class="chip chip-default" style="margin-left:6px;">${limitAlerts.length}</span></div>
           <span class="text-sm text-muted">долг ≥ 80% от лимита</span>
         </div>
-        ${limitAlerts.length ? limitAlerts.map(a => `
-          <div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
-            <div style="flex:1; min-width:0;">
-              <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
-              <div class="text-sm text-muted">
-                ${fmt.rub(a.debt)} / ${fmt.rub(a.limit)}
-                ${a.overdueAmt > 0 ? `· <span style="color:var(--danger); font-weight:600;">⚠ ${fmt.rub(a.overdueAmt)} просрочено</span>` : '· <span style="color:var(--success);">✓ без просрочки</span>'}
+        <div style="flex:1; overflow-y:auto; max-height:330px;">
+          ${limitAlerts.length ? limitAlerts.map(a => `
+            <div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
+              <div style="flex:1; min-width:0;">
+                <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
+                <div class="text-sm text-muted">
+                  ${fmt.num(a.debt)} / ${fmt.num(a.limit)}
+                  ${a.overdueAmt > 0 ? `· <span style="color:var(--danger); font-weight:600;">⚠ ${fmt.num(a.overdueAmt)} просрочено</span>` : '· <span style="color:var(--success);">✓ без просрочки</span>'}
+                </div>
               </div>
+              <span class="chip" style="background:${a.load >= 100 ? '#FEE2E2' : '#FEF3C7'}; color:${a.load >= 100 ? '#991B1B' : '#92400E'}; font-weight:700; flex-shrink:0;">${a.load}%</span>
             </div>
-            <span class="chip" style="background:${a.load >= 100 ? '#FEE2E2' : '#FEF3C7'}; color:${a.load >= 100 ? '#991B1B' : '#92400E'}; font-weight:700; flex-shrink:0;">${a.load}%</span>
-          </div>
-        `).join('') : `
-          <div class="empty-state" style="padding:18px;">
-            <div class="empty-state-icon" style="font-size:28px;">✨</div>
-            <div class="fw-600">Лимиты в норме</div>
-            <div class="text-sm text-muted">Нет клиентов с загрузкой ≥ 80%</div>
-          </div>
-        `}
+          `).join('') : `
+            <div class="empty-state" style="padding:18px;">
+              <div class="empty-state-icon" style="font-size:28px;">✨</div>
+              <div class="fw-600">Лимиты в норме</div>
+              <div class="text-sm text-muted">Нет клиентов с загрузкой ≥ 80%</div>
+            </div>
+          `}
+        </div>
       </div>
     </div>
     ` : ''}
-
-    <!-- 📞 ПДЗ — позвонить по оплате (топ должников по сумме просрочки) -->
-    <div class="card mb-4" style="border-left:4px solid ${overdueCallList.length ? 'var(--danger)' : 'var(--success)'};">
-      <div class="card-header">
-        <div class="card-title">📞 ПДЗ — позвонить по оплате</div>
-        <div style="display:flex; gap:10px; align-items:center;">
-          <span class="text-sm text-muted">${overdueCallList.length ? 'топ ' + overdueCallList.length + ' по просрочке' : 'просрочек нет'}</span>
-          ${overdueCallList.length ? `<button class="btn btn-ghost btn-sm" id="dash-go-pdz">Все ПДЗ в Аналитике →</button>` : ''}
-        </div>
-      </div>
-      ${overdueCallList.length ? `
-        <table class="data" style="font-size:13px;">
-          <thead><tr>
-            <th>Клиент</th>
-            <th>Менеджер</th>
-            <th class="num">Просрочено</th>
-            <th class="num">Общий долг</th>
-            <th class="num">% от долга</th>
-            <th>Возраст</th>
-          </tr></thead>
-          <tbody>
-            ${overdueCallList.map(o => {
-              const pctOfDebt = o.debt > 0 ? Math.round(o.overdueAmt / o.debt * 100) : 0;
-              const worst = o.worst;
-              return `<tr data-cid="${o.client.id}" style="cursor:pointer;">
-                <td class="fw-600">${escapeHtml(o.client.name)}</td>
-                <td>${escapeHtml(o.client.manager || '—')}</td>
-                <td class="num" style="color:var(--danger); font-weight:700;">${fmt.num(o.overdueAmt)}</td>
-                <td class="num">${fmt.num(o.debt)}</td>
-                <td class="num"><span style="color:${pctOfDebt >= 80 ? 'var(--danger)' : pctOfDebt >= 50 ? '#D97706' : 'var(--text)'}; font-weight:600;">${pctOfDebt}%</span></td>
-                <td>${worst ? `<span class="chip" style="background:${worst.color}; color:white; font-weight:600;">${worst.label}</span>` : '<span class="text-muted">—</span>'}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      ` : `
-        <div class="empty-state" style="padding:24px;">
-          <div class="empty-state-icon" style="font-size:32px;">🎉</div>
-          <div class="fw-700" style="color:var(--success); font-size:15px;">Все платят вовремя</div>
-          <div class="text-sm text-muted">Нет клиентов с просроченным долгом</div>
-        </div>
-      `}
-    </div>
   `;
 }
 
 function afterDashboard() {
   // Open client when clicking on rows that have a client id (events, recent, top)
+  // data-open-tab опционально задаёт активную вкладку (например 'sales' для блока «Без отгрузок»)
   document.querySelectorAll('[data-cid]').forEach(el => {
-    el.addEventListener('click', () => openClientModal(el.dataset.cid));
+    el.addEventListener('click', () => openClientModal(el.dataset.cid, el.dataset.openTab || null));
   });
   // "Готово" button: first click — enter confirm mode (✓ Подтвердить + ✕ Отмена); second — actually complete
   document.querySelectorAll('[data-todo-done]').forEach(btn => {
@@ -1999,13 +1999,6 @@ function afterDashboard() {
       state.myDayExpanded = false; // reset expand when switching tabs
       renderView();
     });
-  });
-  // Inline expand / collapse of My Day
-  document.getElementById('dash-myday-expand')?.addEventListener('click', () => {
-    state.myDayExpanded = true; renderView();
-  });
-  document.getElementById('dash-myday-collapse')?.addEventListener('click', () => {
-    state.myDayExpanded = false; renderView();
   });
   document.getElementById('dash-go-funnel')?.addEventListener('click', () => setView('funnel'));
   document.getElementById('dash-go-pdz')?.addEventListener('click', () => { state._analyticsTab = 'pdz'; setView('analytics'); });
