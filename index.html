@@ -11,6 +11,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Leaflet: карта для раздела «Полевые продажи» (требует интернет; на file:// карта будет пустой) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -964,6 +967,9 @@ const DEFAULT_USERS = [
   { username: 'buharova', password: 'wp9456', name: 'Мария Бухарова',          role: 'manager', manager: 'Бухарова Мария Александровна',     active: true  },
   { username: 'dvoirin',  password: 'wp2567', name: 'Борис Двойрин',           role: 'manager', manager: 'Двойрин Борис',                    active: true  },
   { username: 'glavbuh',  password: 'wp3678', name: 'Главбух',                 role: 'manager', manager: 'Главбух',                          active: true  },
+  // Торговые представители (роль 'rep' — видят только «Полевые продажи» и свои записи)
+  { username: 'terebenin', password: 'tp1234', name: 'Теребенин',                role: 'rep',     manager: null, rep_name: 'Теребенин',         active: true  },
+  { username: 'bulatov',   password: 'tp2345', name: 'Булатов',                  role: 'rep',     manager: null, rep_name: 'Булатов',           active: true  },
 ];
 
 // =================== STATE ===================
@@ -1426,11 +1432,14 @@ function orderedNav() {
 }
 function renderNav() {
   const isAdmin = state.user && state.user.role === 'admin';
+  const isRep = state.user && state.user.role === 'rep';
   const list = document.getElementById('nav-list');
   let html = '<div class="nav-section">Главное</div>';
   const hidden = (state.settings && state.settings.hiddenViews) || [];
   orderedNav().forEach(item => {
     if (hidden.includes(item.id)) return;
+    // ТП видит ТОЛЬКО «Полевые продажи»
+    if (isRep && item.id !== 'fieldsales') return;
     let badge = '';
     if (item.id === 'clients') badge = `<span class="nav-badge">${visibleClients().length}</span>`;
     if (item.id === 'funnel') {
@@ -1457,6 +1466,8 @@ function renderNav() {
 }
 
 function setView(v) {
+  // ТП не пускаем никуда кроме «Полевые продажи»
+  if (state.user && state.user.role === 'rep' && v !== 'fieldsales') v = 'fieldsales';
   state.currentView = v;
   renderNav();
   document.getElementById('view-title').textContent =
@@ -1467,7 +1478,14 @@ function setView(v) {
 function renderApp() {
   document.getElementById('user-avatar').textContent = fmt.initials(state.user.name);
   document.getElementById('user-name').textContent = state.user.name;
-  document.getElementById('user-role').textContent = state.user.role === 'admin' ? 'Администратор' : 'Менеджер';
+  document.getElementById('user-role').textContent =
+    state.user.role === 'admin' ? 'Администратор'
+    : state.user.role === 'rep' ? 'Торговый представитель'
+    : 'Менеджер';
+  // ТП всегда стартует с «Полевые продажи» (других разделов он не видит)
+  if (state.user.role === 'rep' && state.currentView !== 'fieldsales') {
+    state.currentView = 'fieldsales';
+  }
   renderNav();
   renderView();
 }
@@ -7426,25 +7444,61 @@ document.addEventListener('keydown', (e) => {
 
 
 // =================== FIELD SALES (ТП) ===================
+// Раздел «Полевые продажи»: инструмент торговых представителей.
+// 4 вкладки: Мой день, План посещений (неделя), База ТП, Отчёт + 5-я Карта.
+// Карточка ТП-клиента построена по xlsx-шаблону «ТП отчетность»:
+// идентификация → контакты → профиль → портрет (для СТО/АТП) → решение.
+// Фото визита (сжимаются клиентом до 800px). Передача менеджеру по кнопке.
+// Роль 'rep' видит только этот раздел и только своих клиентов.
+
+// Статусы работы из xlsx + добавили «Свежий» (по умолчанию) и «Передан»
 const TP_STATUS_META = {
-  'Договор':       { cls: 'tps-green',  label: 'Договор' },
-  'В работе':      { cls: 'tps-blue',   label: 'В работе' },
-  'Переговоры':    { cls: 'tps-amber',  label: 'Переговоры' },
-  'В перспективе': { cls: 'tps-indigo', label: 'В перспективе' },
-  'Сложно':        { cls: 'tps-orange', label: 'Сложно' },
-  'Не интересен':  { cls: 'tps-gray',   label: 'Не интересен' },
+  'Свежий':        { cls: 'tps-gray',   label: '🟢 Свежий контакт' },
+  'Переговоры':    { cls: 'tps-amber',  label: '🟡 Переговоры' },
+  'В работе':      { cls: 'tps-blue',   label: '🔵 В работе' },
+  'Работаем':      { cls: 'tps-green',  label: '✅ Работаем' },
+  'В перспективе': { cls: 'tps-indigo', label: '🔮 В перспективе' },
+  'Сложно':        { cls: 'tps-orange', label: '⚠ Сложно' },
+  'Не интересен':  { cls: 'tps-gray',   label: '❌ Не интересен' },
+  'Передан':       { cls: 'tps-green',  label: '📤 Передан менеджеру' },
 };
 function tpStatusChip(status) {
   const m = TP_STATUS_META[status] || { cls: 'tps-gray', label: status || '—' };
   return `<span class="tp-status ${m.cls}">${escapeHtml(m.label)}</span>`;
 }
+
+// Роль 'rep' — торговый представитель видит ТОЛЬКО раздел «Полевые продажи»
+// и работает только со своими записями (rep === state.user.rep_name).
+function tpIsRep() { return state.user && state.user.role === 'rep'; }
+function tpCurrentRepName() {
+  // У rep в state.user.rep_name хранится имя для сопоставления с tpClients[].rep
+  return (state.user && (state.user.rep_name || state.user.name)) || '';
+}
+function tpVisibleClients() {
+  if (tpIsRep()) {
+    const my = tpCurrentRepName();
+    return state.tpClients.filter(c => c.rep === my);
+  }
+  return state.tpClients;
+}
+function tpVisibleVisits() {
+  if (tpIsRep()) {
+    const my = tpCurrentRepName();
+    return state.tpVisits.filter(v => v.rep === my);
+  }
+  return state.tpVisits;
+}
 function tpUniqueReps() {
-  return [...new Set(state.tpClients.map(c => c.rep).filter(Boolean))].sort();
+  // ТП = все из tpClients + явно назначенные через users (rep_name)
+  const s = new Set(state.tpClients.map(c => c.rep).filter(Boolean));
+  state.users.forEach(u => { if (u.role === 'rep' && (u.rep_name || u.name)) s.add(u.rep_name || u.name); });
+  return [...s].sort();
 }
-function tpUniqueCities() {
-  return [...new Set(state.tpClients.map(c => c.city).filter(Boolean))].sort();
-}
-// Cross-link: find a main-base client with the same INN
+function tpUniqueCities() { return [...new Set(state.tpClients.map(c => c.city).filter(Boolean))].sort(); }
+function tpUniqueZones() { return [...new Set(state.tpClients.map(c => c.zone).filter(Boolean))].sort(); }
+function tpUniqueTypes() { return [...new Set(state.tpClients.map(c => c.type).filter(Boolean))].sort(); }
+
+// Поиск клиента основной CRM-базы по ИНН (для связи)
 function tpMainMatch(tpc) {
   if (!tpc.inn) return null;
   const inn = String(tpc.inn).replace(/\D/g, '');
@@ -7452,13 +7506,139 @@ function tpMainMatch(tpc) {
   return state.clients.find(c => c.inn && String(c.inn).replace(/\D/g, '') === inn) || null;
 }
 
-let _tpTab = 'base';
+// Маппинг типа ТП-клиента → виду деятельности основной CRM
+const TP_TYPE_TO_ACTIVITY = {
+  'СТО': 'СТО', 'АТП': 'АТП', 'Магазин': 'Розничный магазин',
+  'Интернет магазин': 'Интернет магазин', 'Опт': 'ОПТ', 'Оптовик': 'ОПТ'
+};
+
+// Текущий ISO-неделя (ГГГГ-Нед)
+function tpWeekStart(d) {
+  const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = dt.getDay(); // 0=Вс
+  const diff = day === 0 ? -6 : 1 - day; // понедельник как старт
+  dt.setDate(dt.getDate() + diff);
+  return dt;
+}
+function tpFmtWeekRange(monday) {
+  const sunday = new Date(monday.getTime() + 6 * 86400000);
+  const f = (d) => d.toLocaleDateString('ru-RU', { day:'2-digit', month:'short' });
+  return `${f(monday)} – ${f(sunday)}`;
+}
+
+// === Фильтры ===
+const _tpFilters = { rep: 'all', city: 'all', zone: 'all', type: 'all', status: 'all', q: '' };
+function tpFilteredClients() {
+  let list = tpVisibleClients();
+  const f = _tpFilters;
+  if (f.rep !== 'all' && !tpIsRep()) list = list.filter(c => c.rep === f.rep);
+  if (f.city !== 'all') list = list.filter(c => c.city === f.city);
+  if (f.zone !== 'all') list = list.filter(c => c.zone === f.zone);
+  if (f.type !== 'all') list = list.filter(c => c.type === f.type);
+  if (f.status !== 'all') list = list.filter(c => c.work_status === f.status);
+  if (f.q) {
+    const q = f.q.toLowerCase();
+    list = list.filter(c => (c.name||'').toLowerCase().includes(q) || (c.address||'').toLowerCase().includes(q) || (c.contact_name||'').toLowerCase().includes(q));
+  }
+  return list;
+}
+
+// === Сжатие фото (canvas) ===
+async function tpCompressPhoto(file, maxSize = 1000, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const ratio = Math.min(maxSize / Math.max(w, h), 1);
+      w = Math.round(w * ratio); h = Math.round(h * ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// === Передача менеджеру ===
+// Создаёт/обновляет клиента в основной базе и ставит задачу менеджеру.
+function tpHandover(tpClient, managerName) {
+  if (!managerName) { alert('Выберите менеджера'); return false; }
+  // 1) Найти / создать клиента в основной базе
+  let mc = tpMainMatch(tpClient);
+  if (!mc) {
+    mc = {
+      id: 'c_tp_' + uid(),
+      name: tpClient.name || '',
+      inn: tpClient.inn || '',
+      manager: managerName,
+      activity: TP_TYPE_TO_ACTIVITY[tpClient.type] || tpClient.type || '',
+      address: tpClient.address || '',
+      city: tpClient.city || '',
+      contact_name: tpClient.contact_name || '',
+      phone: tpClient.phone || '',
+      email: tpClient.email || '',
+      comment: (tpClient.comment || '') + (tpClient.fleet ? '\n\nПарк / СТО: ' + tpClient.fleet : ''),
+      reg_date: new Date().toISOString().slice(0, 10),
+      revenue: 0, debt: 0, overdue: 0, months: {},
+      stages_flags: [false, false, false, false, false, false],
+      contract_signed: false,
+      stageManual: 'contact',
+      from_tp_id: tpClient.id,
+    };
+    state.clients.push(mc);
+  } else {
+    // существующий — только дополняем то, что не заполнено
+    mc.manager = managerName;
+    if (!mc.contact_name && tpClient.contact_name) mc.contact_name = tpClient.contact_name;
+    if (!mc.phone && tpClient.phone) mc.phone = tpClient.phone;
+    if (!mc.email && tpClient.email) mc.email = tpClient.email;
+    if (!mc.address && tpClient.address) mc.address = tpClient.address;
+    if (!mc.city && tpClient.city) mc.city = tpClient.city;
+    mc.from_tp_id = tpClient.id;
+  }
+  // 2) Событие-задача для менеджера
+  const eventTitle = `🟡 Новый лид от ТП (${tpClient.rep || '—'}): ${tpClient.name}`;
+  const eventBody = [
+    tpClient.contact_name ? `Контакт: ${tpClient.contact_name}` : '',
+    tpClient.phone ? `Телефон: ${tpClient.phone}` : '',
+    tpClient.work_terms ? `Условия: ${tpClient.work_terms}${tpClient.deferral_days ? ' (' + tpClient.deferral_days + ' дн отсрочки)' : ''}` : '',
+    tpClient.comment ? `\n${tpClient.comment}` : ''
+  ].filter(Boolean).join('\n');
+  state.events.push({
+    id: uid(), clientId: mc.id, kind: 'followup',
+    date: new Date().toISOString(),
+    title: eventTitle,
+    description: eventBody,
+    author: tpClient.rep || 'ТП',
+    completed: false,
+    from_tp: true,
+  });
+  // 3) Отметить tpClient
+  tpClient.passed_at = new Date().toISOString();
+  tpClient.passed_to_manager = managerName;
+  tpClient.linked_client_id = mc.id;
+  tpClient.work_status = 'Передан';
+  persist();
+  return mc;
+}
+
+// === Render: главный экран раздела ===
+let _tpTab = 'today';
 function renderFieldSales() {
+  // ТП по умолчанию открывает «Мой день», у админа можно начать с базы
+  if (!_tpTab) _tpTab = tpIsRep() ? 'today' : 'today';
   return `
     <div class="page-tabs">
-      <button class="page-tab ${_tpTab==='base'?'active':''}" data-tptab="base">📇 База ТП</button>
-      <button class="page-tab ${_tpTab==='visits'?'active':''}" data-tptab="visits">🗺 Визиты</button>
-      <button class="page-tab ${_tpTab==='svod'?'active':''}" data-tptab="svod">📊 Свод</button>
+      <button class="page-tab ${_tpTab==='today'?'active':''}" data-tptab="today">🔨 Мой день</button>
+      <button class="page-tab ${_tpTab==='plan'?'active':''}" data-tptab="plan">📅 План посещений</button>
+      <button class="page-tab ${_tpTab==='base'?'active':''}" data-tptab="base">🏢 База ТП</button>
+      <button class="page-tab ${_tpTab==='map'?'active':''}" data-tptab="map">🗺 Карта</button>
+      ${!tpIsRep() ? `<button class="page-tab ${_tpTab==='report'?'active':''}" data-tptab="report">📊 Отчёт</button>` : ''}
     </div>
     <div id="tp-tab-content"></div>
   `;
@@ -7473,322 +7653,717 @@ function afterFieldSales() {
 }
 function drawTpTab() {
   const wrap = document.getElementById('tp-tab-content');
-  if (_tpTab === 'base') drawTpBase(wrap);
-  else if (_tpTab === 'visits') drawTpVisits(wrap);
-  else drawTpSvod(wrap);
+  if (!wrap) return;
+  if (_tpTab === 'today') return drawTpToday(wrap);
+  if (_tpTab === 'plan') return drawTpPlan(wrap);
+  if (_tpTab === 'base') return drawTpBase(wrap);
+  if (_tpTab === 'map') return drawTpMap(wrap);
+  if (_tpTab === 'report') return drawTpReport(wrap);
+  drawTpToday(wrap);
 }
 
-const _tpFilters = { rep: 'all', city: 'all', type: 'all', status: 'all' };
-function tpFiltered() {
-  return state.tpClients.filter(c => {
-    if (_tpFilters.rep !== 'all' && c.rep !== _tpFilters.rep) return false;
-    if (_tpFilters.city !== 'all' && c.city !== _tpFilters.city) return false;
-    if (_tpFilters.type !== 'all' && c.type !== _tpFilters.type) return false;
-    if (_tpFilters.status !== 'all' && c.work_status !== _tpFilters.status) return false;
-    return true;
-  });
+// === Вкладка «Мой день» ===
+function drawTpToday(wrap) {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayShort = new Date().toLocaleDateString('ru-RU', { weekday:'long', day:'2-digit', month:'long' });
+  const visits = tpVisibleVisits();
+  // Сегодняшние + просроченные открытые визиты
+  const todayVisits = visits.filter(v => v.date === today && !v.completed);
+  const overdueVisits = visits.filter(v => v.date < today && !v.completed);
+  // Последние выполненные — за 7 дней
+  const cutoff = new Date(Date.now() - 7 * 86400000).toISOString().slice(0,10);
+  const recentDone = visits.filter(v => v.completed && (v.completed_at || v.date) >= cutoff)
+    .sort((a,b) => (b.completed_at || b.date).localeCompare(a.completed_at || a.date));
+
+  const myClients = tpVisibleClients();
+  const myToHandover = myClients.filter(c => c.work_status === 'Работаем' && !c.passed_at);
+  const myFresh = myClients.filter(c => c.work_status === 'Свежий' || !c.work_status);
+
+  wrap.innerHTML = `
+    <div class="info-banner" style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; color:#92400E;">
+      📍 ${escapeHtml(todayShort.charAt(0).toUpperCase() + todayShort.slice(1))} · ${tpIsRep() ? `вы вошли как <b>${escapeHtml(tpCurrentRepName())}</b>` : 'просмотр всех ТП'}
+    </div>
+
+    <div class="grid grid-4 mb-4">
+      <div class="kpi"><div class="kpi-accent" style="background:var(--wp-yellow)"></div><div class="kpi-label">📅 Визитов сегодня</div><div class="kpi-value">${todayVisits.length}</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:${overdueVisits.length?'var(--danger)':'var(--text-soft)'}"></div><div class="kpi-label">⚠ Просрочено визитов</div><div class="kpi-value" style="color:${overdueVisits.length?'var(--danger)':'inherit'};">${overdueVisits.length}</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">📤 К передаче</div><div class="kpi-value">${myToHandover.length}</div><div class="kpi-sub">статус «Работаем»</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">🟢 Свежих</div><div class="kpi-value">${myFresh.length}</div><div class="kpi-sub">требуют профиля</div></div>
+    </div>
+
+    <div class="grid grid-2 mb-4">
+      <!-- Сегодня + просроченные -->
+      <div class="card" style="border-left:4px solid var(--wp-yellow);">
+        <div class="card-header" style="padding-bottom:6px;">
+          <div class="card-title">🔨 Сегодня и не выполнено</div>
+          <button class="btn btn-primary btn-sm" id="tp-add-visit-today">+ Визит на сегодня</button>
+        </div>
+        <div style="padding:0 0 8px;">
+          ${[...todayVisits, ...overdueVisits].length ? [...todayVisits, ...overdueVisits].map(v => {
+            const isOverdue = v.date < today;
+            const c = state.tpClients.find(x => x.id === v.clientId);
+            return `<div class="card-row" data-tp-visit-row="${v.id}" style="cursor:pointer; padding:10px 16px; display:flex; gap:10px; align-items:flex-start;">
+              <div style="flex:1; min-width:0;">
+                <div class="fw-600">${escapeHtml(v.client || (c && c.name) || '—')}</div>
+                <div class="text-sm text-muted">${v.address || (c && c.address) || ''}</div>
+                ${isOverdue ? `<span class="chip chip-danger" style="margin-top:4px;">просрочен: ${fmt.date(v.date)}</span>` : `<span class="chip chip-yellow" style="margin-top:4px;">сегодня</span>`}
+              </div>
+              <div style="display:flex; gap:6px; flex-shrink:0;">
+                ${v.phone || (c && c.phone) ? `<a href="tel:${escapeHtml((v.phone||c.phone).replace(/\\s/g,''))}" onclick="event.stopPropagation();" class="btn btn-sm" title="Позвонить">📞</a>` : ''}
+                <button class="btn btn-sm btn-done" data-tp-done-visit="${v.id}" onclick="event.stopPropagation();">✓ Готово</button>
+              </div>
+            </div>`;
+          }).join('') : '<div class="empty-state" style="padding:20px;"><div class="empty-state-icon">✨</div><div class="fw-600">Сегодня визитов нет</div><div class="text-sm text-muted">Запланируйте на «План посещений»</div></div>'}
+        </div>
+      </div>
+
+      <!-- К передаче менеджеру -->
+      <div class="card" style="border-left:4px solid var(--success);">
+        <div class="card-header" style="padding-bottom:6px;">
+          <div class="card-title">📤 Готовы к передаче менеджеру</div>
+          <span class="text-sm text-muted">${myToHandover.length}</span>
+        </div>
+        <div style="padding:0 0 8px;">
+          ${myToHandover.length ? myToHandover.slice(0, 8).map(c => `
+            <div class="card-row" data-tp-client-row="${c.id}" style="cursor:pointer; padding:10px 16px;">
+              <div style="flex:1; min-width:0;">
+                <div class="fw-600">${escapeHtml(c.name)}</div>
+                <div class="text-sm text-muted">${escapeHtml(c.city || '')}${c.address?' · '+escapeHtml(c.address.slice(0,40)):''}</div>
+              </div>
+              ${tpStatusChip(c.work_status)}
+            </div>
+          `).join('') : '<div class="empty-state" style="padding:20px;"><div class="fw-600">Пока нечего передавать</div><div class="text-sm text-muted">Доводите клиентов до статуса «Работаем»</div></div>'}
+        </div>
+      </div>
+    </div>
+
+    ${recentDone.length ? `
+      <div class="card mb-4">
+        <div class="card-header">
+          <div class="card-title">✅ Выполнено за 7 дней</div>
+          <span class="text-sm text-muted">${recentDone.length}</span>
+        </div>
+        <table class="data" style="font-size:13px;">
+          <thead><tr><th>Дата</th><th>Клиент</th><th>Итоги</th><th>План действий</th></tr></thead>
+          <tbody>
+            ${recentDone.slice(0, 20).map(v => `
+              <tr data-tp-visit-row="${v.id}" style="cursor:pointer;">
+                <td>${fmt.date(v.completed_at || v.date)}</td>
+                <td class="fw-600">${escapeHtml(v.client || '—')}</td>
+                <td class="text-sm">${escapeHtml((v.result||'').slice(0,80))}${v.result&&v.result.length>80?'…':''}</td>
+                <td class="text-sm text-muted">${escapeHtml((v.next_plan||'').slice(0,60))}${v.next_plan&&v.next_plan.length>60?'…':''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : ''}
+  `;
+  // Биндинги
+  document.getElementById('tp-add-visit-today')?.addEventListener('click', () => openTpVisitModal(null, today));
+  wrap.querySelectorAll('[data-tp-visit-row]').forEach(el => el.addEventListener('click', () => openTpVisitModal(el.dataset.tpVisitRow)));
+  wrap.querySelectorAll('[data-tp-client-row]').forEach(el => el.addEventListener('click', () => openTpClientModal(el.dataset.tpClientRow)));
+  wrap.querySelectorAll('[data-tp-done-visit]').forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const v = state.tpVisits.find(x => x.id === b.dataset.tpDoneVisit);
+    if (v) {
+      v.completed = true;
+      v.completed_at = new Date().toISOString().slice(0,10);
+      persist();
+      drawTpToday(wrap);
+    }
+  }));
 }
 
+// === Вкладка «План посещений» (неделя) ===
+let _tpPlanWeek = null; // Date понедельника
+function drawTpPlan(wrap) {
+  if (!_tpPlanWeek) _tpPlanWeek = tpWeekStart(new Date());
+  const monday = new Date(_tpPlanWeek);
+  const visits = tpVisibleVisits();
+  const reps = tpUniqueReps();
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday.getTime() + i * 86400000);
+    days.push(d);
+  }
+  const dayKey = (d) => d.toISOString().slice(0,10);
+
+  wrap.innerHTML = `
+    <div class="filter-bar">
+      <button class="btn btn-ghost btn-sm" id="tp-plan-prev">‹ Прошлая</button>
+      <button class="btn btn-ghost btn-sm" id="tp-plan-today">Эта неделя</button>
+      <button class="btn btn-ghost btn-sm" id="tp-plan-next">Следующая ›</button>
+      <span class="text-sm fw-600" style="margin-left:10px;">${tpFmtWeekRange(monday)}</span>
+      ${!tpIsRep() ? `
+        <select id="tp-plan-rep" style="margin-left:10px;">
+          <option value="all">Все ТП</option>
+          ${reps.map(r => `<option ${_tpFilters.rep===r?'selected':''}>${escapeHtml(r)}</option>`).join('')}
+        </select>
+      ` : ''}
+      <div style="margin-left:auto;"><button class="btn btn-primary btn-sm" id="tp-plan-add">+ Запланировать визит</button></div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:10px; margin-top:14px;">
+      ${days.map((d, i) => {
+        const key = dayKey(d);
+        let dayVisits = visits.filter(v => v.date === key);
+        if (!tpIsRep() && _tpFilters.rep !== 'all') dayVisits = dayVisits.filter(v => v.rep === _tpFilters.rep);
+        const isToday = key === new Date().toISOString().slice(0,10);
+        const isPast = key < new Date().toISOString().slice(0,10);
+        const dayName = d.toLocaleDateString('ru-RU', { weekday:'short' });
+        const dateNum = d.getDate();
+        return `<div class="card" style="display:flex; flex-direction:column; min-height:300px; ${isToday?'border:2px solid var(--wp-yellow);':''}">
+          <div style="padding:10px 12px; border-bottom:1px solid var(--border); background:${isToday?'var(--wp-yellow-soft)':isPast?'#FAFAFA':'#fff'}; text-align:center;">
+            <div class="text-sm text-muted" style="text-transform:uppercase;">${escapeHtml(dayName)}</div>
+            <div class="fw-700" style="font-size:18px;">${dateNum}</div>
+            <div class="text-sm text-muted">${dayVisits.length} ${dayVisits.length===1?'визит':'визитов'}</div>
+          </div>
+          <div style="flex:1; padding:6px; display:flex; flex-direction:column; gap:6px; overflow-y:auto; max-height:340px;">
+            ${dayVisits.length ? dayVisits.map(v => {
+              const c = state.tpClients.find(x => x.id === v.clientId);
+              return `<div class="tp-plan-visit ${v.completed?'tp-plan-done':''}" data-tp-visit-row="${v.id}" style="cursor:pointer; padding:6px 8px; background:${v.completed?'#F0FDF4':'#FFFBEB'}; border:1px solid ${v.completed?'#86EFAC':'#FDE68A'}; border-radius:6px; font-size:12px;">
+                <div class="fw-600" style="font-size:13px;">${escapeHtml(v.client || (c && c.name) || '—')}</div>
+                ${!tpIsRep() && v.rep ? `<div class="text-sm" style="color:#6B7280;">👤 ${escapeHtml(v.rep)}</div>` : ''}
+                ${v.address ? `<div class="text-sm text-muted" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(v.address)}</div>` : ''}
+                ${v.completed ? '<span class="chip chip-success" style="font-size:10px;">выполнен</span>' : ''}
+              </div>`;
+            }).join('') : `<div style="flex:1; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:12px;">пусто</div>`}
+            <button class="btn btn-ghost btn-sm" data-tp-plan-add-day="${key}" style="font-size:11px; margin-top:auto;">+ визит</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  document.getElementById('tp-plan-prev')?.addEventListener('click', () => { _tpPlanWeek = new Date(_tpPlanWeek.getTime() - 7 * 86400000); drawTpPlan(wrap); });
+  document.getElementById('tp-plan-next')?.addEventListener('click', () => { _tpPlanWeek = new Date(_tpPlanWeek.getTime() + 7 * 86400000); drawTpPlan(wrap); });
+  document.getElementById('tp-plan-today')?.addEventListener('click', () => { _tpPlanWeek = tpWeekStart(new Date()); drawTpPlan(wrap); });
+  document.getElementById('tp-plan-rep')?.addEventListener('change', (e) => { _tpFilters.rep = e.target.value; drawTpPlan(wrap); });
+  document.getElementById('tp-plan-add')?.addEventListener('click', () => openTpVisitModal(null, dayKey(monday)));
+  wrap.querySelectorAll('[data-tp-plan-add-day]').forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openTpVisitModal(null, b.dataset.tpPlanAddDay);
+  }));
+  wrap.querySelectorAll('[data-tp-visit-row]').forEach(el => el.addEventListener('click', () => openTpVisitModal(el.dataset.tpVisitRow)));
+}
+
+// === Вкладка «База ТП» ===
 function drawTpBase(wrap) {
   const reps = tpUniqueReps();
   const cities = tpUniqueCities();
-  const types = [...new Set(state.tpClients.map(c => c.type).filter(Boolean))].sort();
-  const all = state.tpClients;
-  const dealCount = all.filter(c => c.work_status === 'Договор').length;
-  const handed = all.filter(c => c.handover_mark || c.manager).length;
-  const linked = all.filter(c => tpMainMatch(c)).length;
-  const conv = all.length ? Math.round(dealCount / all.length * 100) : 0;
+  const zones = tpUniqueZones();
+  const types = tpUniqueTypes();
+  const list = tpFilteredClients();
+  const total = tpVisibleClients().length;
 
   wrap.innerHTML = `
-    <div class="grid grid-4 mb-4">
-      <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Клиентов собрано ТП</div><div class="kpi-value">${fmt.int(all.length)}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">Дошли до договора</div><div class="kpi-value">${fmt.int(dealCount)}</div><div class="kpi-sub">конверсия ${conv}%</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Передано менеджерам</div><div class="kpi-value">${fmt.int(handed)}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--wp-yellow)"></div><div class="kpi-label">Связаны с базой по ИНН</div><div class="kpi-value">${fmt.int(linked)}</div><div class="kpi-sub">пересечения с «Клиентами»</div></div>
-    </div>
     <div class="filter-bar">
-      <select id="tpf-rep"><option value="all">Все ТП</option>${reps.map(r=>`<option ${_tpFilters.rep===r?'selected':''}>${escapeHtml(r)}</option>`).join('')}</select>
+      ${!tpIsRep() ? `<select id="tpf-rep"><option value="all">Все ТП</option>${reps.map(r=>`<option ${_tpFilters.rep===r?'selected':''}>${escapeHtml(r)}</option>`).join('')}</select>` : ''}
       <select id="tpf-city"><option value="all">Все города</option>${cities.map(c=>`<option ${_tpFilters.city===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select>
+      <select id="tpf-zone"><option value="all">Все зоны</option>${zones.map(z=>`<option ${_tpFilters.zone===z?'selected':''}>${escapeHtml(z)}</option>`).join('')}</select>
       <select id="tpf-type"><option value="all">Все типы</option>${types.map(t=>`<option ${_tpFilters.type===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}</select>
       <select id="tpf-status"><option value="all">Все статусы</option>${Object.keys(TP_STATUS_META).map(s=>`<option ${_tpFilters.status===s?'selected':''}>${escapeHtml(s)}</option>`).join('')}</select>
+      <input type="search" id="tpf-q" placeholder="🔍 Поиск..." value="${escapeHtml(_tpFilters.q)}" style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; min-width:160px;">
       <button class="btn btn-ghost btn-sm" id="tpf-reset">Сбросить</button>
       <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
-        <span class="text-sm text-muted">Найдено: <b id="tpf-count">—</b></span>
+        <span class="text-sm text-muted">Найдено: <b>${list.length}</b> из ${total}</span>
         <button class="btn btn-primary btn-sm" id="tp-add">+ Клиент ТП</button>
       </div>
     </div>
     <div class="table-wrap">
       <table class="data">
         <thead><tr>
-          <th>Клиент</th><th>Торговый представитель</th><th>Город</th><th>Тип</th>
-          <th>Статус работы</th><th>ИНН</th><th>Связь с CRM</th><th>Передан менеджеру</th>
+          <th>Клиент</th>
+          ${!tpIsRep() ? '<th>ТП</th>' : ''}
+          <th>Город</th>
+          <th>Тип</th>
+          <th>Статус</th>
+          <th>Контакт</th>
+          <th>Связь с CRM</th>
+          <th>Передан</th>
         </tr></thead>
-        <tbody id="tp-base-tbody"></tbody>
+        <tbody>
+          ${list.length ? list.slice(0, 400).map(c => {
+            const match = tpMainMatch(c);
+            const hasContact = !!(c.phone || c.email || c.contact_name);
+            return `<tr data-tpid="${c.id}" style="cursor:pointer;">
+              <td>
+                <div class="fw-600">${escapeHtml(c.name)}</div>
+                ${c.address ? `<div class="text-sm text-muted">${escapeHtml(c.address.slice(0,60))}</div>` : ''}
+              </td>
+              ${!tpIsRep() ? `<td class="text-sm">${escapeHtml(c.rep||'—')}</td>` : ''}
+              <td>${escapeHtml(c.city||'—')}${c.zone?` <span class="text-sm text-muted">(${escapeHtml(c.zone)})</span>`:''}</td>
+              <td>${c.type ? `<span class="chip chip-activity">${escapeHtml(c.type)}</span>` : '<span class="text-muted">—</span>'}</td>
+              <td>${tpStatusChip(c.work_status)}</td>
+              <td>${hasContact ? `<div class="text-sm">${escapeHtml(c.contact_name||'')}</div>${c.phone?`<div class="text-sm text-muted">${escapeHtml(c.phone)}</div>`:''}` : '<span class="chip" style="background:#FEF3C7; color:#92400E;">⚠ нет</span>'}</td>
+              <td>${match ? `<span class="chip chip-success" title="Менеджер: ${escapeHtml(match.manager||'—')}">✓ в базе</span>` : (c.inn ? '<span class="text-muted text-sm">нет</span>' : '<span class="text-muted text-sm">без ИНН</span>')}</td>
+              <td>${c.passed_at ? `<span class="chip chip-info">${escapeHtml(c.passed_to_manager||'—')}</span><div class="text-sm text-muted">${fmt.date(c.passed_at)}</div>` : '<span class="text-muted">—</span>'}</td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="8"><div class="empty-state">Клиентов не найдено</div></td></tr>'}
+        </tbody>
       </table>
     </div>
   `;
-  const bindF = (id, key) => { const el = document.getElementById(id); el.addEventListener('change', () => { _tpFilters[key] = el.value; drawTpBaseTable(); }); };
-  bindF('tpf-rep','rep'); bindF('tpf-city','city'); bindF('tpf-type','type'); bindF('tpf-status','status');
-  document.getElementById('tpf-reset').onclick = () => { _tpFilters.rep='all'; _tpFilters.city='all'; _tpFilters.type='all'; _tpFilters.status='all'; drawTpTab(); };
-  document.getElementById('tp-add').onclick = () => openTpClientModal(null);
-  drawTpBaseTable();
-}
-function drawTpBaseTable() {
-  const list = tpFiltered();
-  document.getElementById('tpf-count').textContent = list.length;
-  const tbody = document.getElementById('tp-base-tbody');
-  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">Клиенты не найдены</div></td></tr>'; return; }
-  tbody.innerHTML = list.slice(0, 400).map(c => {
-    const match = tpMainMatch(c);
-    return `
-    <tr data-tpid="${c.id}">
-      <td><div class="fw-600">${escapeHtml(c.name)}</div>${c.contact_name?`<div class="text-sm text-muted">${escapeHtml(c.contact_name)}</div>`:''}</td>
-      <td>${escapeHtml(c.rep||'—')}</td>
-      <td>${escapeHtml(c.city||'—')}</td>
-      <td>${c.type?`<span class="chip chip-activity">${escapeHtml(c.type)}</span>`:'—'}</td>
-      <td>${tpStatusChip(c.work_status)}</td>
-      <td>${c.inn?escapeHtml(c.inn):'<span class="text-muted">нет</span>'}</td>
-      <td>${match?`<span class="chip chip-success">✓ в базе</span>`:'<span class="text-muted">—</span>'}</td>
-      <td>${c.manager?`<span class="chip chip-info">${escapeHtml(c.manager)}</span>`:'<span class="text-muted">—</span>'}</td>
-    </tr>`;
-  }).join('');
-  if (list.length > 400) tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="8" class="muted text-sm" style="text-align:center;padding:12px;">Показано 400 из ${list.length}</td></tr>`);
-  tbody.querySelectorAll('tr[data-tpid]').forEach(tr => tr.addEventListener('click', () => openTpClientModal(tr.dataset.tpid)));
-  attachTableSort(document.querySelector('#tp-base-tbody').closest('table'));
-}
-
-function drawTpVisits(wrap) {
-  const reps = tpUniqueReps();
-  wrap.innerHTML = `
-    <div class="filter-bar">
-      <select id="tpv-rep"><option value="all">Все ТП</option>${reps.map(r=>`<option ${_tpFilters.rep===r?'selected':''}>${escapeHtml(r)}</option>`).join('')}</select>
-      <div style="margin-left:auto;"><button class="btn btn-primary btn-sm" id="tpv-add">+ Запланировать визит</button></div>
-    </div>
-    <div id="tpv-list"></div>
-  `;
-  document.getElementById('tpv-rep').addEventListener('change', (e) => { _tpFilters.rep = e.target.value; drawTpVisitsList(); });
-  document.getElementById('tpv-add').onclick = () => openVisitModal(null);
-  drawTpVisitsList();
-}
-function drawTpVisitsList() {
-  const wrap = document.getElementById('tpv-list');
-  let list = state.tpVisits.slice();
-  if (_tpFilters.rep !== 'all') list = list.filter(v => v.rep === _tpFilters.rep);
-  if (!list.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🗺</div>Визитов нет. Запланируйте первый визит.</div>'; return; }
-  // group by rep -> month -> week
-  const groups = {};
-  list.forEach(v => {
-    const g = v.rep || '—';
-    (groups[g] = groups[g] || []).push(v);
+  const bind = (id, key) => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { _tpFilters[key] = el.value; drawTpBase(wrap); }); };
+  bind('tpf-rep','rep'); bind('tpf-city','city'); bind('tpf-zone','zone'); bind('tpf-type','type'); bind('tpf-status','status');
+  const q = document.getElementById('tpf-q');
+  if (q) { let t; q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { _tpFilters.q = q.value; drawTpBase(wrap); }, 250); }); }
+  document.getElementById('tpf-reset')?.addEventListener('click', () => {
+    Object.assign(_tpFilters, { rep:'all', city:'all', zone:'all', type:'all', status:'all', q:'' });
+    drawTpBase(wrap);
   });
-  wrap.innerHTML = Object.keys(groups).sort().map(rep => {
-    const items = groups[rep].sort((a,b) => String(a.month).localeCompare(String(b.month)) || String(a.week).localeCompare(String(b.week)));
-    const done = items.filter(v => v.completed).length;
-    return `
-      <div class="card mb-4">
-        <div class="card-header">
-          <div class="card-title">${escapeHtml(rep)}</div>
-          <span class="text-sm text-muted">${items.length} визитов • выполнено ${done}</span>
-        </div>
-        <table class="data">
-          <thead><tr><th>Месяц</th><th>Нед.</th><th>Клиент</th><th>Итоги встречи</th><th>Дальнейший план</th><th>Статус</th><th data-no-sort></th></tr></thead>
-          <tbody>
-            ${items.map(v => `
-              <tr data-vid="${v.id}">
-                <td>${escapeHtml(v.month||'—')}</td>
-                <td>${escapeHtml(String(v.week||'—'))}</td>
-                <td class="fw-600">${escapeHtml(v.client)}</td>
-                <td class="text-sm">${escapeHtml((v.result||'').slice(0,80))}${v.result&&v.result.length>80?'…':''}</td>
-                <td class="text-sm">${escapeHtml((v.next_plan||'').slice(0,80))}${v.next_plan&&v.next_plan.length>80?'…':''}</td>
-                <td>${v.completed?'<span class="chip chip-success">Выполнен</span>':'<span class="chip chip-info">Запланирован</span>'}</td>
-                <td>${v.completed?'':`<button class="btn btn-sm btn-done" data-done-visit="${v.id}">Готово</button>`}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }).join('');
-  wrap.querySelectorAll('tr[data-vid]').forEach(tr => tr.addEventListener('click', () => openVisitModal(tr.dataset.vid)));
-  wrap.querySelectorAll('[data-done-visit]').forEach(b => b.onclick = (e) => {
-    e.stopPropagation();
-    const v = state.tpVisits.find(x => x.id === b.dataset.doneVisit);
-    if (v) { v.completed = true; persist(); drawTpVisitsList(); }
-  });
-}
-
-function drawTpSvod(wrap) {
-  const list = state.tpClients;
-  wrap.innerHTML = `
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Свод по базе ТП — ${list.length} клиентов</div>
-        <button class="btn btn-sm btn-dark" id="tp-svod-export">📥 Выгрузить в XLSX</button>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="data" style="min-width: 1700px;">
-          <thead><tr>
-            <th>ТП</th><th>Город</th><th>Зона</th><th>Тип</th><th>Клиент</th><th>Адрес</th><th>ИНН</th>
-            <th>Контакт</th><th>Телефон</th><th>Программа</th><th>Группы</th><th>Приоритет</th>
-            <th>Парк / СТО</th><th>Бренды з/ч</th><th>Бренды масла</th><th>Статус</th><th>Условия</th><th>Менеджер</th>
-          </tr></thead>
-          <tbody>
-            ${list.map(c => `
-              <tr data-tpid="${c.id}">
-                <td>${escapeHtml(c.rep||'')}</td><td>${escapeHtml(c.city||'')}</td><td>${escapeHtml(c.zone||'')}</td>
-                <td>${escapeHtml(c.type||'')}</td><td class="fw-600">${escapeHtml(c.name)}</td>
-                <td class="text-sm">${escapeHtml((c.address||'').slice(0,40))}</td><td>${escapeHtml(c.inn||'')}</td>
-                <td class="text-sm">${escapeHtml(c.contact_name||'')}</td><td class="text-sm">${escapeHtml(c.phone||'')}</td>
-                <td>${escapeHtml(c.program||'')}</td><td class="text-sm">${escapeHtml((c.groups||'').slice(0,30))}</td>
-                <td>${escapeHtml(c.priority||'')}</td><td class="text-sm">${escapeHtml((c.fleet||'').slice(0,30))}</td>
-                <td class="text-sm">${escapeHtml((c.brands_parts||'').slice(0,30))}</td>
-                <td class="text-sm">${escapeHtml((c.brands_oil||'').slice(0,30))}</td>
-                <td>${tpStatusChip(c.work_status)}</td><td>${escapeHtml(c.work_terms||'')}</td><td>${escapeHtml(c.manager||'')}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
+  document.getElementById('tp-add')?.addEventListener('click', () => openTpClientModal(null));
   wrap.querySelectorAll('tr[data-tpid]').forEach(tr => tr.addEventListener('click', () => openTpClientModal(tr.dataset.tpid)));
-  document.getElementById('tp-svod-export').onclick = exportTpXlsx;
-  attachTableSort(wrap.querySelector('table.data'));
 }
 
+// === Вкладка «Карта» ===
+let _tpMap = null;
+let _tpMapMarkers = [];
+function drawTpMap(wrap) {
+  const list = tpFilteredClients().filter(c => c.lat && c.lng);
+  const withoutCoords = tpFilteredClients().filter(c => !c.lat || !c.lng).length;
+  const noLeaflet = (typeof L === 'undefined');
+  wrap.innerHTML = `
+    ${noLeaflet ? `<div class="info-banner" style="background:#FEE2E2; border:1px solid #FCA5A5; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; color:#991B1B;">⚠ Карта не загрузилась (нет интернета или заблокирован CDN). Откройте CRM при подключённом интернете.</div>` : ''}
+    <div class="filter-bar">
+      <span class="text-sm">На карте: <b>${list.length}</b> клиентов с координатами</span>
+      ${withoutCoords ? `<span class="text-sm text-muted">· без координат: ${withoutCoords} (укажите в карточке)</span>` : ''}
+      <div style="margin-left:auto;"><span class="text-sm text-muted">💡 Клик по маркеру — открыть карточку клиента</span></div>
+    </div>
+    <div id="tp-map" style="height: 600px; border-radius: 12px; overflow: hidden; border:1px solid var(--border); background:#E9EEF2;"></div>
+  `;
+  if (noLeaflet) return;
+  setTimeout(() => {
+    const mapEl = document.getElementById('tp-map');
+    if (!mapEl) return;
+    if (_tpMap) { try { _tpMap.remove(); } catch(_){} _tpMap = null; }
+    _tpMap = L.map(mapEl).setView([59.9343, 30.3351], 5); // СПб как дефолт
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap'
+    }).addTo(_tpMap);
+    _tpMapMarkers = [];
+    list.forEach(c => {
+      const m = L.marker([c.lat, c.lng]).addTo(_tpMap);
+      m.bindPopup(`<b>${escapeHtml(c.name)}</b><br>${escapeHtml(c.address||'')}<br>${escapeHtml(c.contact_name||'')} ${c.phone?'· '+escapeHtml(c.phone):''}<br><button onclick="closeModal(); openTpClientModal('${c.id}'); _tpMap.closePopup();" style="margin-top:6px; padding:4px 10px; background:var(--wp-yellow); border:none; border-radius:6px; cursor:pointer; font-weight:600;">Открыть карточку</button>`);
+      _tpMapMarkers.push(m);
+    });
+    if (list.length) {
+      const group = L.featureGroup(_tpMapMarkers);
+      _tpMap.fitBounds(group.getBounds().pad(0.2));
+    }
+  }, 50);
+}
+
+// === Вкладка «Отчёт» (для админа/менеджера) ===
+function drawTpReport(wrap) {
+  const all = tpVisibleClients();
+  const visits = tpVisibleVisits();
+  const reps = tpUniqueReps();
+
+  // Воронка статусов
+  const statusBuckets = {};
+  Object.keys(TP_STATUS_META).forEach(s => statusBuckets[s] = 0);
+  all.forEach(c => { const s = c.work_status || 'Свежий'; if (statusBuckets[s] != null) statusBuckets[s]++; });
+
+  // По ТП — KPI
+  const repStats = reps.map(r => {
+    const rc = all.filter(c => c.rep === r);
+    const rv = visits.filter(v => v.rep === r);
+    const done = rv.filter(v => v.completed).length;
+    const handed = rc.filter(c => c.passed_at).length;
+    const portraitFilled = rc.filter(c => c.fleet || c.brands_parts || c.brands_oil).length;
+    return { rep: r, clients: rc.length, visits: rv.length, done, handed, portraits: portraitFilled };
+  }).sort((a,b) => b.done - a.done);
+
+  wrap.innerHTML = `
+    <div class="grid grid-4 mb-4">
+      <div class="kpi"><div class="kpi-accent" style="background:var(--wp-yellow)"></div><div class="kpi-label">Клиентов в базе ТП</div><div class="kpi-value">${fmt.int(all.length)}</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Визитов всего</div><div class="kpi-value">${fmt.int(visits.length)}</div><div class="kpi-sub">${fmt.int(visits.filter(v=>v.completed).length)} выполнено</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">Передано менеджерам</div><div class="kpi-value">${fmt.int(all.filter(c=>c.passed_at).length)}</div><div class="kpi-sub">конверсия ${all.length ? Math.round(all.filter(c=>c.passed_at).length/all.length*100) : 0}%</div></div>
+      <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">С портретом</div><div class="kpi-value">${fmt.int(all.filter(c => c.fleet || c.brands_parts || c.brands_oil).length)}</div><div class="kpi-sub">заполнен профиль</div></div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header"><div class="card-title">Воронка статусов</div></div>
+      <div style="padding:16px;">
+        ${Object.keys(statusBuckets).map(s => {
+          const cnt = statusBuckets[s];
+          const pct = all.length ? (cnt / all.length * 100) : 0;
+          return `<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <div style="width:200px;">${tpStatusChip(s)}</div>
+            <div style="flex:1; height:18px; background:#F3F4F6; border-radius:9px; overflow:hidden;">
+              <div style="height:100%; width:${pct}%; background:var(--wp-yellow); border-radius:9px;"></div>
+            </div>
+            <div style="width:80px; text-align:right; font-weight:600;">${cnt} <span class="text-sm text-muted">${pct.toFixed(0)}%</span></div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">Рейтинг торговых представителей</div></div>
+      <table class="data">
+        <thead><tr>
+          <th>ТП</th>
+          <th class="num">Клиентов</th>
+          <th class="num">Визитов</th>
+          <th class="num">Выполнено</th>
+          <th class="num">Передано</th>
+          <th class="num">С портретом</th>
+          <th class="num">Эффективность</th>
+        </tr></thead>
+        <tbody>
+          ${repStats.length ? repStats.map(r => {
+            const eff = r.clients ? Math.round(r.handed / r.clients * 100) : 0;
+            const effColor = eff >= 30 ? 'var(--success)' : eff >= 15 ? '#D97706' : 'var(--text-muted)';
+            return `<tr>
+              <td class="fw-600">${escapeHtml(r.rep)}</td>
+              <td class="num">${r.clients}</td>
+              <td class="num">${r.visits}</td>
+              <td class="num">${r.done}</td>
+              <td class="num">${r.handed}</td>
+              <td class="num">${r.portraits}</td>
+              <td class="num fw-700" style="color:${effColor};">${eff}%</td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="7"><div class="empty-state">Нет данных</div></td></tr>'}
+        </tbody>
+      </table>
+      <div class="text-sm text-muted" style="padding:10px 16px;">«Эффективность» = доля переданных менеджерам от всех собранных клиентов.</div>
+    </div>
+  `;
+}
+
+// === Модальное окно: карточка ТП-клиента (по шаблону xlsx) ===
 function openTpClientModal(tpId) {
   const isNew = !tpId;
-  const c = isNew ? { id: 'tp_new_' + uid(), rep: '', city: '', type: 'СТО', name: '', work_status: 'Переговоры' }
-                  : state.tpClients.find(x => x.id === tpId);
+  const c = isNew ? {
+    id: 'tp_new_' + uid(),
+    rep: tpIsRep() ? tpCurrentRepName() : '',
+    city: '', type: 'СТО', name: '',
+    work_status: 'Свежий', photos: [], visits: []
+  } : state.tpClients.find(x => x.id === tpId);
+  if (!c) { alert('Клиент не найден'); return; }
+  if (!c.photos) c.photos = [];
+  if (!c.visits) c.visits = [];
   const match = tpMainMatch(c);
   const reps = tpUniqueReps();
+  const cities = tpUniqueCities();
+  const isServiceType = c.type === 'СТО' || c.type === 'АТП';
+  const managersInBase = uniqueManagers();
+
   openModal(`
-    <div class="modal-header">
-      <div class="modal-title">${isNew?'Новый клиент ТП':escapeHtml(c.name)}</div>
-      <button class="modal-close" id="m-close">✕</button>
-    </div>
-    <div class="modal-body">
-      ${match ? `<div class="tp-link-banner">🔗 Этот клиент уже есть в основной базе «Клиенты» (ИНН ${escapeHtml(c.inn)}), менеджер: <b>${escapeHtml(match.manager||'—')}</b>.</div>`
-              : (c.inn ? '<div class="tp-link-banner tp-link-none">Клиента с таким ИНН в основной базе пока нет.</div>' : '')}
-      <div class="card-section-h" style="margin-top:0;">Основное</div>
-      <div class="info-grid-2col">
-        <label class="field-row"><span>Наименование клиента</span><input id="tp-name" value="${escapeHtml(c.name||'')}"></label>
-        <label class="field-row"><span>ИНН</span><input id="tp-inn" value="${escapeHtml(c.inn||'')}" placeholder="для связи с базой"></label>
-        <label class="field-row"><span>Торговый представитель</span><input id="tp-rep" list="tp-rep-list" value="${escapeHtml(c.rep||'')}"><datalist id="tp-rep-list">${reps.map(r=>`<option value="${escapeHtml(r)}">`).join('')}</datalist></label>
-        <label class="field-row"><span>Тип клиента</span><select id="tp-type">${['СТО','Магазин','АТП','Оптовик','Другое'].map(t=>`<option ${c.type===t?'selected':''}>${t}</option>`).join('')}</select></label>
-        <label class="field-row"><span>Город</span><input id="tp-city" value="${escapeHtml(c.city||'')}"></label>
-        <label class="field-row"><span>Зона города</span><input id="tp-zone" value="${escapeHtml(c.zone||'')}"></label>
-        <label class="field-row" style="grid-column:1/-1;"><span>Адрес</span><input id="tp-address" value="${escapeHtml(c.address||'')}"></label>
-      </div>
-      <div class="card-section-h">Контакты и работа</div>
-      <div class="info-grid-2col">
-        <label class="field-row"><span>Контактное лицо</span><input id="tp-contact" value="${escapeHtml(c.contact_name||'')}"></label>
-        <label class="field-row"><span>Телефон</span><input id="tp-phone" value="${escapeHtml(c.phone||'')}"></label>
-        <label class="field-row"><span>Почта</span><input id="tp-email" value="${escapeHtml(c.email||'')}"></label>
-        <label class="field-row"><span>Статус работы</span><select id="tp-status">${Object.keys(TP_STATUS_META).map(s=>`<option ${c.work_status===s?'selected':''}>${s}</option>`).join('')}</select></label>
-        <label class="field-row"><span>Программа (ГП/ЛП)</span><input id="tp-program" value="${escapeHtml(c.program||'')}"></label>
-        <label class="field-row"><span>Приоритет</span><input id="tp-priority" value="${escapeHtml(c.priority||'')}"></label>
-        <label class="field-row"><span>Передан менеджеру</span><input id="tp-manager" value="${escapeHtml(c.manager||'')}" placeholder="ФИО менеджера"></label>
-        <label class="field-row"><span>Условия работы</span><input id="tp-terms" value="${escapeHtml(c.work_terms||'')}"></label>
-      </div>
-      <details class="card-collapse">
-        <summary>🔧 Профиль клиента (бренды, парк, поставщики)</summary>
-        <div class="info-grid-2col" style="margin-top:12px;">
-          <label class="field-row"><span>Группы клиента</span><input id="tp-groups" value="${escapeHtml(c.groups||'')}"></label>
-          <label class="field-row"><span>Парк машин / СТО</span><input id="tp-fleet" value="${escapeHtml(c.fleet||'')}"></label>
-          <label class="field-row"><span>Бренды з/ч</span><input id="tp-bparts" value="${escapeHtml(c.brands_parts||'')}"></label>
-          <label class="field-row"><span>Бренды масла</span><input id="tp-boil" value="${escapeHtml(c.brands_oil||'')}"></label>
-          <label class="field-row"><span>Как выбирают поставщика</span><input id="tp-supplier" value="${escapeHtml(c.supplier_choice||'')}"></label>
-          <label class="field-row"><span>Наличие склада</span><input id="tp-warehouse" value="${escapeHtml(c.warehouse||'')}"></label>
+    <div class="client-header" style="background: linear-gradient(180deg, #FFE486 0%, var(--wp-yellow) 55%, #E5B027 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 6px rgba(120,72,0,0.18);">
+      <div class="client-header-avatar">${fmt.initials(c.name) || '?'}</div>
+      <div class="client-header-info">
+        <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;">
+          <div class="client-header-name">${escapeHtml(c.name || 'Новый клиент ТП')}</div>
+          ${c.type ? `<span style="background:rgba(15,17,21,0.85); color:#FFC72C; padding:4px 12px; border-radius:999px; font-size:13px; font-weight:700;">🏭 ${escapeHtml(c.type)}</span>` : ''}
         </div>
-      </details>
-      <div class="card-section-h">Комментарий</div>
-      <textarea id="tp-comment" class="big-comment" rows="2" placeholder="Заметки по клиенту от торгового представителя...">${escapeHtml(c.comment||'')}</textarea>
+        <div class="client-header-meta">
+          ${c.rep ? `<span>👤 ТП: ${escapeHtml(c.rep)}</span>` : ''}
+          ${c.city ? `<span>📍 ${escapeHtml(c.city)}${c.zone?', '+escapeHtml(c.zone):''}</span>` : ''}
+        </div>
+        <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+          ${tpStatusChip(c.work_status)}
+          ${match ? `<span class="chip chip-success" title="Менеджер: ${escapeHtml(match.manager||'—')}">🔗 В основной базе</span>` : ''}
+          ${c.passed_at ? `<span class="chip chip-info">📤 Передан ${escapeHtml(c.passed_to_manager||'—')} · ${fmt.date(c.passed_at)}</span>` : ''}
+        </div>
+      </div>
+      <button class="modal-close" id="m-close" style="color:var(--wp-black);">✕</button>
     </div>
+    <div class="modal-body" style="max-height: calc(100vh - 240px); overflow-y: auto;">
+      <!-- Идентификация -->
+      <div class="card-section-h" style="margin-top:0;">🪪 Идентификация</div>
+      <div class="info-grid-2col">
+        <label class="field-row"><span>Наименование *</span><input id="tp-name" value="${escapeHtml(c.name||'')}"></label>
+        <label class="field-row"><span>ИНН</span><input id="tp-inn" value="${escapeHtml(c.inn||'')}" placeholder="для связи с базой CRM"></label>
+        <label class="field-row"><span>Торговый представитель ${tpIsRep() ? '(вы)' : ''}</span>
+          <input id="tp-rep" list="tp-rep-list" value="${escapeHtml(c.rep||'')}" ${tpIsRep()?'readonly':''}>
+          <datalist id="tp-rep-list">${reps.map(r=>`<option value="${escapeHtml(r)}">`).join('')}</datalist>
+        </label>
+        <label class="field-row"><span>Тип клиента</span><select id="tp-type">${['Магазин','СТО','АТП','Интернет магазин','Опт','Другое'].map(t=>`<option ${c.type===t?'selected':''}>${t}</option>`).join('')}</select></label>
+        <label class="field-row"><span>Город</span><input id="tp-city" list="tp-city-list" value="${escapeHtml(c.city||'')}"><datalist id="tp-city-list">${cities.map(x=>`<option value="${escapeHtml(x)}">`).join('')}</datalist></label>
+        <label class="field-row"><span>Зона города</span><input id="tp-zone" value="${escapeHtml(c.zone||'')}" placeholder="Север / Юг / Запад / Восток"></label>
+        <label class="field-row" style="grid-column:1/-1;"><span>Адрес</span><input id="tp-address" value="${escapeHtml(c.address||'')}"></label>
+        <label class="field-row"><span>Координаты (lat, lng)</span><input id="tp-coords" value="${c.lat&&c.lng?(c.lat+', '+c.lng):''}" placeholder="59.9343, 30.3351 — для карты"></label>
+        <label class="field-row"><span>Время работы</span><input id="tp-hours" value="${escapeHtml(c.work_hours||'')}" placeholder="09:00 — 18:00"></label>
+      </div>
+
+      <!-- Контакты -->
+      <div class="card-section-h">📞 Контакты ЛПР</div>
+      <div class="info-grid-2col">
+        <label class="field-row"><span>ФИО ЛПР (кто делает заказ)</span><input id="tp-contact" value="${escapeHtml(c.contact_name||'')}"></label>
+        <label class="field-row"><span>Должность</span><input id="tp-position" value="${escapeHtml(c.position||'')}" placeholder="Директор / Снабжение"></label>
+        <label class="field-row"><span>Телефон ЛПР</span><input id="tp-phone" value="${escapeHtml(c.phone||'')}" type="tel" placeholder="+7 ..."></label>
+        <label class="field-row"><span>Email</span><input id="tp-email" value="${escapeHtml(c.email||'')}" type="email"></label>
+      </div>
+
+      <!-- Профиль покупателя -->
+      <div class="card-section-h">🎯 Профиль покупателя</div>
+      <div class="info-grid-2col">
+        <label class="field-row"><span>Программа работы</span>
+          <select id="tp-program">${['','ГП','ЛП','ГП/ЛП'].map(p=>`<option ${c.program===p?'selected':''}>${p||'—'}</option>`).join('')}</select>
+        </label>
+        <label class="field-row"><span>Что важно (приоритет)</span><input id="tp-priority" value="${escapeHtml(c.priority||'')}" placeholder="Цена / Сроки / Качество / Стабильность / Бренд"></label>
+        <label class="field-row" style="grid-column:1/-1;"><span>Группы товаров клиента</span><input id="tp-groups" value="${escapeHtml(c.groups||'')}" placeholder="Тормозная, Подвеска, Кузов, Освещение..."></label>
+      </div>
+
+      <!-- Портрет — только для СТО/АТП -->
+      <div class="card-section-h">🚛 Портрет клиента ${isServiceType?'<span style="color:var(--success); font-size:11px;">(для СТО / АТП)</span>':'<span class="text-sm text-muted">(заполняется для СТО / АТП)</span>'}</div>
+      <div class="info-grid-2col">
+        <label class="field-row" style="grid-column:1/-1;"><span>Парк машин / Количество постов</span><textarea id="tp-fleet" rows="2" placeholder="напр. «20 машин, 5 прицепов. Scania-10, Schmitz-2, Sitrak-10»">${escapeHtml(c.fleet||'')}</textarea></label>
+        <label class="field-row" style="grid-column:1/-1;"><span>Специализация / Сами ремонтируют?</span><textarea id="tp-spec" rows="2" placeholder="напр. «Сами. СТО специализируются на тормозной системе и подвеске»">${escapeHtml(c.specialization||'')}</textarea></label>
+        <label class="field-row"><span>Бренды з/ч (используют)</span><input id="tp-bparts" value="${escapeHtml(c.brands_parts||'')}" placeholder="Marshall, Bremhof, OEM..."></label>
+        <label class="field-row"><span>Бренды масла</span><input id="tp-boil" value="${escapeHtml(c.brands_oil||'')}" placeholder="Shell 10w-40, Total..."></label>
+        <label class="field-row" style="grid-column:1/-1;"><span>Как выбирают поставщика?</span><input id="tp-supplier" value="${escapeHtml(c.supplier_choice||'')}" placeholder="скорость, ассортимент, цена, наличие, условия оплаты"></label>
+        <label class="field-row"><span>Наличие склада</span>
+          <select id="tp-warehouse">${['','да','нет','небольшой'].map(x=>`<option ${(c.warehouse||'')===x?'selected':''}>${x||'—'}</option>`).join('')}</select>
+        </label>
+      </div>
+
+      <!-- Решение / Передача -->
+      <div class="card-section-h">🤝 Решение и передача менеджеру</div>
+      <div class="info-grid-2col">
+        <label class="field-row"><span>Статус работы</span>
+          <select id="tp-status">${Object.keys(TP_STATUS_META).map(s=>`<option ${c.work_status===s?'selected':''}>${s}</option>`).join('')}</select>
+        </label>
+        <label class="field-row"><span>Условия работы</span>
+          <select id="tp-terms">${['','Отсрочка','ОТХ','Предоплата','Частичная предоплата','Не определено'].map(x=>`<option ${(c.work_terms||'')===x?'selected':''}>${x||'—'}</option>`).join('')}</select>
+        </label>
+        <label class="field-row"><span>Дней отсрочки</span><input id="tp-defer" type="number" min="0" max="365" value="${c.deferral_days||''}"></label>
+        <label class="field-row"><span>Передан менеджеру</span><input id="tp-mgr" value="${escapeHtml(c.passed_to_manager||'')}" readonly style="background:#F9FAFB;"></label>
+      </div>
+      <label class="field-row" style="margin-top:12px;"><span style="font-weight:600;">Комментарий — что важно знать</span></label>
+      <textarea id="tp-comment" rows="3" placeholder="Что важно знать по клиенту: договорённости, гарантии, объёмы, причины отказа...">${escapeHtml(c.comment||'')}</textarea>
+
+      <!-- Фотографии -->
+      <div class="card-section-h">📷 Фото с визитов <span class="text-sm text-muted">(${c.photos.length})</span></div>
+      <div id="tp-photos-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:8px; margin-bottom:10px;">
+        ${c.photos.map((p, i) => `<div style="position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden; cursor:pointer; border:1px solid var(--border);" data-tp-photo-open="${i}">
+          <img src="${p.url}" style="width:100%; height:100%; object-fit:cover;">
+          <button data-tp-photo-del="${i}" title="Удалить" style="position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; background:rgba(220,38,38,0.9); color:white; border:none; cursor:pointer; font-size:14px; line-height:18px; padding:0;">×</button>
+          ${p.caption ? `<div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.55); color:white; padding:3px 6px; font-size:10px; text-align:center;">${escapeHtml(p.caption)}</div>` : ''}
+        </div>`).join('')}
+      </div>
+      <div style="display:flex; gap:6px;">
+        <input type="file" id="tp-photo-input" accept="image/*" capture="environment" style="display:none;">
+        <button class="btn btn-sm" id="tp-photo-add">📷 Добавить фото</button>
+        <span class="text-sm text-muted" style="align-self:center;">сжимаются до 1000px, JPEG</span>
+      </div>
+
+      <!-- История визитов -->
+      ${c.visits.length ? `
+        <div class="card-section-h">📋 История визитов (${c.visits.length})</div>
+        <div style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:8px;">
+          ${c.visits.slice().reverse().map(v => `<div style="padding:8px 12px; border-bottom:1px solid var(--border);">
+            <div class="fw-600 text-sm">${fmt.dateLong(v.date)}</div>
+            <div class="text-sm">${escapeHtml(v.summary||'')}</div>
+            ${v.next_plan ? `<div class="text-sm text-muted">→ ${escapeHtml(v.next_plan)}</div>` : ''}
+          </div>`).join('')}
+        </div>
+      ` : ''}
+    </div>
+
     <div class="modal-footer">
-      ${!isNew && state.user.role==='admin' ? `<button class="btn btn-danger" id="tp-del">Удалить</button>` : ''}
+      ${!isNew && state.user.role === 'admin' ? `<button class="btn btn-danger" id="tp-del">Удалить</button>` : ''}
+      ${!isNew && c.work_status === 'Работаем' && !c.passed_at ? `<button class="btn" style="background:var(--success); color:white;" id="tp-handover">📤 Передать менеджеру</button>` : ''}
       <button class="btn" id="tp-cancel">Закрыть</button>
       <button class="btn btn-primary" id="tp-save">Сохранить</button>
     </div>
   `, 'modal-wide');
+
   document.getElementById('m-close').onclick = closeModal;
   document.getElementById('tp-cancel').onclick = closeModal;
+
+  // Удаление
   if (document.getElementById('tp-del')) document.getElementById('tp-del').onclick = () => {
-    if (!confirm('Удалить клиента ТП?')) return;
+    if (!confirm('Удалить клиента ТП? Действие необратимо.')) return;
     state.tpClients = state.tpClients.filter(x => x.id !== c.id);
     persist(); closeModal(); renderView();
   };
-  document.getElementById('tp-save').onclick = () => {
-    const v = id => (document.getElementById(id).value || '').trim();
-    if (!v('tp-name')) { alert('Укажите наименование клиента'); return; }
+
+  // Фото — добавление
+  document.getElementById('tp-photo-add').onclick = () => document.getElementById('tp-photo-input').click();
+  document.getElementById('tp-photo-input').onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      const dataUrl = await tpCompressPhoto(file, 1000, 0.8);
+      const caption = prompt('Подпись фото (необязательно):', '') || '';
+      c.photos.push({ url: dataUrl, caption, taken_at: new Date().toISOString() });
+      persist(); closeModal(); openTpClientModal(c.id); // перерисовать
+    } catch (err) { alert('Не удалось обработать фото: ' + err.message); }
+  };
+
+  // Фото — удаление
+  document.querySelectorAll('[data-tp-photo-del]').forEach(b => b.onclick = (e) => {
+    e.stopPropagation();
+    const idx = +b.dataset.tpPhotoDel;
+    if (!confirm('Удалить фото?')) return;
+    c.photos.splice(idx, 1);
+    persist(); closeModal(); openTpClientModal(c.id);
+  });
+  // Фото — просмотр
+  document.querySelectorAll('[data-tp-photo-open]').forEach(el => el.onclick = () => {
+    const idx = +el.dataset.tpPhotoOpen;
+    const p = c.photos[idx];
+    const w = window.open('', '_blank');
+    if (w) w.document.write(`<title>Фото</title><img src="${p.url}" style="max-width:100%; height:auto;">`);
+  });
+
+  // Передача менеджеру
+  if (document.getElementById('tp-handover')) document.getElementById('tp-handover').onclick = () => {
+    const choice = prompt('Кому передать клиента? (введите ФИО менеджера):\n\nДоступные:\n' + managersInBase.join('\n'), c.passed_to_manager || managersInBase[0] || '');
+    if (!choice) return;
+    if (!managersInBase.includes(choice.trim())) {
+      if (!confirm(`Менеджер «${choice}» не найден в списке. Передать всё равно?`)) return;
+    }
+    // Сохраним текущие правки сначала
+    saveTpFromForm();
+    const mc = tpHandover(c, choice.trim());
+    if (mc) {
+      alert(`✓ Клиент передан менеджеру «${choice}». Создана задача-событие.`);
+      closeModal(); renderView();
+    }
+  };
+
+  function saveTpFromForm() {
+    const v = id => (document.getElementById(id)?.value || '').trim();
+    const coords = v('tp-coords').split(',').map(x => parseFloat(x.trim()));
     Object.assign(c, {
-      name: v('tp-name'), inn: v('tp-inn'), rep: v('tp-rep'), type: document.getElementById('tp-type').value,
+      name: v('tp-name'), inn: v('tp-inn'),
+      rep: v('tp-rep'),
+      type: document.getElementById('tp-type').value,
       city: v('tp-city'), zone: v('tp-zone'), address: v('tp-address'),
-      contact_name: v('tp-contact'), phone: v('tp-phone'), email: v('tp-email'),
-      work_status: document.getElementById('tp-status').value, program: v('tp-program'),
-      priority: v('tp-priority'), manager: v('tp-manager'), work_terms: v('tp-terms'),
-      groups: v('tp-groups'), fleet: v('tp-fleet'), brands_parts: v('tp-bparts'),
-      brands_oil: v('tp-boil'), supplier_choice: v('tp-supplier'), warehouse: v('tp-warehouse'),
+      work_hours: v('tp-hours'),
+      lat: isFinite(coords[0]) ? coords[0] : null,
+      lng: isFinite(coords[1]) ? coords[1] : null,
+      contact_name: v('tp-contact'), position: v('tp-position'),
+      phone: v('tp-phone'), email: v('tp-email'),
+      program: document.getElementById('tp-program').value === '—' ? '' : document.getElementById('tp-program').value,
+      priority: v('tp-priority'), groups: v('tp-groups'),
+      fleet: v('tp-fleet'), specialization: v('tp-spec'),
+      brands_parts: v('tp-bparts'), brands_oil: v('tp-boil'),
+      supplier_choice: v('tp-supplier'),
+      warehouse: document.getElementById('tp-warehouse').value === '—' ? '' : document.getElementById('tp-warehouse').value,
+      work_status: document.getElementById('tp-status').value,
+      work_terms: document.getElementById('tp-terms').value === '—' ? '' : document.getElementById('tp-terms').value,
+      deferral_days: parseInt(v('tp-defer'), 10) || 0,
       comment: v('tp-comment'),
     });
+  }
+
+  document.getElementById('tp-save').onclick = () => {
+    if (!document.getElementById('tp-name').value.trim()) { alert('Укажите наименование клиента'); return; }
+    saveTpFromForm();
     if (isNew) state.tpClients.push(c);
     persist(); closeModal(); renderView();
   };
 }
 
-function openVisitModal(visitId) {
+// === Модальное окно: визит ===
+function openTpVisitModal(visitId, defaultDate) {
   const isNew = !visitId;
+  const today = defaultDate || new Date().toISOString().slice(0,10);
+  const v = isNew ? {
+    id: 'tv_new_' + uid(),
+    rep: tpIsRep() ? tpCurrentRepName() : '',
+    date: today,
+    client: '', clientId: null,
+    completed: false, photos: []
+  } : state.tpVisits.find(x => x.id === visitId);
+  if (!v) { alert('Визит не найден'); return; }
+  if (!v.photos) v.photos = [];
   const reps = tpUniqueReps();
-  const v = isNew ? { id: 'tv_new_' + uid(), rep: '', month: '', week: '', client: '', completed: false }
-                  : state.tpVisits.find(x => x.id === visitId);
+  const myClients = tpVisibleClients();
+
   openModal(`
     <div class="modal-header">
-      <div class="modal-title">${isNew?'Новый визит':'Визит — '+escapeHtml(v.client)}</div>
+      <div class="modal-title">${isNew ? '📅 Новый визит' : '📅 Визит — ' + escapeHtml(v.client || '—')}</div>
       <button class="modal-close" id="m-close">✕</button>
     </div>
     <div class="modal-body">
       <div class="info-grid-2col">
-        <label class="field-row"><span>Торговый представитель</span><input id="v-rep" list="v-rep-list" value="${escapeHtml(v.rep||'')}"><datalist id="v-rep-list">${reps.map(r=>`<option value="${escapeHtml(r)}">`).join('')}</datalist></label>
-        <label class="field-row"><span>Клиент</span><input id="v-client" value="${escapeHtml(v.client||'')}"></label>
-        <label class="field-row"><span>Месяц</span><input id="v-month" value="${escapeHtml(v.month||'')}" placeholder="например, Март 2026"></label>
-        <label class="field-row"><span>Неделя</span><input id="v-week" value="${escapeHtml(String(v.week||''))}" placeholder="1–5"></label>
-        <label class="field-row" style="grid-column:1/-1;"><span>Контактные данные</span><input id="v-contacts" value="${escapeHtml(v.contacts||'')}"></label>
-        <label class="field-row" style="grid-column:1/-1;"><span>Адрес</span><input id="v-address" value="${escapeHtml(v.address||'')}"></label>
+        <label class="field-row"><span>Дата визита *</span><input type="date" id="tv-date" value="${v.date}"></label>
+        ${!tpIsRep() ? `<label class="field-row"><span>Торговый представитель</span>
+          <input id="tv-rep" list="tv-rep-list" value="${escapeHtml(v.rep||'')}">
+          <datalist id="tv-rep-list">${reps.map(r => `<option value="${escapeHtml(r)}">`).join('')}</datalist>
+        </label>` : `<label class="field-row"><span>ТП</span><input value="${escapeHtml(v.rep||'')}" readonly></label>`}
+        <label class="field-row" style="grid-column:1/-1;"><span>Клиент *</span>
+          <input id="tv-client" list="tv-client-list" value="${escapeHtml(v.client||'')}" placeholder="Начните ввод названия...">
+          <datalist id="tv-client-list">${myClients.map(c => `<option value="${escapeHtml(c.name)}" data-cid="${c.id}">${escapeHtml(c.address||'')}</option>`).join('')}</datalist>
+        </label>
+        <label class="field-row" style="grid-column:1/-1;"><span>Адрес</span><input id="tv-address" value="${escapeHtml(v.address||'')}" placeholder="заполняется автоматически по клиенту"></label>
       </div>
       <div class="card-section-h">Результат визита</div>
-      <label class="field-row" style="margin-bottom:12px;"><span>Итоги встречи</span><textarea id="v-result" class="big-comment" rows="2">${escapeHtml(v.result||'')}</textarea></label>
-      <label class="field-row" style="margin-bottom:12px;"><span>Дальнейший план действий</span><textarea id="v-next" class="big-comment" rows="2">${escapeHtml(v.next_plan||'')}</textarea></label>
-      <label class="field-row"><span>Дополнительная информация</span><textarea id="v-extra" class="big-comment" rows="2">${escapeHtml(v.extra||'')}</textarea></label>
+      <label class="field-row" style="display:block; margin-bottom:10px;"><span style="display:block; margin-bottom:4px;">Итоги встречи</span>
+        <textarea id="tv-result" rows="3" placeholder="Что обсудили, что показали, какая реакция...">${escapeHtml(v.result||'')}</textarea>
+      </label>
+      <label class="field-row" style="display:block; margin-bottom:10px;"><span style="display:block; margin-bottom:4px;">План действий</span>
+        <textarea id="tv-next" rows="2" placeholder="Что делать дальше: позвонить, выслать прайс, повторный визит...">${escapeHtml(v.next_plan||'')}</textarea>
+      </label>
+      <label class="field-row" style="display:block;"><span style="display:block; margin-bottom:4px;">Доп. информация</span>
+        <textarea id="tv-extra" rows="2">${escapeHtml(v.extra||'')}</textarea>
+      </label>
     </div>
     <div class="modal-footer">
-      ${!isNew ? `<button class="btn btn-danger" id="v-del">Удалить</button>` : ''}
-      ${!isNew && !v.completed ? `<button class="btn btn-done" id="v-done">Отметить выполненным</button>` : ''}
-      <button class="btn" id="v-cancel">Закрыть</button>
-      <button class="btn btn-primary" id="v-save">Сохранить</button>
+      ${!isNew ? `<button class="btn btn-danger" id="tv-del">Удалить</button>` : ''}
+      ${!isNew && !v.completed ? `<button class="btn" style="background:var(--success); color:white;" id="tv-done">✓ Отметить выполненным</button>` : ''}
+      <button class="btn" id="tv-cancel">Закрыть</button>
+      <button class="btn btn-primary" id="tv-save">Сохранить</button>
     </div>
   `);
   document.getElementById('m-close').onclick = closeModal;
-  document.getElementById('v-cancel').onclick = closeModal;
-  if (document.getElementById('v-del')) document.getElementById('v-del').onclick = () => {
+  document.getElementById('tv-cancel').onclick = closeModal;
+  if (document.getElementById('tv-del')) document.getElementById('tv-del').onclick = () => {
     if (!confirm('Удалить визит?')) return;
     state.tpVisits = state.tpVisits.filter(x => x.id !== v.id);
     persist(); closeModal(); drawTpTab();
   };
-  if (document.getElementById('v-done')) document.getElementById('v-done').onclick = () => {
-    v.completed = true; persist(); closeModal(); drawTpTab();
+  // Авто-заполнение адреса при выборе клиента
+  document.getElementById('tv-client').addEventListener('change', (e) => {
+    const found = state.tpClients.find(c => c.name === e.target.value);
+    if (found) {
+      document.getElementById('tv-address').value = found.address || '';
+      v.clientId = found.id;
+    }
+  });
+  if (document.getElementById('tv-done')) document.getElementById('tv-done').onclick = () => {
+    v.completed = true;
+    v.completed_at = new Date().toISOString().slice(0,10);
+    // Сохраним итоги тоже
+    v.result = document.getElementById('tv-result').value;
+    v.next_plan = document.getElementById('tv-next').value;
+    v.extra = document.getElementById('tv-extra').value;
+    // Добавим запись в visits клиента
+    if (v.clientId) {
+      const c = state.tpClients.find(x => x.id === v.clientId);
+      if (c) {
+        if (!c.visits) c.visits = [];
+        c.visits.push({ date: v.date, summary: v.result, next_plan: v.next_plan });
+      }
+    }
+    persist(); closeModal(); drawTpTab();
   };
-  document.getElementById('v-save').onclick = () => {
-    const val = id => (document.getElementById(id).value || '').trim();
-    if (!val('v-client')) { alert('Укажите клиента'); return; }
+  document.getElementById('tv-save').onclick = () => {
+    const val = id => (document.getElementById(id)?.value || '').trim();
+    if (!val('tv-client')) { alert('Укажите клиента'); return; }
     Object.assign(v, {
-      rep: val('v-rep'), client: val('v-client'), month: val('v-month'), week: val('v-week'),
-      contacts: val('v-contacts'), address: val('v-address'),
-      result: val('v-result'), next_plan: val('v-next'), extra: val('v-extra'),
+      date: val('tv-date'),
+      rep: val('tv-rep') || v.rep,
+      client: val('tv-client'),
+      address: val('tv-address'),
+      result: val('tv-result'),
+      next_plan: val('tv-next'),
+      extra: val('tv-extra'),
     });
+    // Связать с tpClient по имени, если есть
+    const found = state.tpClients.find(c => c.name === v.client);
+    if (found) v.clientId = found.id;
     if (isNew) state.tpVisits.push(v);
     persist(); closeModal(); drawTpTab();
   };
 }
+
 
 // =================== EXPORT PAGE ===================
 function renderExport() {
