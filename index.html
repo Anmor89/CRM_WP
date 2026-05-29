@@ -4887,7 +4887,7 @@ async function onec_autoImport(opts = {}) {
   renderNav();
   renderView();
 
-  let msg = `✓ <b>Импорт завершён:</b><br>+${stats.added} новых, ${stats.updated} обновлено`;
+  let msg = `✓ <b>Данные обновлены:</b><br>+${stats.added} новых клиентов, ${stats.updated} обновлено`;
   if (stats.archived) msg += `, ${stats.archived} в архив`;
   if (built.skipReport.totalSkipped) msg += `<br><span style="font-weight:400; color:#92400E;">⚠ Пропущено ${built.skipReport.totalSkipped} — менеджеров нет в CRM</span>`;
   onec_toast(msg, 'success', 6000);
@@ -5070,7 +5070,7 @@ function onec_showPreview(newClients, matched, errors, fileReport, skipReport) {
 
         <div style="display:flex; gap:10px; justify-content:flex-end;">
           <button class="btn" onclick="closeModal()">Отмена</button>
-          <button class="btn btn-primary" id="onec-apply">Импортировать ${newClients.length} клиентов</button>
+          <button class="btn btn-primary" id="onec-apply">Обновить данные из 1С</button>
         </div>
       </div>
     </div>`;
@@ -5086,16 +5086,35 @@ function onec_showPreview(newClients, matched, errors, fileReport, skipReport) {
 }
 
 function onec_showSuccess(stats) {
+  // Подсчёт что именно обновили по всей базе из state.clients[*].from1c
+  let txnTotal = 0, contractsTotal = 0, debtTotal = 0, agreementsTotal = 0;
+  state.clients.forEach(c => {
+    if (!c.from1c) return;
+    txnTotal += (c.from1c.sales && c.from1c.sales.txn_count) || 0;
+    contractsTotal += (c.from1c.contracts || []).length;
+    if (c.from1c.debt && c.from1c.debt.total > 0) debtTotal++;
+    if (c.from1c.agreement) agreementsTotal++;
+  });
   document.getElementById('modal-content').innerHTML = `
-    <div style="padding:32px; text-align:center;">
-      <div style="font-size:48px; margin-bottom:12px;">🎉</div>
-      <h3 style="margin:0 0 16px;">Импорт завершён</h3>
-      <div class="grid grid-3" style="margin-bottom:20px;">
-        <div><div style="font-size:26px; font-weight:700; color:var(--success);">+${stats.added}</div><div style="font-size:12px; color:var(--text-muted);">добавлено</div></div>
-        <div><div style="font-size:26px; font-weight:700; color:var(--info);">${stats.updated}</div><div style="font-size:12px; color:var(--text-muted);">обновлено</div></div>
-        <div><div style="font-size:26px; font-weight:700; color:var(--text-muted);">${stats.archived}</div><div style="font-size:12px; color:var(--text-muted);">в архив</div></div>
+    <div style="padding:32px; text-align:center; max-width:560px;">
+      <div style="font-size:48px; margin-bottom:8px;">🎉</div>
+      <h3 style="margin:0 0 6px;">Данные обновлены</h3>
+      <div style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Все справочники из 1С пересобраны и сохранены в браузере</div>
+      <div class="grid grid-3" style="margin-bottom:18px;">
+        <div><div style="font-size:24px; font-weight:700; color:var(--success);">+${stats.added}</div><div style="font-size:11px; color:var(--text-muted);">новых клиентов</div></div>
+        <div><div style="font-size:24px; font-weight:700; color:var(--info);">${stats.updated}</div><div style="font-size:11px; color:var(--text-muted);">обновлено</div></div>
+        <div><div style="font-size:24px; font-weight:700; color:var(--text-muted);">${stats.archived}</div><div style="font-size:11px; color:var(--text-muted);">в архив</div></div>
       </div>
-      <div style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Всего клиентов из 1С в базе: <b>${stats.total_incoming}</b>. Данные сохранены в браузере.</div>
+      <div style="background:#F8FAFC; border:1px solid #E5E7EB; border-radius:10px; padding:14px; margin-bottom:20px; text-align:left;">
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;">Что обновлено</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; font-size:13px;">
+          <div>🏢 Партнёры: <b>${stats.total_incoming}</b></div>
+          <div>💰 Продажи: <b>${fmt.int(txnTotal)}</b> позиций</div>
+          <div>📝 Договоры: <b>${fmt.int(contractsTotal)}</b></div>
+          <div>⏱ Соглашения: <b>${fmt.int(agreementsTotal)}</b></div>
+          <div>💳 Долги: <b>${fmt.int(debtTotal)}</b> клиентов</div>
+        </div>
+      </div>
       <button class="btn btn-primary" onclick="closeModal(); renderView();">Открыть CRM</button>
     </div>`;
 }
@@ -5111,7 +5130,7 @@ function renderAdmin() {
         <button class="btn btn-primary btn-sm" id="add-user-btn">+ Пользователь</button>
       </div>
       <table class="data">
-        <thead><tr><th>Имя</th><th>Логин</th><th>Роль</th><th>Менеджер 1С</th><th>Статус</th><th></th></tr></thead>
+        <thead><tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Менеджер 1С</th><th>Статус</th><th style="width:160px;">Действия</th></tr></thead>
         <tbody id="users-tbody"></tbody>
       </table>
     </div>
@@ -5140,19 +5159,60 @@ function afterAdmin() {
     }
   };
 }
+// Генерация пароля — 10 символов: буквы (без 0/O/1/l) и цифры
+function generatePassword(len = 10) {
+  const chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let pwd = '';
+  for (let i = 0; i < len; i++) pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+  return pwd;
+}
+
 function drawUsersTable() {
   const t = document.getElementById('users-tbody');
   t.innerHTML = state.users.map(u => `
     <tr data-uid="${u.username}">
       <td class="fw-600">${escapeHtml(u.name)}</td>
       <td><code>${escapeHtml(u.username)}</code></td>
+      <td>
+        <span class="pwd-hidden" data-uid="${u.username}" data-pwd="${escapeHtml(u.password||'')}" style="font-family:monospace; font-size:13px;">••••••••</span>
+        <button class="btn btn-ghost btn-sm pwd-toggle" data-uid="${u.username}" title="Показать пароль" style="padding:2px 6px; font-size:11px;">👁</button>
+      </td>
       <td>${u.role==='admin'?'<span class="chip chip-yellow">Администратор</span>':'<span class="chip chip-info">Менеджер</span>'}</td>
       <td>${escapeHtml(u.manager||'—')}</td>
       <td>${u.active?'<span class="chip chip-success">Активен</span>':'<span class="chip chip-default">Отключён</span>'}</td>
-      <td><button class="btn btn-sm" data-edit="${u.username}">Изменить</button></td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-sm" data-edit="${u.username}">Изменить</button>
+        <button class="btn btn-sm" data-reset-pwd="${u.username}" title="Сгенерировать новый пароль">🔑 Сбросить</button>
+      </td>
     </tr>
   `).join('');
   t.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openUserModal(b.dataset.edit));
+  // Toggle видимости пароля
+  t.querySelectorAll('.pwd-toggle').forEach(b => b.onclick = () => {
+    const span = t.querySelector(`.pwd-hidden[data-uid="${b.dataset.uid}"]`);
+    if (!span) return;
+    const isVisible = span.dataset.visible === '1';
+    if (isVisible) {
+      span.textContent = '••••••••';
+      span.dataset.visible = '';
+      b.textContent = '👁';
+    } else {
+      span.textContent = span.dataset.pwd || '(не задан)';
+      span.dataset.visible = '1';
+      b.textContent = '🙈';
+    }
+  });
+  // Сброс пароля — генерация нового
+  t.querySelectorAll('[data-reset-pwd]').forEach(b => b.onclick = () => {
+    const u = state.users.find(x => x.username === b.dataset.resetPwd);
+    if (!u) return;
+    const newPwd = generatePassword(10);
+    if (!confirm(`Сбросить пароль для «${u.name}»?\n\nНовый пароль: ${newPwd}\n\nЗапишите его — после нажатия OK пользователь сможет войти только с новым паролем.`)) return;
+    u.password = newPwd;
+    persist();
+    drawUsersTable();
+    onec_toast(`✓ Пароль «${u.name}» сброшен. Новый: <code>${newPwd}</code>`, 'success', 8000);
+  });
 }
 function openUserModal(username) {
   const isEdit = !!username;
@@ -5169,7 +5229,12 @@ function openUserModal(username) {
         <label class="field"><span>Логин</span><input id="u-username" value="${escapeHtml(u.username)}" ${isEdit?'disabled':''} placeholder="ivanov"></label>
       </div>
       <div class="form-row">
-        <label class="field"><span>Пароль ${isEdit?'(оставьте пустым — без изменений)':''}</span><input id="u-password" type="text" value="" placeholder="${isEdit?'без изменений':'минимум 4 символа'}"></label>
+        <label class="field"><span>Пароль ${isEdit?'(оставьте пустым — без изменений)':''}</span>
+          <div style="display:flex; gap:6px;">
+            <input id="u-password" type="text" value="" placeholder="${isEdit?'без изменений':'минимум 4 символа'}" style="flex:1; min-width:0;">
+            <button type="button" class="btn btn-sm" id="u-gen-pwd" title="Сгенерировать случайный пароль">🎲 Сгенерировать</button>
+          </div>
+        </label>
         <label class="field"><span>Роль</span>
           <select id="u-role">
             <option value="manager" ${u.role==='manager'?'selected':''}>Менеджер</option>
@@ -5198,6 +5263,9 @@ function openUserModal(username) {
   `);
   document.getElementById('u-cancel').onclick = closeModal;
   document.getElementById('m-close').onclick = closeModal;
+  document.getElementById('u-gen-pwd').onclick = () => {
+    document.getElementById('u-password').value = generatePassword(10);
+  };
   if (isEdit && document.getElementById('u-del')) {
     document.getElementById('u-del').onclick = () => {
       if (!confirm('Удалить пользователя?')) return;
@@ -8039,7 +8107,24 @@ function drawRawAgreements(wrap) {
 
 // =================== BOOTSTRAP ===================
 initData();
-// auto-login? No — show login.
+
+// Авто-логин для локальной версии (file:// или localhost) — заходим под admin.
+// На GitHub Pages и любых других хостингах автологин выключен — нужен пароль.
+(function autoLoginLocal() {
+  const isLocal = location.protocol === 'file:' ||
+                  location.hostname === 'localhost' ||
+                  location.hostname === '127.0.0.1';
+  if (!isLocal) return;
+  const admin = state.users.find(u => u.role === 'admin' && u.active);
+  if (!admin) return;
+  state.user = admin;
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  renderApp();
+  onec_dataFolderAvailable().then(ok => {
+    if (ok) onec_autoImport({ silent: true });
+  });
+})();
 
 </script>
 </body>
