@@ -1774,7 +1774,7 @@ function renderDashboard() {
     ` : ''}
 
     ${(w.myday !== false) ? `
-    <div class="grid mb-4" style="display:grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 16px; align-items: stretch;">
+    <div class="grid mb-4" style="display:grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; align-items: stretch;">
       <!-- 1) Что сделать -->
       <div class="card" style="border-left:4px solid ${overdueCnt ? 'var(--danger)' : (todayCnt ? 'var(--wp-yellow)' : 'var(--success)')}; display:flex; flex-direction:column; min-height:340px;">
         <div class="card-header" style="padding-bottom: 8px; flex-wrap:wrap;">
@@ -1832,8 +1832,8 @@ function renderDashboard() {
           ${overdueCallList.length ? `<button class="btn btn-ghost btn-sm" id="dash-go-pdz" style="padding:2px 8px; font-size:11px;">Все в Аналитике →</button>` : ''}
         </div>
         ${overdueCallList.length ? `
-          <div style="flex:1; overflow-y:auto; max-height:330px;">
-            <table class="data" style="font-size:12px;">
+          <div style="flex:1; overflow:auto; max-height:330px; min-width:0;">
+            <table class="data" style="font-size:12px; width:100%;">
               <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);">
                 <tr>
                   <th style="padding:6px 10px;">Клиент</th>
@@ -1867,7 +1867,7 @@ function renderDashboard() {
     ` : ''}
 
     ${(w.funnel !== false) ? `
-    <div class="grid grid-2 mb-4" style="grid-template-columns: 1.4fr 1fr; align-items: stretch;">
+    <div class="grid grid-2 mb-4" style="grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: stretch;">
       <div class="card" style="display:flex; flex-direction:column;">
         <div class="card-header">
           <div class="card-title">Воронка по клиентам</div>
