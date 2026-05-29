@@ -1825,10 +1825,10 @@ function renderDashboard() {
         </div>
       </div>
 
-      <!-- 3) Высокая загрузка лимита (была внизу — перенесли наверх) -->
+      <!-- 3) Близко к лимиту (долг ≥ 80% от лимита) -->
       <div class="card" style="border-left:4px solid ${limitAlerts.length ? '#DC2626' : 'var(--success)'}; display:flex; flex-direction:column; min-height:340px;">
         <div class="card-header" style="padding-bottom: 6px;">
-          <div class="card-title">💳 Высокая загрузка лимита <span class="chip chip-default" style="margin-left:6px;">${limitAlerts.length}</span></div>
+          <div class="card-title">💳 Близко к лимиту <span class="chip chip-default" style="margin-left:6px;">${limitAlerts.length}</span></div>
           <span class="text-sm text-muted">долг ≥ 80% от лимита</span>
         </div>
         <div style="flex:1; overflow-y:auto; max-height:330px;">
@@ -1836,10 +1836,7 @@ function renderDashboard() {
             <div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
               <div style="flex:1; min-width:0;">
                 <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
-                <div class="text-sm text-muted">
-                  ${fmt.num(a.debt)} / ${fmt.num(a.limit)}
-                  ${a.overdueAmt > 0 ? `· <span style="color:var(--danger); font-weight:600;">⚠ ${fmt.num(a.overdueAmt)} просрочено</span>` : '· <span style="color:var(--success);">✓ без просрочки</span>'}
-                </div>
+                <div class="text-sm text-muted">${fmt.num(a.debt)} / ${fmt.num(a.limit)}</div>
               </div>
               <span class="chip" style="background:${a.load >= 100 ? '#FEE2E2' : '#FEF3C7'}; color:${a.load >= 100 ? '#991B1B' : '#92400E'}; font-weight:700; flex-shrink:0;">${a.load}%</span>
             </div>
