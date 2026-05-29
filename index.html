@@ -1803,11 +1803,11 @@ function renderDashboard() {
       <div class="card" style="border-left:4px solid ${coolingDown.length ? '#F59E0B' : 'var(--success)'}; display:flex; flex-direction:column; min-height:340px;">
         <div class="card-header" style="padding-bottom: 6px;">
           <div class="card-title">📭 Без отгрузок в этом месяце <span class="chip chip-default" style="margin-left:6px;">${coolingDown.length}</span></div>
-          <span class="text-sm text-muted">покупал в пред. — пора связаться</span>
+          <span class="text-sm text-muted">покупал в прошлом месяце — пора связаться</span>
         </div>
         <div style="flex:1; overflow-y:auto; max-height:330px;">
           ${coolingDown.length ? coolingDown.map(a => {
-            const lastMonth = a.prevAmt > 0 ? 'в прошлом мес' : 'в позапр. мес';
+            const lastMonth = a.prevAmt > 0 ? 'в прошлом месяце' : 'в позапрошлом месяце';
             return `<div class="card-row" data-cid="${a.client.id}" data-open-tab="sales" style="cursor:pointer; padding:8px 14px;">
               <div style="flex:1; min-width:0;">
                 <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
