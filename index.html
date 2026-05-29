@@ -1658,8 +1658,35 @@ function renderDashboard() {
     if (limit <= 0) return null;
     const load = Math.round(debt / limit * 100);
     if (load < 80) return null;
-    return { client: c, limit, debt, load };
+    const overdueAmt = c.overdue || 0;
+    return { client: c, limit, debt, load, overdueAmt };
   }).filter(x => x).sort((a,b) => b.load - a.load).slice(0, 5);
+
+  // 📞 ПДЗ — позвонить по оплате: клиенты с просрочкой, отсортированы по сумме просроченного
+  // Для каждого — максимальная корзина aging с деньгами (показывает «возраст» долга)
+  const _agingBuckets = [
+    { key: 'd180plus', label: '180+ дн', color: '#7F1D1D' },
+    { key: 'd60_179',  label: '60-179 дн', color: '#DC2626' },
+    { key: 'd45_59',   label: '45-59 дн', color: '#EF4444' },
+    { key: 'd30_44',   label: '30-44 дн', color: '#F97316' },
+    { key: 'd15_29',   label: '15-29 дн', color: '#F59E0B' },
+    { key: 'd3_14',    label: '3-14 дн',  color: '#EAB308' },
+    { key: 'd1_2',     label: '1-2 дн',   color: '#84CC16' }
+  ];
+  const overdueCallList = all.map(c => {
+    const od = c.overdue || 0;
+    if (od <= 0) return null;
+    const debt = c.debt || 0;
+    const aging = c.from1c && c.from1c.debt && c.from1c.debt.aging;
+    // Самая «старая» корзина с деньгами — наиболее болезненная просрочка
+    let worst = null;
+    if (aging) {
+      for (const b of _agingBuckets) {
+        if ((aging[b.key] || 0) > 0) { worst = b; break; }
+      }
+    }
+    return { client: c, overdueAmt: od, debt, worst };
+  }).filter(x => x).sort((a,b) => b.overdueAmt - a.overdueAmt).slice(0, 8);
 
   // 📉 ОСТЫВАЮЩИЕ: покупал в прошлом ИЛИ позапрошлом месяце, но НЕ покупает в текущем
   const _now = new Date();
@@ -1858,7 +1885,10 @@ function renderDashboard() {
           <div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
             <div style="flex:1; min-width:0;">
               <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
-              <div class="text-sm text-muted">${fmt.rub(a.debt)} / ${fmt.rub(a.limit)}</div>
+              <div class="text-sm text-muted">
+                ${fmt.rub(a.debt)} / ${fmt.rub(a.limit)}
+                ${a.overdueAmt > 0 ? `· <span style="color:var(--danger); font-weight:600;">⚠ ${fmt.rub(a.overdueAmt)} просрочено</span>` : '· <span style="color:var(--success);">✓ без просрочки</span>'}
+              </div>
             </div>
             <span class="chip" style="background:${a.load >= 100 ? '#FEE2E2' : '#FEF3C7'}; color:${a.load >= 100 ? '#991B1B' : '#92400E'}; font-weight:700; flex-shrink:0;">${a.load}%</span>
           </div>
@@ -1872,6 +1902,49 @@ function renderDashboard() {
       </div>
     </div>
     ` : ''}
+
+    <!-- 📞 ПДЗ — позвонить по оплате (топ должников по сумме просрочки) -->
+    <div class="card mb-4" style="border-left:4px solid ${overdueCallList.length ? 'var(--danger)' : 'var(--success)'};">
+      <div class="card-header">
+        <div class="card-title">📞 ПДЗ — позвонить по оплате</div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span class="text-sm text-muted">${overdueCallList.length ? 'топ ' + overdueCallList.length + ' по просрочке' : 'просрочек нет'}</span>
+          ${overdueCallList.length ? `<button class="btn btn-ghost btn-sm" id="dash-go-pdz">Все ПДЗ в Аналитике →</button>` : ''}
+        </div>
+      </div>
+      ${overdueCallList.length ? `
+        <table class="data" style="font-size:13px;">
+          <thead><tr>
+            <th>Клиент</th>
+            <th>Менеджер</th>
+            <th class="num">Просрочено</th>
+            <th class="num">Общий долг</th>
+            <th class="num">% от долга</th>
+            <th>Возраст</th>
+          </tr></thead>
+          <tbody>
+            ${overdueCallList.map(o => {
+              const pctOfDebt = o.debt > 0 ? Math.round(o.overdueAmt / o.debt * 100) : 0;
+              const worst = o.worst;
+              return `<tr data-cid="${o.client.id}" style="cursor:pointer;">
+                <td class="fw-600">${escapeHtml(o.client.name)}</td>
+                <td>${escapeHtml(o.client.manager || '—')}</td>
+                <td class="num" style="color:var(--danger); font-weight:700;">${fmt.num(o.overdueAmt)}</td>
+                <td class="num">${fmt.num(o.debt)}</td>
+                <td class="num"><span style="color:${pctOfDebt >= 80 ? 'var(--danger)' : pctOfDebt >= 50 ? '#D97706' : 'var(--text)'}; font-weight:600;">${pctOfDebt}%</span></td>
+                <td>${worst ? `<span class="chip" style="background:${worst.color}; color:white; font-weight:600;">${worst.label}</span>` : '<span class="text-muted">—</span>'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      ` : `
+        <div class="empty-state" style="padding:24px;">
+          <div class="empty-state-icon" style="font-size:32px;">🎉</div>
+          <div class="fw-700" style="color:var(--success); font-size:15px;">Все платят вовремя</div>
+          <div class="text-sm text-muted">Нет клиентов с просроченным долгом</div>
+        </div>
+      `}
+    </div>
   `;
 }
 
@@ -1935,6 +2008,7 @@ function afterDashboard() {
     state.myDayExpanded = false; renderView();
   });
   document.getElementById('dash-go-funnel')?.addEventListener('click', () => setView('funnel'));
+  document.getElementById('dash-go-pdz')?.addEventListener('click', () => { state._analyticsTab = 'pdz'; setView('analytics'); });
   // KPI-плашки — переходы
   document.querySelectorAll('.dash-kpi-link').forEach(el => {
     el.addEventListener('click', () => {
