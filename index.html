@@ -201,19 +201,27 @@ a { color: inherit; text-decoration: none; }
 .topbar-actions { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 
 .topbar-context {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 8px;
   font-size: 13px; color: var(--text); font-weight: 600;
   white-space: nowrap;
+  background: #F9FAFB;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px 4px 12px;
+  transition: border-color 0.15s, background 0.15s;
 }
+.topbar-context:hover { background: #fff; border-color: #CBD5E1; }
 .topbar-context-icon { color: var(--text-muted); font-size: 14px; }
 .topbar-context-name { color: var(--text); font-weight: 600; }
 .topbar-context select {
   border: none; background: transparent; font-size: 13px; font-weight: 600;
-  color: var(--text); padding: 4px 18px 4px 0; outline: none; cursor: pointer;
+  color: var(--text); padding: 4px 22px 4px 0; outline: none; cursor: pointer;
   appearance: none; -webkit-appearance: none;
+  min-width: 170px; max-width: 260px;
+  text-overflow: ellipsis; overflow: hidden;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='3'><polyline points='6 9 12 15 18 9'/></svg>");
   background-repeat: no-repeat;
-  background-position: right 0 center;
+  background-position: right 2px center;
 }
 .topbar-context select:hover { color: var(--wp-yellow-dark); }
 
@@ -319,8 +327,9 @@ table.data { width: 100%; border-collapse: collapse; }
 table.data th, table.data td {
   padding: 10px 16px; text-align: left;
   border-bottom: 1px solid var(--border); font-size: 13px;
+  vertical-align: middle;
 }
-table.data th { background: #F9FAFB; font-weight: 600; color: var(--text-muted); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; position: sticky; top: 0; z-index: 1; }
+table.data th { background: #F9FAFB; font-weight: 600; color: var(--text-muted); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; position: sticky; top: 0; z-index: 1; vertical-align: middle; }
 table.data th.sortable { cursor: pointer; user-select: none; }
 table.data th.sortable:hover { background: #F1F2F4; color: var(--text); }
 table.data th .sort-ind { display: inline-block; width: 12px; opacity: 0.4; margin-left: 4px; font-size: 10px; vertical-align: middle; }
@@ -963,6 +972,7 @@ const state = {
     category: 'all',
     stage: 'all',
     eventStatus: 'all',
+    contact: 'all',     // all | nocontact | hascontact
     search: '',
   },
   dashboardStage: null,        // selected stage on the dashboard for drill-down table
@@ -998,26 +1008,25 @@ function persist() {
     localStorage.setItem(LS_KEY, JSON.stringify(snap));
     state._persistTruncated = false;
   } catch (e) {
-    // Если переполнение — обрезаем транзакции до 200 на клиента и пробуем снова
+    // Если переполнение — ступенчато режем транзакции (1000 → 500 → 200 → 0)
     if (e && (e.name === 'QuotaExceededError' || e.code === 22 || /quota/i.test(e.message||''))) {
-      let truncatedAny = false;
-      state.clients.forEach(c => {
-        const txns = c.from1c && c.from1c.sales && c.from1c.sales.transactions;
-        if (txns && txns.length > 200) {
-          c.from1c.sales.transactions = txns.slice(0, 200);
-          c.from1c.sales._truncated_at = 200;
-          truncatedAny = true;
-        }
-      });
-      if (truncatedAny) {
-        try { localStorage.setItem(LS_KEY, JSON.stringify(snap)); state._persistTruncated = true; }
-        catch (e2) {
-          // Совсем не лезет — выбрасываем транзакции
-          state.clients.forEach(c => {
-            if (c.from1c && c.from1c.sales) { c.from1c.sales.transactions = []; c.from1c.sales._truncated_at = 0; }
-          });
-          try { localStorage.setItem(LS_KEY, JSON.stringify(snap)); state._persistTruncated = true; } catch(e3){}
-        }
+      const tryLevel = (limit) => {
+        state.clients.forEach(c => {
+          const txns = c.from1c && c.from1c.sales && c.from1c.sales.transactions;
+          if (txns && txns.length > limit) {
+            c.from1c.sales.transactions = txns.slice(0, limit);
+            c.from1c.sales._truncated_at = limit;
+          }
+        });
+        try { localStorage.setItem(LS_KEY, JSON.stringify(snap)); state._persistTruncated = true; return true; }
+        catch (_) { return false; }
+      };
+      // Стараемся сохранить максимум: сначала 1000, потом 500, потом 200, потом 0 (выкинуть транзакции)
+      if (!tryLevel(1000) && !tryLevel(500) && !tryLevel(200)) {
+        state.clients.forEach(c => {
+          if (c.from1c && c.from1c.sales) { c.from1c.sales.transactions = []; c.from1c.sales._truncated_at = 0; }
+        });
+        try { localStorage.setItem(LS_KEY, JSON.stringify(snap)); state._persistTruncated = true; } catch(_){}
       }
     }
   }
@@ -1471,7 +1480,8 @@ function renderTopbarContext() {
   const el = document.getElementById('topbar-context');
   if (!el || !state.user) { if (el) el.innerHTML = ''; return; }
   if (state.user.role === 'admin') {
-    const mgrs = [...new Set(state.clients.map(c => c.manager).filter(Boolean))].sort();
+    // Скрытых менеджеров (state.settings.hiddenManagers) в селекторе не показываем
+    const mgrs = uniqueManagers();
     const cur = state.adminViewMgr || 'all';
     el.innerHTML = `
       <span class="topbar-context-icon">👤</span>
@@ -1511,6 +1521,11 @@ function applyFilters(list) {
       const es = clientEventStatus(c.id);
       if (f.eventStatus === 'noevent') { if (es !== 'none' && es !== 'stale') return false; }
       else if (es !== f.eventStatus) return false;
+    }
+    if (f.contact && f.contact !== 'all') {
+      const has = !!(c.phone || c.email || c.contact_name);
+      if (f.contact === 'nocontact' && has) return false;
+      if (f.contact === 'hascontact' && !has) return false;
     }
     if (f.search) {
       const s = f.search.toLowerCase();
@@ -1597,7 +1612,7 @@ function getEvents(clientId, all=false) {
         if (el.dataset.cid) {
           openClientModal(el.dataset.cid);
         } else if (el.dataset.mgr) {
-          state.filters = { manager: el.dataset.mgr, activity:'all', category:'all', stage:'all', eventStatus:'all', search:'' };
+          state.filters = { manager: el.dataset.mgr, activity:'all', category:'all', stage:'all', eventStatus:'all', contact:'all', search:'' };
           setView('funnel');
         }
         hide();
@@ -1694,17 +1709,21 @@ function renderDashboard() {
   const revCurMonth = all.reduce((s, c) => s + ((c.from1c && c.from1c.sales && c.from1c.sales.by_month && c.from1c.sales.by_month[curMonth]) || 0), 0);
   const profitCurMonth = all.reduce((s, c) => s + ((c.from1c && c.from1c.sales && c.from1c.sales.profit_by_month && c.from1c.sales.profit_by_month[curMonth]) || 0), 0);
 
-  // ⚠ КРИТИЧНО: клиенты на грани лимита (долг ≥ 80% от лимита)
-  const limitAlerts = all.map(c => {
-    const contracts = (c.from1c && c.from1c.contracts) || [];
-    const limit = contracts.filter(x => x.status === 'Действует').reduce((s,x) => s + (x.limit || 0), 0);
-    const debt = c.debt || 0;
-    if (limit <= 0) return null;
-    const load = Math.round(debt / limit * 100);
-    if (load < 80) return null;
-    const overdueAmt = c.overdue || 0;
-    return { client: c, limit, debt, load, overdueAmt };
-  }).filter(x => x).sort((a,b) => b.load - a.load);
+  // 💰 ПОСТУПЛЕНИЯ ДС за последние 7д / 30д (переключатель на дашборде)
+  const dashPayDays = state._dashPayDays || 7;
+  const _payCutoff = new Date(Date.now() - dashPayDays * 24*3600*1000).toISOString().slice(0,10);
+  const recentPayments = [];
+  all.forEach(c => {
+    const items = c.from1c && c.from1c.payments && c.from1c.payments.items;
+    if (!items) return;
+    items.forEach(it => {
+      if (it.date && it.date >= _payCutoff) {
+        recentPayments.push({ ...it, client: c });
+      }
+    });
+  });
+  recentPayments.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+  const paymentsTotal = recentPayments.reduce((s,p) => s + (p.amount||0), 0);
 
   // 📞 ПДЗ — позвонить по оплате: клиенты с просрочкой, отсортированы по сумме просроченного
   // Для каждого — максимальная корзина aging с деньгами (показывает «возраст» долга)
@@ -1820,7 +1839,7 @@ function renderDashboard() {
     ${(w.myday !== false) ? `
     <div class="mb-4" style="display:grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.25fr) minmax(0, 1.25fr); gap: 16px; align-items: stretch;">
       <!-- 1) Что сделать -->
-      <div class="card" style="border-left:4px solid ${overdueCnt ? 'var(--danger)' : (todayCnt ? 'var(--wp-yellow)' : 'var(--success)')}; display:flex; flex-direction:column; min-height:340px;">
+      <div class="card" style="border-left:4px solid ${overdueCnt ? 'var(--danger)' : (todayCnt ? 'var(--wp-yellow)' : 'var(--success)')}; display:flex; flex-direction:column; min-height:300px;">
         <div class="card-header" style="padding-bottom: 8px; flex-wrap:wrap;">
           <div style="display:flex; align-items:center; gap:10px; flex:1; flex-wrap:wrap;">
             <div class="card-title">📋 Что сделать</div>
@@ -1844,7 +1863,7 @@ function renderDashboard() {
       </div>
 
       <!-- 2) Без отгрузок в этом месяце -->
-      <div class="card" style="border-left:4px solid ${coolingDown.length ? '#F59E0B' : 'var(--success)'}; display:flex; flex-direction:column; min-height:340px;">
+      <div class="card" style="border-left:4px solid ${coolingDown.length ? '#F59E0B' : 'var(--success)'}; display:flex; flex-direction:column; min-height:300px;">
         <div class="card-header" style="padding-bottom: 6px;">
           <div class="card-title">📭 Без отгрузок в этом месяце <span class="chip chip-default" style="margin-left:6px;">${coolingDown.length}</span></div>
           <span class="text-sm text-muted">покупал в прошлом месяце — пора связаться</span>
@@ -1869,28 +1888,40 @@ function renderDashboard() {
         </div>
       </div>
 
-      <!-- 3) Близко к лимиту (долг ≥ 80% от лимита) -->
-      <div class="card" style="border-left:4px solid ${limitAlerts.length ? '#DC2626' : 'var(--success)'}; display:flex; flex-direction:column; min-height:340px;">
-        <div class="card-header" style="padding-bottom: 6px;">
-          <div class="card-title">💳 Близко к лимиту <span class="chip chip-default" style="margin-left:6px;">${limitAlerts.length}</span></div>
-          <span class="text-sm text-muted">долг ≥ 80% от лимита</span>
+      <!-- 3) Поступления ДС (последние 7д / 30д) — пульс выручки -->
+      <div class="card" style="border-left:4px solid ${recentPayments.length ? 'var(--success)' : 'var(--border)'}; display:flex; flex-direction:column; min-height:300px;">
+        <div class="card-header" style="padding-bottom: 6px; flex-wrap:wrap; gap:6px;">
+          <div class="card-title">💰 Поступления ДС <span class="chip chip-default" style="margin-left:6px;">${recentPayments.length}</span></div>
+          <div style="display:inline-flex; gap:2px; background:#F1F5F9; border-radius:6px; padding:2px;">
+            <button data-paydays="7"  class="dash-pay-tab ${dashPayDays===7 ?'active':''}" style="border:none; padding:3px 10px; font-size:11px; font-weight:600; border-radius:4px; cursor:pointer; background:${dashPayDays===7 ?'white':'transparent'}; color:${dashPayDays===7 ?'var(--text)':'var(--text-muted)'}; box-shadow:${dashPayDays===7 ?'0 1px 2px rgba(0,0,0,0.06)':'none'};">7 дн</button>
+            <button data-paydays="30" class="dash-pay-tab ${dashPayDays===30?'active':''}" style="border:none; padding:3px 10px; font-size:11px; font-weight:600; border-radius:4px; cursor:pointer; background:${dashPayDays===30?'white':'transparent'}; color:${dashPayDays===30?'var(--text)':'var(--text-muted)'}; box-shadow:${dashPayDays===30?'0 1px 2px rgba(0,0,0,0.06)':'none'};">30 дн</button>
+          </div>
         </div>
-        <div style="flex:1; overflow-y:auto; max-height:330px;">
-          ${limitAlerts.length ? limitAlerts.map(a => `
-            <div class="card-row" data-cid="${a.client.id}" style="cursor:pointer; padding:8px 16px;">
+        ${recentPayments.length ? `
+          <div style="padding: 0 16px 8px; font-size:12px; color:var(--text-muted);">
+            Итого: <b style="color:var(--text); font-size:13px;">${fmt.num(paymentsTotal)}</b>
+          </div>` : ''}
+        <div style="flex:1; overflow-y:auto; max-height:300px;">
+          ${recentPayments.length ? recentPayments.slice(0, 5).map(p => `
+            <div class="card-row" data-cid="${p.client.id}" data-open-tab="sales" style="cursor:pointer; padding:8px 16px;">
               <div style="flex:1; min-width:0;">
-                <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
-                <div class="text-sm text-muted">${fmt.num(a.debt)} / ${fmt.num(a.limit)}</div>
+                <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(p.client.name)}</div>
+                <div class="text-sm text-muted">${fmt.date(p.date)}${p.manager ? ' · ' + escapeHtml(p.manager.split(' ').slice(0,2).join(' ')) : ''}</div>
               </div>
-              <span class="chip" style="background:${a.load >= 100 ? '#FEE2E2' : '#FEF3C7'}; color:${a.load >= 100 ? '#991B1B' : '#92400E'}; font-weight:700; flex-shrink:0;">${a.load}%</span>
+              <span class="chip" style="background:#DCFCE7; color:#166534; font-weight:700; flex-shrink:0; font-variant-numeric: tabular-nums;">${fmt.num(p.amount)}</span>
             </div>
           `).join('') : `
             <div class="empty-state" style="padding:18px;">
-              <div class="empty-state-icon" style="font-size:28px;">✨</div>
-              <div class="fw-600">Лимиты в норме</div>
-              <div class="text-sm text-muted">Нет клиентов с загрузкой ≥ 80%</div>
+              <div class="empty-state-icon" style="font-size:28px;">💤</div>
+              <div class="fw-600">Нет поступлений</div>
+              <div class="text-sm text-muted">За ${dashPayDays} ${dashPayDays===30?'дней':'дней'} нет оплат от клиентов</div>
             </div>
           `}
+          ${recentPayments.length > 5 ? `
+            <div style="padding:8px 16px; text-align:center; border-top:1px solid var(--border);">
+              <button class="btn btn-ghost btn-sm" id="dash-payments-all" style="font-size:11px;">Показать все ${recentPayments.length} →</button>
+            </div>
+          ` : ''}
         </div>
       </div>
     </div>
@@ -1900,7 +1931,7 @@ function renderDashboard() {
     <div class="mb-4" style="display:grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.25fr) minmax(0, 1.25fr); gap: 16px; align-items: stretch;">
       <div class="card" style="display:flex; flex-direction:column;">
         <div class="card-header" style="padding-bottom: 6px;">
-          <div class="card-title">🗂 Воронка <span class="chip chip-default" style="margin-left:6px;">${fmt.int(inFunnel)}</span></div>
+          <div class="card-title">🗂 Воронка по клиентам <span class="chip chip-default" style="margin-left:6px;" title="Клиентов в активной воронке (этапы Контакт → Договор), не считая постоянных и архива">${fmt.int(inFunnel)}</span></div>
           <a class="btn btn-ghost btn-sm" id="dash-go-funnel" style="padding:2px 8px; font-size:11px;">Открыть →</a>
         </div>
         <div style="padding: 8px 12px 12px; display:flex; flex-direction:column; gap:6px;">
@@ -1926,7 +1957,7 @@ function renderDashboard() {
           ${overdueCallList.length ? `<button class="btn btn-ghost btn-sm" id="dash-go-pdz" style="padding:2px 8px; font-size:11px;">Все в Аналитике →</button>` : ''}
         </div>
         ${overdueCallList.length ? `
-          <div style="flex:1; overflow:auto; max-height:330px; min-width:0;">
+          <div style="flex:1; overflow:auto; max-height:250px; min-width:0;">
             <table class="data" style="font-size:13px; width:100%;">
               <thead style="position:sticky; top:0; background:white; z-index:1; box-shadow: 0 1px 0 var(--border);">
                 <tr>
@@ -2020,13 +2051,22 @@ function afterDashboard() {
   });
   document.getElementById('dash-go-funnel')?.addEventListener('click', () => setView('funnel'));
   document.getElementById('dash-go-pdz')?.addEventListener('click', () => { state._analyticsTab = 'pdz'; setView('analytics'); });
+  // Поступления ДС: переключатель 7д / 30д
+  document.querySelectorAll('.dash-pay-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state._dashPayDays = parseInt(btn.dataset.paydays, 10) || 7;
+      renderView();
+    });
+  });
+  // Кнопка «Показать все» в блоке поступлений → открыть модальное окно с полным списком
+  document.getElementById('dash-payments-all')?.addEventListener('click', () => openDashPaymentsModal());
   // KPI-плашки — переходы
   document.querySelectorAll('.dash-kpi-link').forEach(el => {
     el.addEventListener('click', () => {
       const nav = el.dataset.kpiNav;
       if (nav === 'clients') setView('clients');
       else if (nav === 'funnel-active') { state.filters = { ...state.filters, stage: 'active' }; setView('funnel'); }
-      else if (nav === 'analytics-month') { state._analyticsTab = 'month'; setView('analytics'); }
+      else if (nav === 'analytics-month') { state._analyticsTab = 'overview'; setView('analytics'); }
       else if (nav === 'analytics-pdz') { state._analyticsTab = 'pdz'; setView('analytics'); }
       else if (nav === 'analytics-winrate') { state._analyticsTab = 'winrate'; setView('analytics'); }
       else setView('analytics');
@@ -2058,6 +2098,71 @@ function afterDashboard() {
   if (mgrDetails) {
     mgrDetails.addEventListener('toggle', () => { state.dashboardMgrOpen = mgrDetails.open; });
   }
+}
+
+// Модальное окно «Все поступления ДС» (открывается из блока на дашборде)
+function openDashPaymentsModal() {
+  const all = visibleClients();
+  const days = state._dashPayDays || 7;
+  const cutoff = new Date(Date.now() - days * 24*3600*1000).toISOString().slice(0,10);
+  const list = [];
+  all.forEach(c => {
+    const items = c.from1c && c.from1c.payments && c.from1c.payments.items;
+    if (!items) return;
+    items.forEach(it => {
+      if (it.date && it.date >= cutoff) list.push({ ...it, client: c });
+    });
+  });
+  list.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+  const total = list.reduce((s,p) => s + (p.amount||0), 0);
+
+  openModal(`
+    <div style="padding:18px 22px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-size:16px; font-weight:700;">💰 Поступления ДС за ${days} ${days===30?'дней':'дней'}</div>
+        <div class="text-sm text-muted" style="margin-top:2px;">
+          ${list.length} ${list.length===1?'платёж':'платежей'} · итого <b style="color:var(--text);">${fmt.num(total)}</b>
+        </div>
+      </div>
+      <button class="modal-close" id="m-close">✕</button>
+    </div>
+    <div style="padding: 0; max-height: 70vh; overflow-y:auto;">
+      ${list.length ? `
+      <table class="data" style="font-size:13px; margin:0;">
+        <thead style="position:sticky; top:0; background:white; z-index:1;">
+          <tr>
+            <th style="width: 90px;">Дата</th>
+            <th>Клиент</th>
+            <th>Плательщик</th>
+            <th>Менеджер</th>
+            <th class="num" style="width: 130px;">Сумма</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map(p => `
+            <tr data-cid="${p.client.id}" data-open-tab="sales" style="cursor:pointer;">
+              <td>${fmt.date(p.date)}</td>
+              <td class="fw-600">${escapeHtml(p.client.name)}</td>
+              <td class="text-sm text-muted">${escapeHtml(p.partner_actual || '—')}</td>
+              <td class="text-sm text-muted">${escapeHtml(p.manager || '—')}</td>
+              <td class="num fw-600" style="color:#166534;">${fmt.num(p.amount)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ` : `
+        <div class="empty-state" style="padding:40px;">
+          <div class="empty-state-icon" style="font-size:36px;">💤</div>
+          <div class="fw-600" style="margin-top:8px;">Нет поступлений за ${days} дней</div>
+        </div>
+      `}
+    </div>
+  `);
+  document.getElementById('m-close').onclick = closeModal;
+  // Клик по строке открывает карточку клиента
+  document.querySelectorAll('#modal-content tr[data-cid]').forEach(tr => {
+    tr.addEventListener('click', () => openClientModal(tr.dataset.cid, tr.dataset.openTab || null));
+  });
 }
 
 function stageChip(stageId) {
@@ -2221,7 +2326,7 @@ function bindFilterControls() {
   };
   bind('f-manager','manager'); bind('f-activity','activity'); bind('f-category','category'); bind('f-stage','stage');
   document.getElementById('f-reset')?.addEventListener('click', () => {
-    state.filters = { manager:'all', activity:'all', category:'all', stage:'all', eventStatus:'all', search: state.filters.search };
+    state.filters = { manager:'all', activity:'all', category:'all', stage:'all', eventStatus:'all', contact:'all', search: state.filters.search };
     renderView();
   });
 }
@@ -2311,12 +2416,17 @@ function openDealModal() {
 function renderClients() {
   const managers = uniqueManagers();
   const activities = uniqueActivities();
+  const isAdmin = state.user && state.user.role === 'admin';
+  // Счётчик клиентов без контактов в текущей выборке (до применения фильтра contact)
+  const visibleAll = visibleClients();
+  const noContactCount = visibleAll.filter(c => !(c.phone || c.email || c.contact_name)).length;
   return `
     <div class="filter-bar">
+      ${isAdmin ? `
       <select id="f-manager">
         <option value="all">Все менеджеры</option>
         ${managers.map(m => `<option value="${escapeHtml(m)}" ${state.filters.manager===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
-      </select>
+      </select>` : ''}
       <select id="f-activity">
         <option value="all">Все виды деятельности</option>
         ${activities.map(a => `<option value="${escapeHtml(a)}" ${state.filters.activity===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
@@ -2338,8 +2448,14 @@ function renderClients() {
         <option value="planned" ${state.filters.eventStatus==='planned'?'selected':''}>→ Есть план</option>
         <option value="noevent" ${state.filters.eventStatus==='noevent'?'selected':''}>○ Без планового события</option>
       </select>
+      <select id="f-contact" title="Фильтр по наличию контактов клиента">
+        <option value="all">Любые контакты</option>
+        <option value="nocontact" ${state.filters.contact==='nocontact'?'selected':''}>⚠ Без контактов</option>
+        <option value="hascontact" ${state.filters.contact==='hascontact'?'selected':''}>✓ С контактами</option>
+      </select>
       <button class="btn btn-ghost btn-sm" id="f-reset">Сбросить</button>
-      <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+      <div style="margin-left:auto; display:flex; gap:14px; align-items:center;">
+        ${noContactCount > 0 ? `<span class="text-sm" title="Клиентов без контактов (телефон / email / ЛПР)" style="color:#92400E; cursor:pointer;" id="f-nocontact-link">⚠ без контактов: <b>${noContactCount}</b></span>` : ''}
         <span class="text-sm text-muted">Найдено: <b id="f-count">—</b></span>
       </div>
     </div>
@@ -2374,6 +2490,8 @@ function getNeglectedClients() {
     if (!c.revenue && !(c.from1c && c.from1c.sales && c.from1c.sales.total)) return false;
     // С долгом — не «упущен», менеджер обязан с ним работать (вопрос оплаты)
     if ((c.debt || 0) > 0) return false;
+    // Судебные разбирательства — клиент в спец-обработке, не «упущенный»
+    if (c.lawsuit) return false;
     // Индивидуальное напоминание клиента имеет приоритет над общей настройкой
     const useIndividual = c.reminder && c.reminder.enabled && c.reminder.days > 0;
     const cutoff = new Date();
@@ -2399,6 +2517,14 @@ function afterClients() {
   bindFilterControls();
   const esEl = document.getElementById('f-event-status');
   if (esEl) esEl.addEventListener('change', () => { state.filters.eventStatus = esEl.value; drawClientsTable(); });
+  const ctEl = document.getElementById('f-contact');
+  if (ctEl) ctEl.addEventListener('change', () => { state.filters.contact = ctEl.value; drawClientsTable(); });
+  // Клик по счётчику «без контактов» — быстро включить этот фильтр
+  const ncLink = document.getElementById('f-nocontact-link');
+  if (ncLink) ncLink.addEventListener('click', () => {
+    state.filters.contact = 'nocontact';
+    renderView();
+  });
   drawClientsTable();
   // Упущенные клиенты (слева, сворачиваемая) + полезный визуал (справа)
   const neglected = getNeglectedClients();
@@ -2530,10 +2656,14 @@ function drawClientsTable() {
     } else {
       planCell = '<span class="chip chip-default">не запланировано</span>';
     }
+    const hasContact = !!(c.phone || c.email || c.contact_name);
     return `
     <tr data-cid="${c.id}" class="row-ev-${es}">
       <td>
-        <div class="fw-600">${escapeHtml(c.name)}</div>
+        <div class="fw-600" style="display:flex; align-items:center; gap:6px;">
+          ${escapeHtml(c.name)}
+          ${!hasContact ? '<span title="Не заполнены контактные данные (телефон, email, ЛПР)" style="display:inline-flex; align-items:center; padding:1px 6px; background:#FEF3C7; color:#92400E; border-radius:10px; font-size:11px; font-weight:600; white-space:nowrap;">⚠ нет контактов</span>' : ''}
+        </div>
         ${c.inn?`<div class="text-sm text-muted">ИНН ${escapeHtml(c.inn)}</div>`:''}
       </td>
       <td>${c.city ? escapeHtml(c.city) : '<span class="text-muted">—</span>'}</td>
@@ -2671,10 +2801,11 @@ function renderSales() {
           ].map(p => `<button data-sales-period="${p.id}" class="${period===p.id?'active':''}">${p.label}</button>`).join('')}
         </div>
         <div style="margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          ${state.user && state.user.role === 'admin' ? `
           <select id="sales-mgr-filter" style="padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
             <option value="all">Все менеджеры</option>
             ${managers.map(m => `<option value="${escapeHtml(m)}" ${mgrFilter===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
-          </select>
+          </select>` : ''}
           <select id="sales-cat-filter" style="padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
             <option value="all">Все категории</option>
             ${cats.map(c => `<option value="${c}" ${catFilter===c?'selected':''}>${c}</option>`).join('')}
@@ -2917,10 +3048,11 @@ function renderCalendar() {
         <button class="btn btn-ghost btn-sm" id="cal-today">Сегодня</button>
         <button class="btn btn-ghost btn-sm" id="cal-next">›</button>
         <div class="fw-700" id="cal-title" style="margin-left:8px;"></div>
+        ${state.user && state.user.role === 'admin' ? `
         <select id="cal-mgr" style="margin-left:14px; padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
           <option value="all">Все менеджеры</option>
           ${uniqueManagers().map(m => `<option ${_calMgr===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
-        </select>
+        </select>` : ''}
         <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
           <span class="chip chip-info">Звонок</span>
           <span class="chip chip-yellow">Договор</span>
@@ -2946,7 +3078,7 @@ function afterCalendar() {
   document.getElementById('cal-next').onclick = () => { _cal.date.setMonth(_cal.date.getMonth()+1); drawCalendar(); };
   document.getElementById('cal-today').onclick = () => { _cal.date = new Date(); drawCalendar(); };
   document.getElementById('cal-add').onclick = () => openEventModal(null);
-  document.getElementById('cal-mgr').addEventListener('change', (e) => { _calMgr = e.target.value; drawCalendar(); });
+  document.getElementById('cal-mgr')?.addEventListener('change', (e) => { _calMgr = e.target.value; drawCalendar(); });
 }
 function drawCalendar() {
   const d = _cal.date;
@@ -3097,7 +3229,11 @@ function openEventModal(eventId, defaultDate=null, defaultClientId=null) {
 
 // =================== CONTRACTS ===================
 function renderContracts() {
-  const all = visibleClients();
+  let all = visibleClients();
+  const isAdmin = state.user && state.user.role === 'admin';
+  const mgrFilter = state._contractsMgr || 'all';
+  if (isAdmin && mgrFilter !== 'all') all = all.filter(c => c.manager === mgrFilter);
+  const managers = uniqueManagers();
   const list = all.filter(c => c.contract_signed || c.contract_no || c.contract_date);
   const without = all.filter(c => !c.contract_signed && (c.revenue||0) > 100000);
   const inWork = all.filter(c => clientStage(c) === 'contract');
@@ -3125,6 +3261,16 @@ function renderContracts() {
       <div class="kpi" title="Загрузка лимита = Долг ÷ Кредитный лимит × 100%"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">Средняя загрузка лимита</div><div class="kpi-value">${(() => { const loads = list.map(limitLoad).filter(x => x !== null); return loads.length ? Math.round(loads.reduce((a,b)=>a+b,0)/loads.length) + '%' : '—'; })()}</div><div class="kpi-sub">долг ÷ лимит</div></div>
     </div>
     <p class="text-sm text-muted" style="margin-bottom:12px;">Нажмите на плашку, чтобы отфильтровать таблицу. Нажмите ещё раз — снять фильтр.</p>
+
+    ${isAdmin ? `
+      <div class="filter-bar" style="margin-bottom:14px;">
+        <select id="contracts-mgr-filter">
+          <option value="all">Все менеджеры</option>
+          ${managers.map(m => `<option value="${escapeHtml(m)}" ${mgrFilter===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
+        </select>
+        ${mgrFilter !== 'all' ? `<button class="btn btn-ghost btn-sm" id="contracts-mgr-reset">Сбросить</button>` : ''}
+      </div>
+    ` : ''}
 
     <div class="card mb-4">
       <div class="card-header"><div class="card-title">Договоры и условия работы</div></div>
@@ -3175,6 +3321,11 @@ function renderContracts() {
   `;
 }
 function afterContracts() {
+  // Фильтр по менеджеру (admin-only)
+  const mgrSel = document.getElementById('contracts-mgr-filter');
+  if (mgrSel) mgrSel.addEventListener('change', () => { state._contractsMgr = mgrSel.value; renderView(); });
+  const mgrReset = document.getElementById('contracts-mgr-reset');
+  if (mgrReset) mgrReset.addEventListener('click', () => { state._contractsMgr = 'all'; renderView(); });
   // Фильтрация таблицы при клике на KPI-плашку
   let _contractFilter = null;
   function applyContractFilter() {
@@ -3206,11 +3357,12 @@ function afterContracts() {
 
 // =================== ANALYTICS ===================
 function renderAnalytics() {
+  // Если ранее сохранилась несуществующая вкладка 'month' — сбрасываем
+  if (state._analyticsTab === 'month') state._analyticsTab = 'overview';
   const tab = state._analyticsTab || 'overview';
   return `
     <div class="page-tabs">
       <button class="page-tab ${tab==='overview'?'active':''}" data-atab="overview">📊 Обзор базы</button>
-      <button class="page-tab ${tab==='month'?'active':''}" data-atab="month">💰 Месяц</button>
       <button class="page-tab ${tab==='winrate'?'active':''}" data-atab="winrate">🏆 Win Rate</button>
       <button class="page-tab ${tab==='pdz'?'active':''}" data-atab="pdz">⚠ ПДЗ</button>
     </div>
@@ -3225,189 +3377,83 @@ function afterAnalytics() {
     renderView();
   });
   const wrap = document.getElementById('analytics-tab-content');
-  if (tab === 'month') return drawAnalyticsMonth(wrap);
   if (tab === 'pdz') return drawAnalyticsPdz(wrap);
   if (tab === 'winrate') return drawAnalyticsWinRate(wrap);
   return drawAnalyticsOverview(wrap);
 }
 
-// --- Tab: Обзор базы (старый контент + Виды деятельности) ---
+// --- Tab: Обзор базы ---
+// 1) Жизненный цикл базы (на половину ширины)
+// 2) Клиенты по менеджерам — admin only
+// 3) Пульс активности — события по дням за 30 дней + KPI
+// 4) Продажи месяца — таблица по менеджерам (перенесено из старого таба «Месяц»)
 function drawAnalyticsOverview(wrap) {
   const all = visibleClients();
-  // Виды деятельности — компактная разбивка (перенесена с дашборда)
-  const actCounts = {};
-  all.forEach(c => { const a = c.activity || 'Не указан'; actCounts[a] = (actCounts[a]||0) + 1; });
-  const actSorted = Object.entries(actCounts).sort((a,b) => b[1] - a[1]);
-  const actMax = actSorted[0] ? actSorted[0][1] : 1;
-  const totalClients = all.length;
-  const palette = ['#F59E0B', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#06B6D4', '#EC4899', '#84CC16', '#F97316', '#6B7280'];
-
-  wrap.innerHTML = `
-    <div class="grid grid-2 mb-4">
-      <div class="chart-card"><h3>Распределение по этапам воронки</h3><div class="chart-box"><canvas id="ch-stages"></canvas></div></div>
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">Виды деятельности</div>
-          <span class="text-sm text-muted">структура базы</span>
-        </div>
-        ${actSorted.length ? `<div style="padding: 14px 16px; display:flex; flex-direction:column; gap:10px;">
-          ${actSorted.map(([name, cnt], i) => {
-            const pct = totalClients ? (cnt / totalClients * 100) : 0;
-            const barW = actMax ? (cnt / actMax * 100) : 0;
-            const color = palette[i % palette.length];
-            return `<div>
-              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; gap:8px;">
-                <span class="fw-600" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${escapeHtml(name)}</span>
-                <span style="font-size:12px; color:var(--text-muted); white-space:nowrap;"><b style="color:var(--text);">${cnt}</b> · ${pct.toFixed(0)}%</span>
-              </div>
-              <div style="height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden;">
-                <div style="height:100%; width:${barW}%; background:${color}; border-radius:3px; transition:width 0.4s;"></div>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>` : '<div class="empty-state" style="padding:20px;">Нет данных</div>'}
-      </div>
-    </div>
-    <div class="grid grid-2 mb-4" style="grid-template-columns: 1fr 1fr;">
-      <div class="chart-card"><h3>Категории клиентов A / B / C</h3><div class="chart-box-sm"><canvas id="ch-cats"></canvas></div></div>
-      <div class="chart-card"><h3>Выручка по видам деятельности</h3><div class="chart-box-sm"><canvas id="ch-rev-activity"></canvas></div></div>
-    </div>
-    <div class="card mb-4">
-      <div class="card-header"><div class="card-title">Жизненный цикл базы — клиенты по году регистрации</div></div>
-      <div style="padding:18px;"><div class="chart-box"><canvas id="ch-cohort"></canvas></div></div>
-    </div>
-
-    ${(() => {
-      const isAdmin = state.user && state.user.role === 'admin';
-      if (!isAdmin) return '';
-      const managers = [...new Set(all.map(c => c.manager).filter(Boolean))].sort();
-      const mgrData = managers.map(m => {
-        const mClients = all.filter(c => c.manager === m);
-        const active = mClients.filter(c => clientStage(c) === 'active').length;
-        const archive = mClients.filter(c => clientStage(c) === 'reject').length;
-        return { manager: m, total: mClients.length, active, archive, inFunnel: mClients.length - active - archive };
-      }).sort((a, b) => b.total - a.total);
-      if (!mgrData.length) return '';
-      return `
-        <div class="card mb-4">
-          <div class="card-header">
-            <div class="card-title">Клиенты по менеджерам</div>
-            <span class="text-sm text-muted">${mgrData.length} ${mgrData.length===1?'менеджер':'менеджеров'} — клик переключает контекст</span>
-          </div>
-          <table class="data mgr-table">
-            <thead><tr><th>Менеджер</th><th class="num">Всего</th><th class="num">Активных</th><th class="num">В воронке</th><th class="num">Архив</th><th style="width:30%;">Структура базы</th></tr></thead>
-            <tbody>
-              ${mgrData.map(md => {
-                const ap = md.total ? md.active/md.total*100 : 0;
-                const fp = md.total ? md.inFunnel/md.total*100 : 0;
-                const rp = md.total ? md.archive/md.total*100 : 0;
-                return `<tr class="mgr-row" data-manager="${escapeHtml(md.manager)}" title="Кликните, чтобы посмотреть данные этого менеджера">
-                  <td><div style="display:flex;align-items:center;gap:9px;"><div class="user-avatar" style="width:24px;height:24px;font-size:9px;">${fmt.initials(md.manager)}</div><span class="fw-600">${escapeHtml(md.manager)}</span></div></td>
-                  <td class="num fw-700">${md.total}</td>
-                  <td class="num" style="color:#3F7F5B;">${md.active}</td>
-                  <td class="num">${md.inFunnel}</td>
-                  <td class="num text-muted">${md.archive}</td>
-                  <td><div class="mgr-bar2">
-                    <div class="mgr-bar2-seg" style="width:${ap}%; background:#9CC9AE;" title="Активных: ${md.active}"></div>
-                    <div class="mgr-bar2-seg" style="width:${fp}%; background:#F2D77E;" title="В воронке: ${md.inFunnel}"></div>
-                    <div class="mgr-bar2-seg" style="width:${rp}%; background:#D7DADE;" title="Архив: ${md.archive}"></div>
-                  </div></td>
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
-          <div class="mgr-legend" style="padding: 8px 16px;">
-            <span class="mgr-legend-item"><span class="chip-dot" style="background:#9CC9AE"></span>Активные</span>
-            <span class="mgr-legend-item"><span class="chip-dot" style="background:#F2D77E"></span>В воронке</span>
-            <span class="mgr-legend-item"><span class="chip-dot" style="background:#D7DADE"></span>Архив</span>
-          </div>
-        </div>
-      `;
-    })()}
-
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Работа клиентской базы по событиям</div>
-        <span class="text-sm text-muted">насколько активно менеджеры ведут клиентов</span>
-      </div>
-      <div class="card-body">
-        <div class="grid grid-5 mb-4" id="ev-kpis"></div>
-        <div class="grid grid-2" style="grid-template-columns: 1fr 1fr;">
-          <div>
-            <h3 style="font-size:14px; font-weight:600; margin: 4px 0 12px;">События по менеджерам</h3>
-            <div class="chart-box"><canvas id="ch-mgr-events"></canvas></div>
-            <p class="text-sm text-muted" style="margin-top:8px;">Открытые и просроченные события — сколько работы в плане у каждого менеджера.</p>
-          </div>
-          <div>
-            <h3 style="font-size:14px; font-weight:600; margin: 4px 0 12px;">Конверсия в постоянных клиентов</h3>
-            <div class="chart-box"><canvas id="ch-mgr-conv"></canvas></div>
-            <p class="text-sm text-muted" style="margin-top:8px;">Доля клиентов менеджера, дошедших до этапа «${escapeHtml(stageById('active').name)}».</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-  // Клик по строке менеджера → переключение контекста
-  wrap.querySelectorAll('.mgr-row').forEach(el => {
-    el.addEventListener('click', () => {
-      state.adminViewMgr = el.dataset.manager;
-      renderNav(); renderView();
-    });
-  });
-  drawAnalyticsCharts();
-}
-
-// --- Tab: Месяц — выручка/прибыль текущего месяца по менеджерам и клиентам ---
-function drawAnalyticsMonth(wrap) {
-  const all = visibleClients();
+  const isAdmin = state.user && state.user.role === 'admin';
   const curMonth = new Date().toISOString().slice(0, 7);
   const monthLabel = new Date().toLocaleDateString('ru-RU', { year:'numeric', month:'long' });
 
-  // Для каждого клиента — продажи и прибыль за текущий месяц
-  const rows = all.map(c => {
+  // Продажи месяца — агрегат по менеджерам (бывший таб «Месяц»)
+  const monthByMgr = {};
+  let totalRevMonth = 0;
+  all.forEach(c => {
     const sales = (c.from1c && c.from1c.sales) || {};
     const rev = (sales.by_month && sales.by_month[curMonth]) || 0;
+    if (rev <= 0) return;
     const profit = (sales.profit_by_month && sales.profit_by_month[curMonth]) || 0;
-    return { id: c.id, name: c.name, manager: c.manager||'—', activity: c.activity||'', rev, profit, margin: rev > 0 ? (profit/rev*100) : 0 };
-  }).filter(r => r.rev > 0).sort((a,b) => b.rev - a.rev);
-
-  const totalRev = rows.reduce((s,r) => s + r.rev, 0);
-  const totalProfit = rows.reduce((s,r) => s + r.profit, 0);
-  const avgMargin = totalRev > 0 ? (totalProfit / totalRev * 100) : 0;
-  const clientsCount = rows.length;
-  const avgCheck = clientsCount ? totalRev / clientsCount : 0;
-
-  // По менеджерам
-  const byMgr = {};
-  rows.forEach(r => {
-    if (!byMgr[r.manager]) byMgr[r.manager] = { manager: r.manager, rev: 0, profit: 0, clients: 0 };
-    byMgr[r.manager].rev += r.rev;
-    byMgr[r.manager].profit += r.profit;
-    byMgr[r.manager].clients++;
+    const m = c.manager || '—';
+    if (!monthByMgr[m]) monthByMgr[m] = { manager: m, rev: 0, profit: 0, clients: 0 };
+    monthByMgr[m].rev += rev;
+    monthByMgr[m].profit += profit;
+    monthByMgr[m].clients++;
+    totalRevMonth += rev;
   });
-  const mgrRows = Object.values(byMgr).sort((a,b) => b.rev - a.rev);
+  const mgrMonthRows = Object.values(monthByMgr).sort((a,b) => b.rev - a.rev);
 
   wrap.innerHTML = `
-    <div class="grid grid-4 mb-4">
-      <div class="kpi"><div class="kpi-accent" style="background:var(--wp-yellow)"></div><div class="kpi-label">Выручка месяца</div><div class="kpi-value">${fmt.rub(totalRev)}</div><div class="kpi-sub">${monthLabel}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">Валовая прибыль</div><div class="kpi-value">${fmt.rub(totalProfit)}</div><div class="kpi-sub">маржа ${avgMargin.toFixed(1)}%</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">Клиентов с заказами</div><div class="kpi-value">${clientsCount}</div><div class="kpi-sub">из ${all.length} в базе</div></div>
-      <div class="kpi"><div class="kpi-accent"></div><div class="kpi-label">Средний чек</div><div class="kpi-value">${fmt.rub(avgCheck)}</div><div class="kpi-sub">выручка ÷ клиентов</div></div>
+    <!-- Жизненный цикл базы — половина ширины -->
+    <div class="grid grid-2 mb-4">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Жизненный цикл базы</div><span class="text-sm text-muted">клиенты по году регистрации</span></div>
+        <div style="padding:14px;"><div class="chart-box-sm"><canvas id="ch-cohort"></canvas></div></div>
+      </div>
+      <div></div>
     </div>
 
-    <div class="info-banner" style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; color:#92400E;">
-      💡 <b>План выручки</b> — функция в разработке. Когда будет загружен план по менеджерам, здесь появится сравнение факт/план.
-    </div>
+    ${isAdmin ? `<div class="card mb-4" id="overview-mgr-block"></div>` : ''}
 
+    <!-- Пульс активности -->
     <div class="card mb-4">
-      <div class="card-header"><div class="card-title">По менеджерам</div></div>
+      <div class="card-header">
+        <div class="card-title">📊 Пульс активности базы</div>
+        <span class="text-sm text-muted">события за последние 30 дней — ритм работы менеджеров</span>
+      </div>
+      <div style="padding:16px;">
+        <div class="grid grid-4 mb-4" id="pulse-kpis"></div>
+        <div>
+          <h3 style="font-size:13px; font-weight:600; color:var(--text-muted); margin: 4px 0 10px;">События по дням</h3>
+          <div class="chart-box"><canvas id="ch-pulse"></canvas></div>
+          <p class="text-sm text-muted" style="margin-top:8px;">Звонки, встречи, договоры и заметки — наведи на столбец, чтобы увидеть тип события.</p>
+        </div>
+        ${isAdmin ? `
+          <div style="margin-top:18px;" id="pulse-mgr-block"></div>
+        ` : ''}
+      </div>
+    </div>
+
+    <!-- Продажи месяца -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <div class="card-title">💰 Продажи · ${escapeHtml(monthLabel)} — итого ${fmt.rub(totalRevMonth)}</div>
+        <span class="text-sm text-muted">по менеджерам, из 1С</span>
+      </div>
       <table class="data">
-        <thead><tr><th>Менеджер</th><th class="num">Клиентов с заказами</th><th class="num">Выручка</th><th class="num">Валовая прибыль</th><th class="num">Маржа</th><th class="num">Доля выручки</th></tr></thead>
+        <thead><tr><th>Менеджер</th><th class="num">Клиентов с заказами</th><th class="num">Выручка</th><th class="num">Валовая прибыль</th><th class="num">Маржа</th><th class="num" style="width:18%;">Доля выручки</th></tr></thead>
         <tbody>
-          ${mgrRows.length ? mgrRows.map(m => {
-            const share = totalRev ? (m.rev/totalRev*100) : 0;
+          ${mgrMonthRows.length ? mgrMonthRows.map(m => {
+            const share = totalRevMonth ? (m.rev/totalRevMonth*100) : 0;
             const margin = m.rev > 0 ? (m.profit/m.rev*100) : 0;
-            return `<tr>
+            return `<tr class="mgr-row" data-manager="${escapeHtml(m.manager)}" style="cursor:pointer;" title="Переключиться на этого менеджера">
               <td class="fw-600">${escapeHtml(m.manager)}</td>
               <td class="num">${m.clients}</td>
               <td class="num">${fmt.rub(m.rev)}</td>
@@ -3424,25 +3470,66 @@ function drawAnalyticsMonth(wrap) {
         </tbody>
       </table>
     </div>
-
-    <div class="card">
-      <div class="card-header"><div class="card-title">По клиентам — топ ${Math.min(rows.length, 50)}</div></div>
-      <table class="data">
-        <thead><tr><th>Клиент</th><th>Менеджер</th><th>Вид</th><th class="num">Выручка</th><th class="num">Валовая прибыль</th><th class="num">Маржа</th></tr></thead>
-        <tbody>
-          ${rows.length ? rows.slice(0, 50).map(r => `<tr data-cid="${r.id}" style="cursor:pointer;">
-            <td class="fw-600">${escapeHtml(r.name)}</td>
-            <td>${escapeHtml(r.manager)}</td>
-            <td>${r.activity ? `<span class="chip chip-activity">${escapeHtml(r.activity)}</span>` : '<span class="text-muted">—</span>'}</td>
-            <td class="num">${fmt.rub(r.rev)}</td>
-            <td class="num">${fmt.rub(r.profit)}</td>
-            <td class="num">${r.margin.toFixed(1)}%</td>
-          </tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">Нет данных</div></td></tr>'}
-        </tbody>
-      </table>
-    </div>
   `;
-  wrap.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
+
+  // Клиенты по менеджерам (admin)
+  if (isAdmin) {
+    const managers = [...new Set(all.map(c => c.manager).filter(Boolean))].sort();
+    const mgrData = managers.map(m => {
+      const mClients = all.filter(c => c.manager === m);
+      const active = mClients.filter(c => clientStage(c) === 'active').length;
+      const archive = mClients.filter(c => clientStage(c) === 'reject').length;
+      return { manager: m, total: mClients.length, active, archive, inFunnel: mClients.length - active - archive };
+    }).sort((a, b) => b.total - a.total);
+    const block = document.getElementById('overview-mgr-block');
+    if (block && mgrData.length) {
+      block.innerHTML = `
+        <div class="card-header">
+          <div class="card-title">Клиенты по менеджерам</div>
+          <span class="text-sm text-muted">${mgrData.length} ${mgrData.length===1?'менеджер':'менеджеров'} — клик переключает контекст</span>
+        </div>
+        <table class="data mgr-table">
+          <thead><tr><th>Менеджер</th><th class="num">Всего</th><th class="num">Активных</th><th class="num">В воронке</th><th class="num">Архив</th><th style="width:30%;">Структура базы</th></tr></thead>
+          <tbody>
+            ${mgrData.map(md => {
+              const ap = md.total ? md.active/md.total*100 : 0;
+              const fp = md.total ? md.inFunnel/md.total*100 : 0;
+              const rp = md.total ? md.archive/md.total*100 : 0;
+              return `<tr class="mgr-row" data-manager="${escapeHtml(md.manager)}" title="Кликните, чтобы посмотреть данные этого менеджера">
+                <td><div style="display:flex;align-items:center;gap:9px;"><div class="user-avatar" style="width:24px;height:24px;font-size:9px;">${fmt.initials(md.manager)}</div><span class="fw-600">${escapeHtml(md.manager)}</span></div></td>
+                <td class="num fw-700">${md.total}</td>
+                <td class="num" style="color:#3F7F5B;">${md.active}</td>
+                <td class="num">${md.inFunnel}</td>
+                <td class="num text-muted">${md.archive}</td>
+                <td><div class="mgr-bar2">
+                  <div class="mgr-bar2-seg" style="width:${ap}%; background:#9CC9AE;" title="Активных: ${md.active}"></div>
+                  <div class="mgr-bar2-seg" style="width:${fp}%; background:#F2D77E;" title="В воронке: ${md.inFunnel}"></div>
+                  <div class="mgr-bar2-seg" style="width:${rp}%; background:#D7DADE;" title="Архив: ${md.archive}"></div>
+                </div></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        <div class="mgr-legend" style="padding: 8px 16px;">
+          <span class="mgr-legend-item"><span class="chip-dot" style="background:#9CC9AE"></span>Активные</span>
+          <span class="mgr-legend-item"><span class="chip-dot" style="background:#F2D77E"></span>В воронке</span>
+          <span class="mgr-legend-item"><span class="chip-dot" style="background:#D7DADE"></span>Архив</span>
+        </div>
+      `;
+    } else if (block) {
+      block.remove();
+    }
+  }
+
+  // Клик по строке менеджера → переключение контекста
+  wrap.querySelectorAll('.mgr-row').forEach(el => {
+    el.addEventListener('click', () => {
+      state.adminViewMgr = el.dataset.manager;
+      renderNav(); renderView();
+    });
+  });
+
+  drawOverviewCharts(all);
 }
 
 // --- Tab: Win Rate — разбор конверсии в постоянных клиентов ---
@@ -3645,48 +3732,21 @@ function drawAnalyticsPdz(wrap) {
   drawPdzTable();
 }
 
-function drawAnalyticsCharts() {
+function drawOverviewCharts(all) {
   destroyCharts();
-  const all = visibleClients();
-  // Soft brand palette
   const C = {
     yellow: '#EBC55B', yellowSoft: '#F6E3A8', dark: '#2A2D34',
     green: '#8FBF9F', greenSoft: '#BFD9C6', gray: '#C9CCD1', graySoft: '#E4E6EA',
     grid: '#EEF0F2',
+    call: '#9AB7D4',     // спокойный синий — звонки
+    meeting: '#EBC55B',  // фирменный жёлтый — встречи
+    contract: '#8FBF9F', // зелёный — договоры
+    note: '#C9CCD1',     // серый — заметки/прочее
   };
   Chart.defaults.font.family = 'Inter';
   Chart.defaults.color = '#6B7280';
 
-  // 1. Stages — horizontal soft bar
-  const stageCounts = STAGES.map(s => all.filter(c => clientStage(c)===s.id).length);
-  _chartRefs.s1 = new Chart(document.getElementById('ch-stages'), {
-    type: 'bar',
-    data: { labels: STAGES.map(s=>s.name), datasets: [{ label:'Клиентов', data: stageCounts, backgroundColor: C.yellow, borderRadius: 6, borderSkipped:false, barThickness: 18 }] },
-    options: softHBar(false, C)
-  });
-
-  // (2. «Виды деятельности» теперь — HTML-блок, не chart)
-  const acts = uniqueActivities();
-
-  // 3. Categories — doughnut, soft tones
-  const catCounts = ['A','B','C'].map(k => all.filter(c => clientCategory(c)===k).length);
-  _chartRefs.s3 = new Chart(document.getElementById('ch-cats'), {
-    type: 'doughnut',
-    data: { labels: ['A — активные','B — слабоактивные','C — без отгрузок'],
-            datasets:[{ data: catCounts, backgroundColor:[C.green, C.yellow, C.gray], borderWidth: 2, borderColor: '#fff' }] },
-    options: { responsive:true, maintainAspectRatio:false, cutout: '62%',
-               plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, padding:14, font:{family:'Inter'} } } } }
-  });
-
-  // 4. Revenue by activity — horizontal dark bar
-  const revByAct = acts.map(a => all.filter(c => (c.activity||'Другое')===a).reduce((s,c)=>s+(c.revenue||0),0));
-  _chartRefs.s4 = new Chart(document.getElementById('ch-rev-activity'), {
-    type: 'bar',
-    data: { labels: acts, datasets: [{ label:'Выручка', data: revByAct, backgroundColor: C.dark, borderRadius: 6, borderSkipped:false, barThickness: 16 }] },
-    options: softHBar(true, C)
-  });
-
-  // 5. Cohort by year — vertical soft bar
+  // 1. Жизненный цикл базы — год регистрации (вертикальный bar)
   const byYear = {};
   all.forEach(c => {
     if (!c.reg_date) return;
@@ -3695,92 +3755,154 @@ function drawAnalyticsCharts() {
     byYear[String(y)] = (byYear[String(y)]||0)+1;
   });
   const yKeys = Object.keys(byYear).sort();
-  _chartRefs.s5 = new Chart(document.getElementById('ch-cohort'), {
-    type: 'bar',
-    data: { labels: yKeys, datasets:[{ label:'Клиентов', data: yKeys.map(k=>byYear[k]), backgroundColor: C.yellow, borderRadius: 6, borderSkipped:false }] },
-    options: softVBar(C)
-  });
+  const cohEl = document.getElementById('ch-cohort');
+  if (cohEl) {
+    _chartRefs.coh = new Chart(cohEl, {
+      type: 'bar',
+      data: { labels: yKeys, datasets:[{ label:'Клиентов', data: yKeys.map(k=>byYear[k]), backgroundColor: C.yellow, borderRadius: 6, borderSkipped:false }] },
+      options: softVBar(C)
+    });
+  }
 
-  // 6. Events KPIs
-  const clientIds = new Set(all.map(c => c.id));
-  const evs = state.events.filter(e => clientIds.has(e.clientId));
+  // 2. Пульс активности — события за последние 30 дней по типам
   const now = new Date();
-  const open = evs.filter(e => !e.completed);
-  const overdue = open.filter(e => new Date(e.date) < new Date(now.toDateString()));
-  const done = evs.filter(e => e.completed);
-  const withOpenEvent = new Set(open.map(e => e.clientId));
-  const coverage = all.length ? Math.round(withOpenEvent.size / all.length * 100) : 0;
-  const perClient = all.length ? (evs.length / all.length) : 0;
-  const evKpis = [
-    { label: 'Всего событий', value: fmt.int(evs.length), accent: C.yellow },
-    { label: 'Запланировано', value: fmt.int(open.length - overdue.length), accent: '#9AB7D4', sub: 'открытых, в срок' },
-    { label: 'Просрочено', value: fmt.int(overdue.length), accent: '#D89A9A', sub: overdue.length ? 'требуют внимания' : 'всё в срок' },
-    { label: 'Выполнено', value: fmt.int(done.length), accent: C.green },
-    { label: 'Покрытие базы', value: coverage + '%', accent: C.dark, sub: `${perClient.toFixed(1)} событий на клиента` },
+  const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startDay = new Date(today0.getTime() - 29 * 86400000); // 30 дней включая сегодня
+  const days = [];
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(startDay.getTime() + i * 86400000);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  const dayLabels = days.map(d => {
+    const dt = new Date(d);
+    return dt.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit' });
+  });
+
+  // События привязаны к клиентам visibleClients()
+  const clientIds = new Set(all.map(c => c.id));
+  const evsAll = state.events.filter(e => clientIds.has(e.clientId));
+  const evsRecent = evsAll.filter(e => {
+    const ed = new Date(e.date).toISOString().slice(0,10);
+    return ed >= days[0] && ed <= days[29];
+  });
+  const typeMap = { call: 'call', meeting: 'meeting', contract: 'contract', note: 'note', followup: 'note' };
+  const series = { call: Array(30).fill(0), meeting: Array(30).fill(0), contract: Array(30).fill(0), note: Array(30).fill(0) };
+  evsRecent.forEach(e => {
+    const k = typeMap[e.kind] || 'note';
+    const ed = new Date(e.date).toISOString().slice(0,10);
+    const idx = days.indexOf(ed);
+    if (idx >= 0) series[k][idx]++;
+  });
+
+  // KPI пульса
+  const totalRecent = evsRecent.length;
+  const doneRecent = evsRecent.filter(e => e.completed).length;
+  const overdueOpen = evsAll.filter(e => !e.completed && new Date(e.date) < today0).length;
+  const perDay = totalRecent / 30;
+  const pulseKpis = [
+    { label: 'События / 30 дней', value: fmt.int(totalRecent), accent: C.yellow, sub: `≈ ${perDay.toFixed(1)} в день` },
+    { label: 'Выполнено', value: fmt.int(doneRecent), accent: C.green, sub: totalRecent ? Math.round(doneRecent/totalRecent*100) + '%' : '—' },
+    { label: 'Просрочено сейчас', value: fmt.int(overdueOpen), accent: overdueOpen > 0 ? '#D89A9A' : C.gray, sub: overdueOpen ? 'требуют внимания' : 'всё в срок' },
+    { label: 'Покрытие базы', value: (() => {
+        const touched = new Set(evsRecent.map(e => e.clientId)).size;
+        return all.length ? Math.round(touched / all.length * 100) + '%' : '—';
+      })(), accent: C.dark, sub: 'клиентов с касаниями' },
   ];
-  document.getElementById('ev-kpis').innerHTML = evKpis.map(k => `
-    <div class="kpi"><div class="kpi-accent" style="background:${k.accent}"></div>
-      <div class="kpi-label">${k.label}</div><div class="kpi-value">${k.value}</div>
-      ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}</div>
-  `).join('');
+  const kpisEl = document.getElementById('pulse-kpis');
+  if (kpisEl) {
+    kpisEl.innerHTML = pulseKpis.map(k => `
+      <div class="kpi"><div class="kpi-accent" style="background:${k.accent}"></div>
+        <div class="kpi-label">${k.label}</div><div class="kpi-value">${k.value}</div>
+        ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}</div>
+    `).join('');
+  }
 
-  // Per-manager
-  const mgrs = [...new Set(all.map(c => c.manager).filter(Boolean))];
-  const clientMgr = {}; all.forEach(c => clientMgr[c.id] = c.manager);
-  const mgrStats = mgrs.map(m => {
-    const me = evs.filter(e => clientMgr[e.clientId] === m);
-    const mClients = all.filter(c => c.manager === m);
-    const activeCnt = mClients.filter(c => clientStage(c) === 'active').length;
-    return {
-      manager: m,
-      planned: me.filter(e => !e.completed && new Date(e.date) >= new Date(now.toDateString())).length,
-      overdue: me.filter(e => !e.completed && new Date(e.date) < new Date(now.toDateString())).length,
-      total: mClients.length, active: activeCnt,
-      conv: mClients.length ? Math.round(activeCnt / mClients.length * 100) : 0,
-    };
-  }).sort((a,b) => (b.planned+b.overdue) - (a.planned+a.overdue));
-
-  // 7a. Events by manager — soft stacked
-  _chartRefs.s6 = new Chart(document.getElementById('ch-mgr-events'), {
-    type: 'bar',
-    data: {
-      labels: mgrStats.map(s => s.manager.split(' ').slice(0,2).join(' ')),
-      datasets: [
-        { label: 'Запланировано', data: mgrStats.map(s=>s.planned), backgroundColor: '#9AB7D4', borderRadius: 4, barThickness: 16 },
-        { label: 'Просрочено',    data: mgrStats.map(s=>s.overdue), backgroundColor: '#D89A9A', borderRadius: 4, barThickness: 16 },
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font:{family:'Inter'} } } },
-      scales: {
-        x: { stacked: true, grid: { display: false } },
-        y: { stacked: true, grid: { color: C.grid }, border: { display:false }, ticks: { precision: 0 } }
+  // Pulse chart — stacked bar по типам
+  const pulseEl = document.getElementById('ch-pulse');
+  if (pulseEl) {
+    _chartRefs.pulse = new Chart(pulseEl, {
+      type: 'bar',
+      data: {
+        labels: dayLabels,
+        datasets: [
+          { label: 'Звонки',   data: series.call,     backgroundColor: C.call,     borderRadius: 3, barThickness: 'flex', maxBarThickness: 18 },
+          { label: 'Встречи',  data: series.meeting,  backgroundColor: C.meeting,  borderRadius: 3, barThickness: 'flex', maxBarThickness: 18 },
+          { label: 'Договоры', data: series.contract, backgroundColor: C.contract, borderRadius: 3, barThickness: 'flex', maxBarThickness: 18 },
+          { label: 'Заметки',  data: series.note,     backgroundColor: C.note,     borderRadius: 3, barThickness: 'flex', maxBarThickness: 18 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font:{family:'Inter'} } } },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { autoSkip: true, maxRotation: 0 } },
+          y: { stacked: true, grid: { color: C.grid }, border: { display:false }, ticks: { precision: 0 } }
+        }
       }
-    }
-  });
+    });
+  }
 
-  // 7b. Conversion by manager — soft green horizontal
-  const convSorted = [...mgrStats].sort((a,b) => b.conv - a.conv);
-  _chartRefs.s7 = new Chart(document.getElementById('ch-mgr-conv'), {
-    type: 'bar',
-    data: {
-      labels: convSorted.map(s => s.manager.split(' ').slice(0,2).join(' ')),
-      datasets: [{ label: 'Конверсия', data: convSorted.map(s=>s.conv), backgroundColor: C.green, borderRadius: 5, borderSkipped:false, barThickness: 16 }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-      plugins: { legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => {
-          const s = convSorted[ctx.dataIndex];
-          return `Конверсия ${s.conv}% — ${s.active} из ${s.total} клиентов`;
-        } } } },
-      scales: {
-        x: { grid: { color: C.grid }, border: { display:false }, max: 100, ticks: { callback: v => v + '%' } },
-        y: { grid: { display: false }, border: { display:false } }
-      }
-    }
-  });
+  // Активность по менеджерам — таблица (admin only)
+  const mgrBlock = document.getElementById('pulse-mgr-block');
+  if (mgrBlock) {
+    const mgrs = [...new Set(all.map(c => c.manager).filter(Boolean))];
+    const clientMgr = {}; all.forEach(c => clientMgr[c.id] = c.manager);
+    const mgrStats = mgrs.map(m => {
+      const me = evsRecent.filter(e => clientMgr[e.clientId] === m);
+      const done = me.filter(e => e.completed).length;
+      const open = me.filter(e => !e.completed).length;
+      // События по типам
+      const byType = { call:0, meeting:0, contract:0, note:0 };
+      me.forEach(e => byType[typeMap[e.kind] || 'note']++);
+      const touched = new Set(me.map(e => e.clientId)).size;
+      const baseSize = all.filter(c => c.manager === m).length;
+      return { manager: m, total: me.length, done, open, byType, touched, baseSize };
+    }).filter(s => s.total > 0 || s.baseSize > 0).sort((a,b) => b.total - a.total);
+
+    mgrBlock.innerHTML = `
+      <h3 style="font-size:13px; font-weight:600; color:var(--text-muted); margin: 4px 0 10px;">Активность по менеджерам — 30 дней</h3>
+      <table class="data" style="font-size:13px;">
+        <thead>
+          <tr>
+            <th>Менеджер</th>
+            <th class="num">База</th>
+            <th class="num">Событий</th>
+            <th class="num">Звонки</th>
+            <th class="num">Встречи</th>
+            <th class="num">Договоры</th>
+            <th class="num">Заметки</th>
+            <th class="num">Касаний клиентов</th>
+            <th class="num">Покрытие</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${mgrStats.length ? mgrStats.map(s => {
+            const cov = s.baseSize ? Math.round(s.touched / s.baseSize * 100) : 0;
+            const covColor = cov >= 60 ? 'var(--success)' : cov >= 30 ? '#D97706' : 'var(--danger)';
+            return `<tr class="mgr-row" data-manager="${escapeHtml(s.manager)}" style="cursor:pointer;" title="Переключиться на этого менеджера">
+              <td class="fw-600">${escapeHtml(s.manager)}</td>
+              <td class="num text-muted">${s.baseSize}</td>
+              <td class="num fw-700">${s.total}</td>
+              <td class="num">${s.byType.call || '<span class="text-muted">—</span>'}</td>
+              <td class="num">${s.byType.meeting || '<span class="text-muted">—</span>'}</td>
+              <td class="num">${s.byType.contract || '<span class="text-muted">—</span>'}</td>
+              <td class="num text-muted">${s.byType.note || '<span class="text-muted">—</span>'}</td>
+              <td class="num">${s.touched}</td>
+              <td class="num fw-700" style="color:${covColor};">${cov}%</td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="9"><div class="empty-state">За 30 дней событий нет.</div></td></tr>'}
+        </tbody>
+      </table>
+      <p class="text-sm text-muted" style="padding: 10px 16px;">«Покрытие» = доля клиентов менеджера, с которыми было хотя бы одно касание за 30 дней.</p>
+    `;
+    // Клик по строке менеджера → переключение контекста
+    mgrBlock.querySelectorAll('.mgr-row').forEach(el => {
+      el.addEventListener('click', () => {
+        state.adminViewMgr = el.dataset.manager;
+        renderNav(); renderView();
+      });
+    });
+  }
 }
 
 // Soft horizontal bar options (Power-BI-ish: muted grid, no axis borders)
@@ -4250,7 +4372,8 @@ const ONEC_FILE_TYPES = [
   { key: 'agreements', re: /Соглашения/i,                   label: 'Соглашения (отсрочки)' },
   { key: 'debt',       re: /Задолженност/i,                 label: 'Задолженность' },
   { key: 'orders',     re: /Расшифровка\s*заказ/i,          label: 'Расшифровка заказов' },
-  { key: 'sales',      re: /Продаж[иь]\s*по\s*дн/i,         label: 'Продажи по дням' }
+  { key: 'sales',      re: /Продаж[иь]\s*по\s*дн/i,         label: 'Продажи по дням' },
+  { key: 'payments',   re: /Поступлен/i,                    label: 'Поступления безналичных ДС' }
 ];
 
 const ONEC_STAGE_MAP = {
@@ -4592,6 +4715,91 @@ function onec_parseSales(rows) {
   return map;
 }
 
+// Парсер «Поступления безналичных ДС (Клиенты)» — оплаты от клиентов.
+// Шапка отчёта на строках 1-7 («Параметры»/«Тип объекта»), заголовки колонок
+// на строке 9 (часть колонок) + строке 10 (подколонки «Партнер.*»). Данные с 11.
+// Используем автодетект колонок по тексту заголовка — устойчивость к перестановкам.
+function onec_parsePayments(rows) {
+  // 1) Найти строку с заголовками — она содержит "Сумма документа" и/или "Дата входящего".
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(25, rows.length); i++) {
+    const r = rows[i]; if (!r) continue;
+    const joined = r.map(c => (c||'').toString().toLowerCase()).join('|');
+    if (joined.includes('сумма документа') || joined.includes('дата входящего')) {
+      headerRow = i; break;
+    }
+  }
+  if (headerRow < 0) return new Map();
+
+  const h1 = rows[headerRow] || [];
+  const h2 = rows[headerRow + 1] || [];
+  const cellText = (idx) => ((h1[idx] || '') + ' ' + (h2[idx] || '')).toString().toLowerCase().trim();
+
+  const findCol = (...needles) => {
+    const maxLen = Math.max(h1.length, h2.length);
+    for (let i = 0; i < maxLen; i++) {
+      const txt = cellText(i);
+      if (needles.every(n => txt.includes(n.toLowerCase()))) return i;
+    }
+    return -1;
+  };
+
+  const cols = {
+    date:    findCol('дата', 'входящ'),       // Дата входящего документа
+    docNo:   findCol('номер', 'входящ'),      // Номер входящего документа
+    partner: findCol('партнер'),              // Первая колонка с «Партнер» (без точки) — основной партнёр
+    amount:  findCol('сумма', 'документа'),   // Сумма документа
+    manager: findCol('основной', 'менеджер'), // Партнер.Основной менеджер
+    head:    findCol('головное'),             // Партнер.Головное предприятие
+  };
+  // Подстраховка для «партнер» — нам нужен именно «Партнер» (без .Основной менеджер / .Головное).
+  // findCol по слову «партнер» вернёт первую такую колонку, что обычно правильно, но проверим.
+  // Если колонок «Партнер*» больше одной, основным считаем тот, где h1 содержит «партнер» БЕЗ точки или скобки.
+  for (let i = 0; i < h1.length; i++) {
+    const t = (h1[i] || '').toString().trim().toLowerCase();
+    if (t === 'партнер') { cols.partner = i; break; }
+  }
+
+  // 2) Найти строку, с которой начинаются данные: после h1 (и h2, если она тоже заголовочная).
+  // h2 считаем заголовочной, если содержит «партнер.» или «основной менеджер» или «головное».
+  const h2IsHeader = h2.some(c => {
+    const t = (c || '').toString().toLowerCase();
+    return t.includes('партнер.') || t.includes('основной менеджер') || t.includes('головное');
+  });
+  const dataStart = headerRow + (h2IsHeader ? 2 : 1);
+
+  // 3) Сборка: ключ группировки — «Головное предприятие» если заполнено, иначе «Партнер»
+  //    (та же логика, что в onec_buildClients для филиалов).
+  const map = new Map();
+  for (let i = dataStart; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    const partner = (r[cols.partner] || '').toString().trim();
+    if (!partner) continue;
+    const date = onec_parseDate(r[cols.date]);
+    const amount = onec_num(r[cols.amount]);
+    if (!date || !amount) continue;
+
+    const head = cols.head >= 0 ? (r[cols.head] || '').toString().trim() : '';
+    const key = head || partner;
+
+    if (!map.has(key)) map.set(key, { total: 0, count: 0, last_date: null, items: [] });
+    const entry = map.get(key);
+    entry.total += amount;
+    entry.count++;
+    if (!entry.last_date || date > entry.last_date) entry.last_date = date;
+    entry.items.push({
+      date,
+      amount,
+      doc_no:    cols.docNo   >= 0 ? (r[cols.docNo]   || '').toString().trim() : '',
+      manager:   cols.manager >= 0 ? (r[cols.manager] || '').toString().trim() : '',
+      partner_actual: partner // конкретный плательщик (филиал), если head был
+    });
+  }
+  // По дате убывания (свежие сверху)
+  map.forEach(e => e.items.sort((a, b) => (b.date || '').localeCompare(a.date || '')));
+  return map;
+}
+
 const ONEC_PARSERS = {
   partners: onec_parsePartners,
   inn: onec_parseInn,
@@ -4600,7 +4808,8 @@ const ONEC_PARSERS = {
   agreements: onec_parseAgreements,
   debt: onec_parseDebt,
   orders: onec_parseOrders,
-  sales: onec_parseSales
+  sales: onec_parseSales,
+  payments: onec_parsePayments
 };
 
 // Собирает данные из 8 источников в единые объекты клиентов.
@@ -4635,7 +4844,7 @@ function onec_buildClients(parsed, allowedManagers /* Set | null */) {
     let primary = partners.find(x => !x.head_company || x.head_company === groupKey || x._name === groupKey);
     if (!primary) primary = partners[0];
 
-    // Соберём ИНН/КПП/адреса/договоры/отсрочки/долги/заказы/продажи по ВСЕМ партнёрам группы
+    // Соберём ИНН/КПП/адреса/договоры/отсрочки/долги/заказы/продажи/платежи по ВСЕМ партнёрам группы
     const innList = [];
     const addressList = [];
     let allContracts = [];
@@ -4643,6 +4852,27 @@ function onec_buildClients(parsed, allowedManagers /* Set | null */) {
     let aggDebt = null;
     let aggOrders = null;
     let aggSales = null;
+    let aggPayments = null;
+    const paymentsSeenKeys = new Set();
+
+    // Платежи могут быть сгруппированы как по groupKey (если head_company), так и по конкретному партнёру.
+    // Берём оба и дедуплицируем по (date|amount|doc_no|partner_actual).
+    const collectPayments = (pname) => {
+      if (!parsed.payments || !pname) return;
+      const pay = parsed.payments.get(pname);
+      if (!pay) return;
+      if (!aggPayments) aggPayments = { total: 0, count: 0, last_date: null, items: [] };
+      pay.items.forEach(it => {
+        const dedupKey = `${it.date}|${it.amount}|${it.doc_no}|${it.partner_actual}`;
+        if (paymentsSeenKeys.has(dedupKey)) return;
+        paymentsSeenKeys.add(dedupKey);
+        aggPayments.total += it.amount;
+        aggPayments.count++;
+        if (!aggPayments.last_date || it.date > aggPayments.last_date) aggPayments.last_date = it.date;
+        aggPayments.items.push(it);
+      });
+    };
+    collectPayments(groupKey);
 
     for (const p of partners) {
       const pName = p._name;
@@ -4653,6 +4883,8 @@ function onec_buildClients(parsed, allowedManagers /* Set | null */) {
       const d = parsed.debt       ? parsed.debt.get(pName)       : null;
       const o = parsed.orders     ? parsed.orders.get(pName)     : null;
       const s = parsed.sales      ? parsed.sales.get(pName)      : null;
+      // Платежи: также пробуем по имени каждого партнёра группы (на случай когда head не заполнен)
+      collectPayments(pName);
 
       if (i) innList.push({ ...i, _partner: pName });
       if (a) addressList.push({ ...a, _partner: pName });
@@ -4697,6 +4929,9 @@ function onec_buildClients(parsed, allowedManagers /* Set | null */) {
     if (aggSales && aggSales.transactions.length) {
       aggSales.transactions.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     }
+    if (aggPayments && aggPayments.items.length) {
+      aggPayments.items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    }
 
     const primaryInn = innList[0] || {};
     const primaryAddr = addressList[0] || {};
@@ -4722,6 +4957,7 @@ function onec_buildClients(parsed, allowedManagers /* Set | null */) {
         debt: aggDebt,
         orders: aggOrders,
         sales: aggSales,
+        payments: aggPayments,
         // метаинформация про филиалы
         sub_partners: subPartners,
         is_group: subPartners.length > 1
@@ -4849,7 +5085,8 @@ const ONEC_AUTOLOAD_FILES = [
   'Соглашения с клиентами (отсрочка) XLSX.xlsx',
   'Задолженность клиентов по срокам - для Power BI (факт данные) XLSX.xlsx',
   'Расшифровка заказов клиентов.xlsx',
-  'Продажи по дням (для анализа) XLSX.xlsx'
+  'Продажи по дням (для анализа) XLSX.xlsx',
+  'Поступления безналичных ДС (Клиенты) XLSX.xlsx'
 ];
 
 async function onec_dataFolderAvailable() {
@@ -5374,18 +5611,11 @@ function openClientModal(clientId, initialTab = null) {
   const managers = uniqueManagers();
   const acts = uniqueActivities();
 
-  const waRaw = (c.wa || c.phone || '').trim();
-  const waDigits = waRaw.replace(/\D/g, '');
-  const waLink = waDigits ? (waRaw.startsWith('http') ? waRaw : `https://wa.me/${waDigits}`) : '';
-  const tgRaw = (c.tg || '').trim();
-  const tgHandle = tgRaw.replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '');
-  const tgLink = tgRaw ? (tgRaw.startsWith('http') ? tgRaw : `https://t.me/${tgHandle}`) : '';
+  // Контакт-кнопка email — оставлена (WA/TG убраны по решению пользователя)
   const contactBtnBase = 'display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; color:white; text-decoration:none; font-size:16px; transition:transform 0.12s, filter 0.12s;';
-  const contactBtns = (tgLink || waLink || c.email) ? `
+  const contactBtns = c.email ? `
         <div style="display:flex; gap:8px; margin-top:12px;">
-          ${tgLink ? `<a href="${escapeHtml(tgLink)}" target="_blank" rel="noopener noreferrer" title="Telegram: ${escapeHtml(c.tg)}" style="${contactBtnBase} background:#2AABEE;" onmouseover="this.style.filter='brightness(1.1)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.filter=''; this.style.transform=''">✈️</a>` : ''}
-          ${waLink ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener noreferrer" title="WhatsApp: ${escapeHtml(c.wa || c.phone)}" style="${contactBtnBase} background:#25D366;" onmouseover="this.style.filter='brightness(1.1)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.filter=''; this.style.transform=''">💬</a>` : ''}
-          ${c.email ? `<a href="mailto:${escapeHtml(c.email)}" title="Написать: ${escapeHtml(c.email)}" style="${contactBtnBase} background:rgba(255,255,255,0.18);" onmouseover="this.style.background='rgba(255,255,255,0.32)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(255,255,255,0.18)'; this.style.transform=''">✉️</a>` : ''}
+          <a href="mailto:${escapeHtml(c.email)}" title="Написать: ${escapeHtml(c.email)}" style="${contactBtnBase} background:rgba(255,255,255,0.18);" onmouseover="this.style.background='rgba(255,255,255,0.32)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(255,255,255,0.18)'; this.style.transform=''">✉️</a>
         </div>` : '';
 
   // KPI-чипы в шапке (показываем только при наличии 1С-данных или ненулевых значений)
@@ -5530,10 +5760,10 @@ function openClientModal(clientId, initialTab = null) {
     if (val('ci-position') !== null) updates.position = val('ci-position');
     if (val('ci-phone') !== null) updates.phone = val('ci-phone');
     if (val('ci-email') !== null) updates.email = val('ci-email');
-    if (val('ci-wa') !== null) updates.wa = val('ci-wa');
-    if (val('ci-tg') !== null) updates.tg = val('ci-tg');
     // Block "Флаги работы"
     if (val('ci-comp') !== null) updates.competitor = val('ci-comp');
+    const lawsuitEl = document.getElementById('ci-lawsuit');
+    if (lawsuitEl) updates.lawsuit = lawsuitEl.checked;
     // Settings tab — override-ы
     if (val('ci-stage-manual') !== null) updates.stageManual = val('ci-stage-manual') || null;
     if (val('ci-cat-manual') !== null) updates.categoryManual = val('ci-cat-manual') || null;
@@ -5564,14 +5794,6 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
   const priceOptions = ['', ...PRICE_TYPES].map(p =>
     `<option value="${escapeHtml(p)}" ${(c.price_type||'')===p?'selected':''}>${p ? escapeHtml(p) : '— не выбрано —'}</option>`
   ).join('');
-
-  // WhatsApp / Telegram прямые ссылки — для значков-кнопок рядом с полями
-  const waRaw = (c.wa || c.phone || '').trim();
-  const waDigits = waRaw.replace(/\D/g, '');
-  const waLink = waDigits ? (waRaw.startsWith('http') ? waRaw : `https://wa.me/${waDigits}`) : '';
-  const tgRaw = (c.tg || '').trim();
-  const tgHandle = tgRaw.replace(/^@/, '').replace(/^https?:\/\/t\.me\//i, '');
-  const tgLink = tgRaw ? (tgRaw.startsWith('http') ? tgRaw : `https://t.me/${tgHandle}`) : '';
 
   // Флаги работы (из 1С + ручные)
   const f1c = c.from1c || {};
@@ -5639,27 +5861,8 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
             <label class="field-row"><span>Должность</span><input id="ci-position" value="${escapeHtml(c.position||'')}" placeholder="Директор / Снабжение"></label>
             <label class="field-row"><span>Телефон</span><input id="ci-phone" value="${escapeHtml(c.phone||'')}" placeholder="+7 ..."></label>
             <label class="field-row"><span>Email</span><input id="ci-email" value="${escapeHtml(c.email||'')}" placeholder="info@..."></label>
-            <div class="field-row">
-              <span>WhatsApp</span>
-              <div style="display:flex; gap:6px; align-items:stretch;">
-                <input id="ci-wa" value="${escapeHtml(c.wa||'')}" placeholder="+7... или ссылка wa.me/..." style="flex:1; min-width:0;">
-                ${waLink ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener" title="Открыть чат в WhatsApp"
-                  style="display:inline-flex; align-items:center; justify-content:center; width:38px; background:#25D366; color:white; border-radius:6px; text-decoration:none; flex-shrink:0;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                </a>` : ''}
-              </div>
-            </div>
-            <div class="field-row">
-              <span>Telegram</span>
-              <div style="display:flex; gap:6px; align-items:stretch;">
-                <input id="ci-tg" value="${escapeHtml(c.tg||'')}" placeholder="@username или ссылка t.me/..." style="flex:1; min-width:0;">
-                ${tgLink ? `<a href="${escapeHtml(tgLink)}" target="_blank" rel="noopener" title="Открыть в Telegram"
-                  style="display:inline-flex; align-items:center; justify-content:center; width:38px; background:#2AABEE; color:white; border-radius:6px; text-decoration:none; flex-shrink:0;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
-                </a>` : ''}
-              </div>
-            </div>
           </div>
+          <div class="text-sm text-muted" style="margin-top:6px;">💬 WhatsApp / Telegram — кнопки доступны в шапке карточки клиента (если указан телефон или @username).</div>
         </div>
 
         <!-- BLOCK: Флаги работы -->
@@ -5673,6 +5876,10 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
             ${editFlag('otkh', f1c.otkh, 'Работа по ОТХ', 'Работа по схеме «обмен на товар-сырьё»')}
             ${editFlag('retro_bonus', f1c.retro_bonus, 'Ретро-бонус', 'Есть соглашение на ретро-бонус')}
             ${editFlag('tested_product', f1c.tested_product, 'Тест нашей продукции', 'Клиент тестировал нашу продукцию')}
+            <label class="client-flag client-flag-edit" title="Идут судебные разбирательства. Такие клиенты не попадают в «Упущенные клиенты»." style="${c.lawsuit ? 'background:#FEF2F2; border-color:#FCA5A5;' : ''}">
+              <input type="checkbox" id="ci-lawsuit" ${c.lawsuit ? 'checked' : ''} style="cursor:pointer; margin-right:6px;">
+              <span style="flex:1;">⚖ Суд${c.lawsuit ? ' <b style="color:var(--danger);">(идёт)</b>' : ''}</span>
+            </label>
             <div class="client-flag" title="Активна программа кэшбека"><span>${f1c.cashback ? '✅' : '➖'}</span> Кэшбек${f1c.cashback ? ': ' + escapeHtml(f1c.cashback) : ''}</div>
             <div class="client-flag" title="Бренд-конкурент">${f1c.brand_competitor ? `🏷 Бренд-конкурент: <b>${escapeHtml(f1c.brand_competitor)}</b>` : '<span>➖</span> Бренд-конкурент не указан'}</div>
           </div>
@@ -5871,91 +6078,91 @@ function bindClientFiles(c) {
 function renderClientSettings(c, sgInfo, catInfo, managers) {
   const hasOverrides = c.stageManual || c.categoryManual || c.cityManual || c.contract_noManual;
   return `
-    <div style="max-width: 700px;">
+    <div style="max-width: 1100px;">
       <div class="info-banner" style="background:#F0F9FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px 14px; margin-bottom:18px; font-size:13px; color:#1E40AF;">
         ℹ Здесь — ручные override-ы. Они <b>перебивают значения из 1С</b>. Если поле не заполнено — значение берётся из 1С (если есть), иначе авто-расчёт.
       </div>
 
-      <div class="client-block">
-        <div class="client-block-title">🎯 Этап воронки</div>
-        <div style="padding: 4px 0 8px;">
-          <div style="margin-bottom: 6px;">Сейчас: ${stageChip(sgInfo.stage)}</div>
-          <div class="text-sm text-muted" style="margin-bottom:10px;">Источник: ${sgInfo.reasons.map(escapeHtml).join(', ')}</div>
-        </div>
-        <label class="field-row"><span>Установить вручную (override)</span>
-          <select id="ci-stage-manual">
-            <option value="">— рассчитывать автоматически (приоритет 1С) —</option>
-            ${STAGES.map(s => `<option value="${s.id}" ${c.stageManual===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}
-          </select>
-        </label>
-      </div>
-
-      <div class="client-block">
-        <div class="client-block-title">🏷 Категория клиента</div>
-        <div style="padding: 4px 0 8px;">
-          <div style="margin-bottom: 6px;">Сейчас: <span class="chip chip-cat-${catInfo.category}">${catInfo.category}</span></div>
-          <div class="text-sm text-muted" style="margin-bottom:10px;">Источник: ${catInfo.reasons.map(escapeHtml).join(', ')}</div>
-        </div>
-        <label class="field-row"><span>Установить вручную (override)</span>
-          <select id="ci-cat-manual">
-            <option value="">— рассчитывать автоматически (приоритет 1С) —</option>
-            <option value="A" ${c.categoryManual==='A'?'selected':''}>A — активный</option>
-            <option value="B" ${c.categoryManual==='B'?'selected':''}>B — слабоактивный</option>
-            <option value="C" ${c.categoryManual==='C'?'selected':''}>C — не отгружается</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="client-block">
-        <div class="client-block-title">👤 Ответственный менеджер</div>
-        <label class="field-row"><span>Менеджер</span>
-          <select id="ci-manager">
-            ${managers.map(m => `<option ${c.manager===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
-            ${!managers.includes(c.manager) && c.manager ? `<option selected>${escapeHtml(c.manager)}</option>` : ''}
-          </select>
-        </label>
-        ${c.from1c && c.from1c.primary_manager && c.from1c.primary_manager !== c.manager ? `
-          <div class="text-sm" style="color:var(--warning); margin-top:6px;">⚠ В 1С указан другой менеджер: <b>${escapeHtml(c.from1c.primary_manager)}</b>. При следующем импорте значение в CRM перепишется.</div>
-        ` : ''}
-      </div>
-
-      <!-- Напоминание о неактивности -->
-      <div class="client-block">
-        <div class="client-block-title">🔔 Напоминание о неактивности</div>
-        <p class="text-sm text-muted" style="margin: -4px 0 10px;">Если по клиенту не было событий или продаж дольше N дней — CRM покажет напоминание в разделе «Упущенные клиенты».</p>
-        <div class="info-grid-2col">
-          <label class="field-row"><span>Включить напоминание</span>
-            <select id="ci-reminder-enabled">
-              <option value="0" ${!(c.reminder && c.reminder.enabled)?'selected':''}>Нет (общая настройка из «Параметры работы»)</option>
-              <option value="1" ${(c.reminder && c.reminder.enabled)?'selected':''}>Да — индивидуально для этого клиента</option>
+      <div style="display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap:14px;">
+        <div class="client-block">
+          <div class="client-block-title">🎯 Этап воронки</div>
+          <div style="padding: 4px 0 8px;">
+            <div style="margin-bottom: 6px;">Сейчас: ${stageChip(sgInfo.stage)}</div>
+            <div class="text-sm text-muted" style="margin-bottom:10px;">Источник: ${sgInfo.reasons.map(escapeHtml).join(', ')}</div>
+          </div>
+          <label class="field-row"><span>Установить вручную (override)</span>
+            <select id="ci-stage-manual">
+              <option value="">— рассчитывать автоматически (приоритет 1С) —</option>
+              ${STAGES.map(s => `<option value="${s.id}" ${c.stageManual===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}
             </select>
           </label>
-          <label class="field-row"><span>Через сколько дней без активности</span>
+        </div>
+
+        <div class="client-block">
+          <div class="client-block-title">🏷 Категория клиента</div>
+          <div style="padding: 4px 0 8px;">
+            <div style="margin-bottom: 6px;">Сейчас: <span class="chip chip-cat-${catInfo.category}">${catInfo.category}</span></div>
+            <div class="text-sm text-muted" style="margin-bottom:10px;">Источник: ${catInfo.reasons.map(escapeHtml).join(', ')}</div>
+          </div>
+          <label class="field-row"><span>Установить вручную (override)</span>
+            <select id="ci-cat-manual">
+              <option value="">— рассчитывать автоматически (приоритет 1С) —</option>
+              <option value="A" ${c.categoryManual==='A'?'selected':''}>A — активный</option>
+              <option value="B" ${c.categoryManual==='B'?'selected':''}>B — слабоактивный</option>
+              <option value="C" ${c.categoryManual==='C'?'selected':''}>C — не отгружается</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="client-block">
+          <div class="client-block-title">👤 Ответственный менеджер</div>
+          <label class="field-row"><span>Менеджер</span>
+            <select id="ci-manager">
+              ${managers.map(m => `<option ${c.manager===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
+              ${!managers.includes(c.manager) && c.manager ? `<option selected>${escapeHtml(c.manager)}</option>` : ''}
+            </select>
+          </label>
+          ${c.from1c && c.from1c.primary_manager && c.from1c.primary_manager !== c.manager ? `
+            <div class="text-sm" style="color:var(--warning); margin-top:6px;">⚠ В 1С указан другой менеджер: <b>${escapeHtml(c.from1c.primary_manager)}</b>. При следующем импорте значение в CRM перепишется.</div>
+          ` : ''}
+        </div>
+
+        <!-- Напоминание о неактивности -->
+        <div class="client-block">
+          <div class="client-block-title">🔔 Напоминание о неактивности</div>
+          <p class="text-sm text-muted" style="margin: -4px 0 10px;">Если по клиенту нет событий или продаж дольше N дней — появится в «Упущенные клиенты».</p>
+          <label class="field-row"><span>Включить напоминание</span>
+            <select id="ci-reminder-enabled">
+              <option value="0" ${!(c.reminder && c.reminder.enabled)?'selected':''}>Нет (общая настройка)</option>
+              <option value="1" ${(c.reminder && c.reminder.enabled)?'selected':''}>Да — индивидуально</option>
+            </select>
+          </label>
+          <label class="field-row" style="margin-top:6px;"><span>Через сколько дней без активности</span>
             <input type="number" id="ci-reminder-days" min="1" max="365" value="${(c.reminder && c.reminder.days) || 30}" placeholder="30">
           </label>
         </div>
-      </div>
 
-      <!-- Метки/теги -->
-      <div class="client-block">
-        <div class="client-block-title">🏷 Метки / теги</div>
-        <p class="text-sm text-muted" style="margin: -4px 0 10px;">Свободные метки для группировки и поиска. Например: «требует личной встречи», «строитель», «отказы по цене».</p>
-        <div id="ci-tags-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; min-height:28px;">
-          ${(c.tags || []).length ? (c.tags || []).map(t => `
-            <span class="chip chip-default" style="display:inline-flex; align-items:center; gap:6px;">
-              ${escapeHtml(t)}
-              <button data-tag-remove="${escapeHtml(t)}" title="Удалить метку" style="background:none; border:none; cursor:pointer; padding:0; font-size:14px; line-height:1; color:var(--text-muted);">×</button>
-            </span>
-          `).join('') : '<span class="text-sm text-muted">пока меток нет</span>'}
-        </div>
-        <div style="display:flex; gap:6px;">
-          <input id="ci-tag-input" placeholder="Введите метку и нажмите Enter…" style="flex:1; min-width:0; padding:8px 12px; border:1px solid #CBD5E1; border-radius:6px; font-size:14px;">
-          <button class="btn btn-sm btn-primary" id="ci-tag-add">+ Добавить</button>
+        <!-- Метки/теги — на всю ширину -->
+        <div class="client-block" style="grid-column: 1 / -1;">
+          <div class="client-block-title">🏷 Метки / теги</div>
+          <p class="text-sm text-muted" style="margin: -4px 0 10px;">Свободные метки для группировки и поиска. Например: «требует личной встречи», «строитель», «отказы по цене».</p>
+          <div id="ci-tags-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; min-height:28px;">
+            ${(c.tags || []).length ? (c.tags || []).map(t => `
+              <span class="chip chip-default" style="display:inline-flex; align-items:center; gap:6px;">
+                ${escapeHtml(t)}
+                <button data-tag-remove="${escapeHtml(t)}" title="Удалить метку" style="background:none; border:none; cursor:pointer; padding:0; font-size:14px; line-height:1; color:var(--text-muted);">×</button>
+              </span>
+            `).join('') : '<span class="text-sm text-muted">пока меток нет</span>'}
+          </div>
+          <div style="display:flex; gap:6px;">
+            <input id="ci-tag-input" placeholder="Введите метку и нажмите Enter…" style="flex:1; min-width:0; padding:8px 12px; border:1px solid #CBD5E1; border-radius:6px; font-size:14px;">
+            <button class="btn btn-sm btn-primary" id="ci-tag-add">+ Добавить</button>
+          </div>
         </div>
       </div>
 
       ${hasOverrides ? `
-        <button class="btn btn-sm" id="ci-reset-overrides" style="margin-top:10px;">↺ Сбросить все override-ы</button>
+        <button class="btn btn-sm" id="ci-reset-overrides" style="margin-top:14px;">↺ Сбросить все override-ы</button>
       ` : ''}
 
       ${c.from1c ? `
@@ -6988,10 +7195,11 @@ function renderActivity() {
           <option value="email" ${f.kind==='email'?'selected':''}>Письмо</option>
         </optgroup>
       </select>
+      ${state.user && state.user.role === 'admin' ? `
       <select id="af-manager">
         <option value="all">Все менеджеры</option>
         ${managers.map(m => `<option value="${escapeHtml(m)}" ${f.manager===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
-      </select>
+      </select>` : ''}
       <select id="af-period">
         <option value="7" ${f.period==='7'?'selected':''}>За неделю</option>
         <option value="30" ${f.period==='30'?'selected':''}>За 30 дней</option>
@@ -7056,10 +7264,11 @@ function renderActivityInline() {
           <option value="email" ${f.kind==='email'?'selected':''}>Письмо</option>
         </optgroup>
       </select>
+      ${state.user && state.user.role === 'admin' ? `
       <select id="af-manager">
         <option value="all">Все менеджеры</option>
         ${managers.map(m => `<option value="${escapeHtml(m)}" ${f.manager===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
-      </select>
+      </select>` : ''}
       <select id="af-period">
         <option value="7" ${f.period==='7'?'selected':''}>За неделю</option>
         <option value="30" ${f.period==='30'?'selected':''}>За 30 дней</option>
@@ -7653,6 +7862,7 @@ function renderRawData() {
       <button class="page-tab ${tab==='contracts'?'active':''}" data-rtab="contracts">📝 Договоры</button>
       <button class="page-tab ${tab==='debt'?'active':''}" data-rtab="debt">💳 Долги</button>
       <button class="page-tab ${tab==='agreements'?'active':''}" data-rtab="agreements">⏱ Соглашения</button>
+      <button class="page-tab ${tab==='payments'?'active':''}" data-rtab="payments">💵 Поступления ДС</button>
     </div>
     <div id="rawdata-content"></div>
   `;
@@ -7673,13 +7883,14 @@ function afterRawData() {
   if (tab === 'contracts') return drawRawContracts(wrap);
   if (tab === 'debt') return drawRawDebt(wrap);
   if (tab === 'agreements') return drawRawAgreements(wrap);
+  if (tab === 'payments') return drawRawPayments(wrap);
 }
 
 // --- Модель данных (Power BI-style) — таблицы 1С с ключами и связями ---
 function drawRawModel(wrap) {
   // Считаем размеры каждой таблицы
   const cntPartners = state.clients.filter(c => c.from1c).length;
-  let cntSales = 0, cntContracts = 0, cntAgreements = 0, cntDebt = 0, cntOrders = 0;
+  let cntSales = 0, cntContracts = 0, cntAgreements = 0, cntDebt = 0, cntOrders = 0, cntPayments = 0;
   state.clients.forEach(c => {
     if (!c.from1c) return;
     cntSales += (c.from1c.sales && c.from1c.sales.txn_count) || 0;
@@ -7687,6 +7898,7 @@ function drawRawModel(wrap) {
     if (c.from1c.agreement) cntAgreements++;
     if (c.from1c.debt && c.from1c.debt.total > 0) cntDebt++;
     if (c.from1c.orders) cntOrders++;
+    cntPayments += (c.from1c.payments && c.from1c.payments.count) || 0;
   });
 
   // Описание таблиц: id, label, источник, поля (PK звёздочкой)
@@ -7730,6 +7942,11 @@ function drawRawModel(wrap) {
       id: 'orders', label: '📦 Заказы', file: 'Расшифровка заказов клиентов',
       count: cntOrders, color: '#EC4899', col: 0, row: 2, badge: 'не используется в UI',
       fields: ['🔑 partner (FK→Партнёры)', 'total (сумма заказов)', 'open (открытые)', 'closed (закрытые)', 'last_date']
+    },
+    {
+      id: 'payments', label: '💵 Поступления ДС', file: 'Поступления безналичных ДС (Клиенты)',
+      count: cntPayments, color: '#16A34A', col: 0, row: 3, badge: '⭐ новое — пульс выручки',
+      fields: ['🔑 partner (FK→Партнёры, через head_company или Партнер)', '⭐ date (Дата входящего документа)', 'amount (Сумма документа)', 'doc_no (Номер входящего)', 'manager (Партнер.Основной менеджер)', 'partner_actual (плательщик-филиал)', '📌 автодетект колонок по тексту заголовка']
     }
   ];
 
@@ -7741,7 +7958,8 @@ function drawRawModel(wrap) {
     { from: 'contracts', to: 'partners' },
     { from: 'agreements', to: 'partners' },
     { from: 'debt', to: 'partners' },
-    { from: 'orders', to: 'partners' }
+    { from: 'orders', to: 'partners' },
+    { from: 'payments', to: 'partners' }
   ];
 
   wrap.innerHTML = `
@@ -7857,7 +8075,7 @@ function drawRawModel(wrap) {
     el.addEventListener('click', () => {
       const tabName = el.dataset.tbl;
       // Маппинг id→таб (где доступно)
-      const map = { partners: 'partners', sales: 'sales', contracts: 'contracts', debt: 'debt', agreements: 'agreements' };
+      const map = { partners: 'partners', sales: 'sales', contracts: 'contracts', debt: 'debt', agreements: 'agreements', payments: 'payments' };
       if (map[tabName]) {
         state._rawDataTab = map[tabName];
         renderView();
@@ -8170,6 +8388,41 @@ function drawRawAgreements(wrap) {
       { label: 'База', value: r => r.date_base, render: r => escapeHtml(r.date_base || '—') }
     ],
     exportFn: () => _exportXlsx(rows, 'Соглашения', '1С_соглашения')
+  });
+}
+
+function drawRawPayments(wrap) {
+  // Собираем все платежи всех клиентов с привязкой
+  const all = [];
+  state.clients.forEach(c => {
+    if (!c.from1c || !c.from1c.payments || !c.from1c.payments.items) return;
+    c.from1c.payments.items.forEach(p => {
+      all.push({
+        _cid: c.id,
+        date: p.date,
+        client: c.name,
+        partner_actual: p.partner_actual || c.name,
+        manager: p.manager || c.manager || '',
+        doc_no: p.doc_no || '',
+        amount: p.amount || 0
+      });
+    });
+  });
+  all.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+  const total = all.reduce((s, p) => s + (p.amount || 0), 0);
+  _rawTable({
+    wrap, rows: all, title: `💵 Поступления безналичных ДС — итого ${fmt.num(total)}`, total: all.length,
+    searchPlaceholder: 'Поиск по клиенту / плательщику / менеджеру / № документа…',
+    exportName: 'payments',
+    columns: [
+      { label: 'Дата', value: r => r.date, num: true, render: r => fmt.date(r.date) },
+      { label: 'Клиент', value: r => r.client, render: r => `<span class="fw-600">${escapeHtml(r.client||'')}</span>` },
+      { label: 'Плательщик', value: r => r.partner_actual, render: r => r.partner_actual !== r.client ? `<span class="text-sm">${escapeHtml(r.partner_actual)}</span>` : '<span class="text-muted">тот же</span>' },
+      { label: '№ док.', value: r => r.doc_no, render: r => escapeHtml(r.doc_no || '—') },
+      { label: 'Менеджер', value: r => r.manager, render: r => escapeHtml(r.manager || '—') },
+      { label: 'Сумма', value: r => r.amount, num: true, render: r => `<span class="fw-700" style="color:#166534;">${fmt.num(r.amount)}</span>` }
+    ],
+    exportFn: () => _exportXlsx(all, 'Поступления', '1С_поступления')
   });
 }
 
