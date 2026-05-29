@@ -5505,20 +5505,22 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
             <label class="field-row"><span>Email</span><input id="ci-email" value="${escapeHtml(c.email||'')}" placeholder="info@..."></label>
             <div class="field-row">
               <span>WhatsApp</span>
-              <div style="display:flex; gap:6px;">
+              <div style="display:flex; gap:6px; align-items:stretch;">
                 <input id="ci-wa" value="${escapeHtml(c.wa||'')}" placeholder="+7... или ссылка wa.me/..." style="flex:1; min-width:0;">
-                ${waLink
-                  ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener" title="Открыть чат в WhatsApp" style="display:inline-flex; align-items:center; gap:6px; padding:0 14px; background:#25D366; color:white; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap;">💬 Открыть</a>`
-                  : `<span title="Заполните номер или ссылку wa.me/..." style="display:inline-flex; align-items:center; gap:6px; padding:0 14px; background:#E5E7EB; color:var(--text-soft); border-radius:6px; font-size:13px; font-weight:600; white-space:nowrap; cursor:not-allowed;">💬 —</span>`}
+                ${waLink ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener" title="Открыть чат в WhatsApp"
+                  style="display:inline-flex; align-items:center; justify-content:center; width:38px; background:#25D366; color:white; border-radius:6px; text-decoration:none; flex-shrink:0;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                </a>` : ''}
               </div>
             </div>
             <div class="field-row">
               <span>Telegram</span>
-              <div style="display:flex; gap:6px;">
+              <div style="display:flex; gap:6px; align-items:stretch;">
                 <input id="ci-tg" value="${escapeHtml(c.tg||'')}" placeholder="@username или ссылка t.me/..." style="flex:1; min-width:0;">
-                ${tgLink
-                  ? `<a href="${escapeHtml(tgLink)}" target="_blank" rel="noopener" title="Открыть в Telegram" style="display:inline-flex; align-items:center; gap:6px; padding:0 14px; background:#2AABEE; color:white; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap;">✈ Открыть</a>`
-                  : `<span title="Заполните @username или ссылку t.me/..." style="display:inline-flex; align-items:center; gap:6px; padding:0 14px; background:#E5E7EB; color:var(--text-soft); border-radius:6px; font-size:13px; font-weight:600; white-space:nowrap; cursor:not-allowed;">✈ —</span>`}
+                ${tgLink ? `<a href="${escapeHtml(tgLink)}" target="_blank" rel="noopener" title="Открыть в Telegram"
+                  style="display:inline-flex; align-items:center; justify-content:center; width:38px; background:#2AABEE; color:white; border-radius:6px; text-decoration:none; flex-shrink:0;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
+                </a>` : ''}
               </div>
             </div>
           </div>
@@ -6256,7 +6258,7 @@ function renderSalesTab(c) {
       <div style="padding:0; background:white;">
         <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
           <input type="search" id="sales-search" placeholder="🔍 Поиск по артикулу / номенклатуре / бренду…" style="padding:6px 12px; border:1px solid var(--border); border-radius:8px; flex:1; max-width:400px; font-size:13px;">
-          <span class="text-sm text-muted" id="sales-page-info">показано ${Math.min(5, txns.length)} из ${txns.length}</span>
+          <span class="text-sm text-muted" id="sales-page-info">показано ${Math.min(6, txns.length)} из ${txns.length}</span>
         </div>
         <div style="max-height: 320px; overflow-y: auto;">
           <table class="data" id="sales-table" style="font-size:13px;">
@@ -6272,7 +6274,7 @@ function renderSalesTab(c) {
               <th class="num">Маржа</th>
             </tr></thead>
             <tbody id="sales-tbody">
-              ${txns.slice(0, 5).map(t => {
+              ${txns.slice(0, 6).map(t => {
                 const isRefund = t.amount < 0;
                 const prof = t.profit != null ? t.profit : ((t.amount||0) - (t.cost||0));
                 const marg = t.margin != null ? t.margin : (t.amount > 0 ? (prof/t.amount*100) : 0);
@@ -6294,9 +6296,9 @@ function renderSalesTab(c) {
           </table>
           <div id="sales-table-empty" class="empty-state" style="padding:30px; display:none;">Ничего не найдено</div>
         </div>
-        ${txns.length > 5 ? `
+        ${txns.length > 6 ? `
           <div style="padding:10px 16px; text-align:center; border-top:1px solid var(--border); background:#FAFBFC;">
-            <button class="btn btn-ghost btn-sm" id="sales-show-more">Показать ещё (${txns.length - 5}) ↓</button>
+            <button class="btn btn-ghost btn-sm" id="sales-show-more">Показать ещё (${txns.length - 6}) ↓</button>
           </div>
         ` : ''}
       </div>
