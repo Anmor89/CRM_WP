@@ -925,7 +925,7 @@ mark { background: var(--wp-yellow-soft); padding: 0 2px; border-radius: 2px; co
       <div class="topbar-title" id="view-title">Дашборд</div>
       <div class="topbar-actions">
         <div class="topbar-context" id="topbar-context"></div>
-        <button class="btn" id="onec-refresh-btn" title="Обновить данные 1С — выбрать xlsx-файлы (или авто-импорт из локальной папки _data/, если запущен HTTP-сервер)">🔄 Обновить</button>
+        <button class="btn" id="onec-refresh-btn" title="Обновить данные 1С — выбрать xlsx-файлы (или авто-импорт из локальной папки «Данные 1С», если запущен HTTP-сервер)">🔄 Обновить</button>
       </div>
     </header>
     <div id="view-container" class="view-container"></div>
@@ -1435,7 +1435,7 @@ document.getElementById('login-form').addEventListener('submit', (e) => {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   renderApp();
-  // Авто-импорт из локальной папки _data/, если она доступна (HTTP-сервер запущен).
+  // Авто-импорт из локальной папки «Данные 1С/» (или legacy «_data/»), если она доступна.
   // Без сервера это просто молча пропускается — кнопка «🔄 Обновить» всё равно открывает file picker.
   onec_dataFolderAvailable().then(ok => {
     if (ok) onec_autoImport({ silent: true });
@@ -1715,11 +1715,11 @@ document.getElementById('onec-refresh-btn')?.addEventListener('click', async (e)
   const btn = e.currentTarget;
   btn.disabled = true;
   btn.textContent = '⏳ Проверяю источник…';
-  // Если рядом есть локальная папка _data/ (HTTP-сервер) — авто-импорт.
+  // Если рядом есть локальная папка «Данные 1С/» (HTTP-сервер) — авто-импорт.
   // Если нет (GitHub Pages, file://) — открываем file picker.
   const hasLocal = await onec_dataFolderAvailable();
   if (hasLocal) {
-    btn.textContent = '⏳ Импорт из _data/…';
+    btn.textContent = '⏳ Импорт из «Данные 1С»…';
     await onec_autoImport({ silent: false });
   } else {
     btn.innerHTML = '🔄 Обновить';
@@ -5197,9 +5197,10 @@ function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
   return stats;
 }
 
-// =================== 1С: АВТО-ИМПОРТ из локальной папки _data/ ===================
-// Сценарий: пользователь запустил start_crm.ps1 → скрипт скопировал xlsx в _data/ →
-// сервер стартанул, CRM открыта на http://localhost — проверяем папку и тихо импортируем.
+// =================== 1С: АВТО-ИМПОРТ из локальной папки «Данные 1С» ===================
+// Сценарий: пользователь запустил локальный HTTP-сервер (python -m http.server)
+// рядом с index.html. CRM проверяет папку и тихо импортирует xlsx-файлы.
+// Поддерживает 2 пути: новый «Данные 1С/» и legacy «_data/».
 
 const ONEC_AUTOLOAD_FILES = [
   'Справочник партнеров (B2B продажи) XLSX.xlsx',
@@ -5212,14 +5213,29 @@ const ONEC_AUTOLOAD_FILES = [
   'Продажи по дням (для анализа) XLSX.xlsx',
   'Поступления безналичных ДС (Клиенты) XLSX.xlsx'
 ];
+// Кандидаты на папку с данными — пробуем в этом порядке.
+// «Данные 1С/» — новый путь (после переноса 30.05.2026), «_data/» — старый.
+const ONEC_DATA_DIRS = ['Данные 1С', '_data'];
+let _onecDataDir = null; // запоминаем подходящую папку, чтобы не проверять каждый раз
 
 async function onec_dataFolderAvailable() {
-  // file:// не умеет fetch к относительным путям → авто-импорт невозможен
   if (location.protocol === 'file:') return false;
-  try {
-    const r = await fetch('./_data/' + encodeURIComponent(ONEC_AUTOLOAD_FILES[0]), { method: 'HEAD' });
-    return r.ok;
-  } catch (e) { return false; }
+  // Если уже знаем рабочую папку — быстрый ребич
+  if (_onecDataDir) {
+    try {
+      const r = await fetch('./' + encodeURIComponent(_onecDataDir) + '/' + encodeURIComponent(ONEC_AUTOLOAD_FILES[0]), { method: 'HEAD' });
+      if (r.ok) return true;
+    } catch (e) {}
+    _onecDataDir = null;
+  }
+  // Иначе пробуем все кандидаты
+  for (const dir of ONEC_DATA_DIRS) {
+    try {
+      const r = await fetch('./' + encodeURIComponent(dir) + '/' + encodeURIComponent(ONEC_AUTOLOAD_FILES[0]), { method: 'HEAD' });
+      if (r.ok) { _onecDataDir = dir; return true; }
+    } catch (e) {}
+  }
+  return false;
 }
 
 function onec_toast(msg, type='info', durationMs=4000) {
@@ -5248,9 +5264,10 @@ async function onec_autoImport(opts = {}) {
 
   const parsed = {};
   const errors = [];
+  const dir = _onecDataDir || ONEC_DATA_DIRS[0];
   for (const fn of ONEC_AUTOLOAD_FILES) {
     try {
-      const r = await fetch('./_data/' + encodeURIComponent(fn));
+      const r = await fetch('./' + encodeURIComponent(dir) + '/' + encodeURIComponent(fn));
       if (!r.ok) { errors.push(`${fn}: ${r.status}`); continue; }
       const ab = await r.arrayBuffer();
       const key = onec_detect(fn);
