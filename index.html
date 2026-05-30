@@ -2728,36 +2728,36 @@ function afterClients() {
       </div>
 
       <div class="card" style="border-left:4px solid ${neglected.length ? 'var(--danger)' : 'var(--success)'};">
-        <div class="card-header">
-          <div class="card-title" style="color:${neglected.length ? 'var(--danger)' : 'var(--text)'};">${neglected.length ? '⚠' : '✨'} Упущенные клиенты <span class="chip ${neglected.length ? 'chip-danger' : 'chip-default'}" style="margin-left:6px;">${neglected.length}</span></div>
-          <span class="text-sm text-muted">${months} мес без активности</span>
+        <div class="card-header" style="padding-bottom:6px;">
+          <div class="card-title" style="color:${neglected.length ? 'var(--danger)' : 'var(--text)'}; font-size:13px;">${neglected.length ? '⚠' : '✨'} Упущенные клиенты <span class="chip ${neglected.length ? 'chip-danger' : 'chip-default'}" style="margin-left:6px;">${neglected.length}</span></div>
+          <span class="text-sm text-muted" style="font-size:11px;">${months} мес без активности</span>
         </div>
         ${neglected.length ? `
-          <table class="data" style="font-size:12px;">
-            <thead><tr><th>Клиент</th><th>Менеджер</th><th class="num">Посл.&nbsp;событие</th><th class="num">Посл.&nbsp;продажа</th></tr></thead>
-            <tbody id="neglected-tbody">
-              ${(open ? neglected.slice(0, 50) : neglected.slice(0, 3)).map(c => {
-                const lastSale = (c.from1c && c.from1c.sales && c.from1c.sales.last_date) || null;
-                const lastEv = lastEventDate(c.id);
-                return `<tr data-cid="${c.id}" style="cursor:pointer;">
-                  <td class="fw-600" style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</td>
-                  <td style="max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(c.manager||'')}">${escapeHtml(c.manager||'—')}</td>
-                  <td class="num">${lastEv ? fmt.date(lastEv) : '<span class="text-muted">—</span>'}</td>
-                  <td class="num">${lastSale ? fmt.date(lastSale) : '<span class="text-muted">—</span>'}</td>
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
+          <div style="padding:6px 12px 4px; display:flex; flex-direction:column; gap:4px;" id="neglected-tbody">
+            ${(open ? neglected.slice(0, 50) : neglected.slice(0, 3)).map(c => {
+              const lastSale = (c.from1c && c.from1c.sales && c.from1c.sales.last_date) || null;
+              const lastEv = lastEventDate(c.id);
+              return `<div data-cid="${c.id}" style="cursor:pointer; padding:6px 8px; border-radius:6px; display:flex; align-items:baseline; gap:8px; justify-content:space-between;" onmouseover="this.style.background='#FAFBFC'" onmouseout="this.style.background=''">
+                <div style="min-width:0; flex:1;">
+                  <div class="fw-600" style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</div>
+                  <div class="text-sm text-muted" style="font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(c.manager||'—')}</div>
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); white-space:nowrap;">
+                  событие: ${lastEv ? fmt.date(lastEv) : '—'} · продажа: ${lastSale ? fmt.date(lastSale) : '—'}
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
           ${neglected.length > 3 ? `
-            <div style="padding:6px 12px; text-align:center; border-top:1px solid var(--border); background:#FAFBFC;">
-              <button class="btn btn-ghost btn-sm" id="neglected-toggle" style="font-size:11px;">${open ? `Свернуть ↑` : `Показать все ${neglected.length} ↓`}</button>
+            <div style="padding:4px 12px; text-align:center; border-top:1px solid var(--border); background:#FAFBFC; font-size:10px;">
+              <button class="btn btn-ghost btn-sm" id="neglected-toggle" style="font-size:10px; padding:2px 8px;">${open ? `Свернуть ↑` : `Все ${neglected.length} ↓`}</button>
               ${!open ? `<span class="text-sm text-muted" style="margin-left:6px;">показано 3 из ${neglected.length}</span>` : ''}
             </div>
           ` : ''}
         ` : `
-          <div class="empty-state" style="padding:18px;">
-            <div class="empty-state-icon" style="font-size:24px;">🎉</div>
-            <div class="fw-700" style="color:var(--success); font-size:13px;">Все клиенты в работе</div>
+          <div class="empty-state" style="padding:14px;">
+            <div class="empty-state-icon" style="font-size:20px;">🎉</div>
+            <div class="fw-700" style="color:var(--success); font-size:12px;">Все клиенты в работе</div>
           </div>
         `}
       </div>
@@ -3401,6 +3401,34 @@ function openEventModal(eventId, defaultDate=null, defaultClientId=null) {
     if (resultEl) e.result = resultEl.value;
     e.completed = true;
     e.completed_at = new Date().toISOString();
+    // Если это поручение ТП — авто-добавить клиента в Базу ТП с реквизитами
+    if (e.kind === 'tp_visit' && e.assigned_to_rep && e.clientId) {
+      const mainClient = state.clients.find(x => x.id === e.clientId);
+      if (mainClient) {
+        const existsInTp = state.tpClients.find(t => (t.linked_client_id === mainClient.id) || (mainClient.inn && t.inn === mainClient.inn) || (t.name === mainClient.name));
+        if (!existsInTp) {
+          const tpc = {
+            id: 'tp_auto_' + uid(),
+            rep: e.assigned_to_rep,
+            name: mainClient.name || '',
+            inn: mainClient.inn || '',
+            address: mainClient.address || '',
+            city: mainClient.city || '',
+            contact_name: mainClient.contact_name || '',
+            phone: mainClient.phone || '',
+            email: mainClient.email || '',
+            type: 'СТО',
+            work_status: 'Свежий',
+            photos: [],
+            visits: [{ date: tpLocalDateStr(), summary: e.result || '', next_plan: '' }],
+            linked_client_id: mainClient.id,
+            _auto_from_mgr_task: e.id,
+          };
+          state.tpClients.push(tpc);
+          onec_toast(`✓ Клиент «${tpc.name}» добавлен в Базу ТП.`, 'success', 5000);
+        }
+      }
+    }
     persist(); closeModal();
     if (state.currentView === 'calendar') drawCalendar();
     renderView(); renderNav();
@@ -4285,47 +4313,48 @@ function renderSettings() {
 
     </div>
 
-    <div class="card">
-      <div class="card-header"><div class="card-title">Параметры работы</div></div>
-      <div class="card-body">
-        <p class="text-sm text-muted mb-3">Настройки логики работы с клиентской базой.</p>
-        <label class="setting-row" style="align-items:center; gap:12px;">
-          <span style="flex:1;">Считать клиента <b>упущенным</b> если нет ни событий, ни продаж за последние</span>
-          <input type="number" id="neglected-months" min="1" max="24" value="${(state.settings && state.settings.neglectedMonths) || 2}" style="width:60px; padding:6px 10px; border:1px solid var(--border); border-radius:6px; text-align:center; font-size:14px;">
-          <span>мес.</span>
-          <button class="btn btn-primary btn-sm" id="neglected-months-save">Сохранить</button>
-        </label>
-        <p class="text-sm text-muted mt-2" style="padding-left:4px;">Упущенные клиенты отображаются в разделе «Клиенты» внизу страницы.</p>
+    <div class="grid grid-2 mb-4" style="grid-template-columns: 1fr 1fr; align-items: stretch;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Параметры работы</div></div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-3">Настройки логики работы с клиентской базой.</p>
+          <label class="setting-row" style="align-items:center; gap:12px; flex-wrap:wrap;">
+            <span style="flex:1; min-width:200px;">Считать клиента <b>упущенным</b> если нет ни событий, ни продаж за последние</span>
+            <input type="number" id="neglected-months" min="1" max="24" value="${(state.settings && state.settings.neglectedMonths) || 2}" style="width:60px; padding:6px 10px; border:1px solid var(--border); border-radius:6px; text-align:center; font-size:14px;">
+            <span>мес.</span>
+            <button class="btn btn-primary btn-sm" id="neglected-months-save">Сохранить</button>
+          </label>
+          <p class="text-sm text-muted mt-2" style="padding-left:4px;">Упущенные клиенты отображаются в разделе «Клиенты» внизу страницы.</p>
+        </div>
       </div>
-    </div>
 
-    <div class="card mb-4">
-      <div class="card-header">
-        <div class="card-title">🗑 Архив клиентов</div>
-        <span class="text-sm text-muted">${(state.clients||[]).filter(c => c.archived).length ? `${(state.clients||[]).filter(c => c.archived).length} в архиве` : 'архив пуст'}</span>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🗑 Архив клиентов</div>
+          <span class="text-sm text-muted">${(state.clients||[]).filter(c => c.archived).length ? `${(state.clients||[]).filter(c => c.archived).length} в архиве` : 'архив пуст'}</span>
+        </div>
+        ${(() => {
+          const archived = (state.clients||[]).filter(c => c.archived);
+          if (!archived.length) return '<div class="empty-state" style="padding:18px;">Архив пуст</div>';
+          return `
+            <div style="max-height:300px; overflow-y:auto;">
+              <table class="data" style="font-size:12px;">
+                <thead><tr><th>Клиент</th><th>Менеджер</th><th style="width:160px;">Действия</th></tr></thead>
+                <tbody>
+                  ${archived.map(c => `<tr>
+                    <td class="fw-600" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</td>
+                    <td style="max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(c.manager||'—')}</td>
+                    <td>
+                      <button class="btn btn-sm" data-arch-restore="${c.id}" title="Вернуть в работу">↩</button>
+                      <button class="btn btn-sm btn-danger" data-arch-purge="${c.id}" title="Удалить навсегда">✕</button>
+                    </td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        })()}
       </div>
-      ${(() => {
-        const archived = (state.clients||[]).filter(c => c.archived);
-        if (!archived.length) return '<div class="empty-state" style="padding:20px;">Архив пуст — никто не удалял клиентов</div>';
-        return `
-          <p class="text-sm text-muted" style="padding: 10px 18px 0;">Клиенты, которые менеджеры пометили на удаление. В рабочих списках их нет. Можно восстановить или удалить окончательно.</p>
-          <table class="data">
-            <thead><tr><th>Клиент</th><th>Менеджер</th><th>Архивировал</th><th class="num">Когда</th><th style="width:180px;">Действия</th></tr></thead>
-            <tbody>
-              ${archived.map(c => `<tr>
-                <td class="fw-600">${escapeHtml(c.name)}</td>
-                <td>${escapeHtml(c.manager||'—')}</td>
-                <td>${escapeHtml(c.archivedBy||'—')}</td>
-                <td class="num">${c.archivedAt ? fmt.date(c.archivedAt) : '—'}</td>
-                <td>
-                  <button class="btn btn-sm" data-arch-restore="${c.id}" title="Вернуть клиента в работу">↩ Восстановить</button>
-                  <button class="btn btn-sm btn-danger" data-arch-purge="${c.id}" title="Удалить безвозвратно — со всеми событиями, комментариями и файлами">✕ Удалить навсегда</button>
-                </td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        `;
-      })()}
     </div>
 
     <div class="card">
@@ -5650,7 +5679,7 @@ function renderAdmin() {
         </div>
       </div>
       <table class="data">
-        <thead><tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Менеджер 1С / ТП</th><th style="width:60px; text-align:center;" title="Есть ли клиенты с этим менеджером в базе">В&nbsp;базе</th><th>Статус</th><th style="width:160px;">Действия</th></tr></thead>
+        <thead><tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Менеджер 1С / ТП</th><th style="width:60px; text-align:center;" title="Найден ли пользователь в данных 1С (для менеджеров) или в Базе ТП (для торговых представителей)">В 1С</th><th>Статус</th><th style="width:160px;">Действия</th></tr></thead>
         <tbody id="users-tbody"></tbody>
       </table>
     </div>
@@ -5728,20 +5757,27 @@ function generatePassword(len = 10) {
 
 function drawUsersTable() {
   const t = document.getElementById('users-tbody');
-  // Подсчёт: есть ли клиенты с таким менеджером (в state.clients или state.tpClients)
-  const mgrCounts = {};
-  state.clients.forEach(c => { if (c.manager) mgrCounts[c.manager] = (mgrCounts[c.manager]||0) + 1; });
-  const repCounts = {};
-  state.tpClients.forEach(c => { if (c.rep) repCounts[c.rep] = (repCounts[c.rep]||0) + 1; });
+  // Список менеджеров из 1С (имеют хотя бы одного клиента — значит они есть в выгрузке)
+  const mgrsIn1c = new Set(state.clients.filter(c => c.from1c).map(c => c.manager).filter(Boolean));
+  // Список ТП из tpClients (они тоже «есть в базе»)
+  const repsInData = new Set(state.tpClients.map(c => c.rep).filter(Boolean));
   t.innerHTML = state.users.map(u => {
     const label = u.role === 'admin' ? '<span class="chip chip-yellow">Администратор</span>'
                 : u.role === 'rep' ? '<span class="chip" style="background:#DCFCE7; color:#166534;">Торговый представитель</span>'
                 : '<span class="chip chip-info">Менеджер</span>';
     const linkName = u.role === 'rep' ? (u.rep_name || u.name) : (u.manager || '');
-    const cnt = u.role === 'rep' ? (repCounts[linkName] || 0) : (mgrCounts[linkName] || 0);
-    const inBase = cnt > 0
-      ? `<span title="${cnt} ${u.role==='rep'?'клиентов ТП':'клиентов в основной базе'}" style="color:var(--success); font-weight:700;">✓ ${cnt}</span>`
-      : (u.role === 'admin' ? '<span class="text-muted">—</span>' : '<span class="chip" style="background:#FEF3C7; color:#92400E; font-size:10px;">нет клиентов</span>');
+    let inBase;
+    if (u.role === 'admin') {
+      inBase = '<span class="text-muted">—</span>';
+    } else if (u.role === 'rep') {
+      inBase = repsInData.has(linkName)
+        ? '<span title="Найден в данных ТП" style="color:var(--success); font-size:16px; font-weight:700;">✓</span>'
+        : '<span title="Нет записей в базе ТП" style="color:var(--text-muted); font-size:14px;">—</span>';
+    } else {
+      inBase = mgrsIn1c.has(linkName)
+        ? '<span title="Найден в выгрузке 1С" style="color:var(--success); font-size:16px; font-weight:700;">✓</span>'
+        : '<span title="Не найден в 1С — пользователь добавлен вручную или удалён из 1С" style="color:var(--text-muted); font-size:14px;">—</span>';
+    }
     return `
     <tr data-uid="${u.username}">
       <td class="fw-600">${escapeHtml(u.name)}</td>
@@ -6048,7 +6084,6 @@ function openClientModal(clientId, initialTab = null) {
     const lawsuitEl = document.getElementById('ci-lawsuit');
     if (lawsuitEl) updates.lawsuit = lawsuitEl.checked;
     // Портрет клиента (если блок отображается)
-    const portraitInputs = ['cp-fleet','cp-spec','cp-bparts','cp-boil','cp-supplier','cp-warehouse','cp-program','cp-hours'];
     if (document.getElementById('cp-fleet')) {
       updates.portrait = Object.assign({}, c.portrait || {}, {
         fleet:          val('cp-fleet') || '',
@@ -6058,7 +6093,6 @@ function openClientModal(clientId, initialTab = null) {
         supplier_choice:val('cp-supplier') || '',
         warehouse:      val('cp-warehouse') || '',
         program:        val('cp-program') || '',
-        work_hours:     val('cp-hours') || '',
       });
     }
     // Settings tab — override-ы
@@ -6183,11 +6217,10 @@ function renderClientOverview(c, sgInfo, catInfo, managers, acts) {
             <label class="field-row"><span>Парк / посты</span><input id="cp-fleet" value="${escapeHtml((c.portrait||{}).fleet||'')}" placeholder="20 машин, 5 прицепов..."></label>
             <label class="field-row"><span>Специализация</span><input id="cp-spec" value="${escapeHtml((c.portrait||{}).specialization||'')}" placeholder="Сами / На стороне / ..."></label>
             <label class="field-row"><span>Бренды з/ч</span><input id="cp-bparts" value="${escapeHtml((c.portrait||{}).brands_parts||'')}"></label>
-            <label class="field-row"><span>Бренды масла</span><input id="cp-boil" value="${escapeHtml((c.portrait||{}).brands_oil||'')}"></label>
+            <label class="field-row"><span>Марки и бренды масел</span><input id="cp-boil" value="${escapeHtml((c.portrait||{}).brands_oil||'')}"></label>
             <label class="field-row"><span>Как выбирают поставщика</span><input id="cp-supplier" value="${escapeHtml((c.portrait||{}).supplier_choice||'')}"></label>
-            <label class="field-row"><span>Склад</span><input id="cp-warehouse" value="${escapeHtml((c.portrait||{}).warehouse||'')}"></label>
-            <label class="field-row"><span>Программа работы</span><input id="cp-program" value="${escapeHtml((c.portrait||{}).program||'')}" placeholder="ГП / ЛП / ГП+ЛП"></label>
-            <label class="field-row"><span>Время работы</span><input id="cp-hours" value="${escapeHtml((c.portrait||{}).work_hours||'')}" placeholder="09:00 — 18:00"></label>
+            <label class="field-row"><span>Наличие склада</span><input id="cp-warehouse" value="${escapeHtml((c.portrait||{}).warehouse||'')}"></label>
+            <label class="field-row" style="grid-column:1/-1;"><span>Программа работы</span><input id="cp-program" value="${escapeHtml((c.portrait||{}).program||'')}" placeholder="ГП / ЛП / ГП+ЛП"></label>
           </div>
         </div>
 
@@ -6569,18 +6602,11 @@ function renderEmbeddedTimeline(c) {
   return `
     <div class="comment-form">
       <div class="comment-form-row">
-        <select id="tl-kind">
-          <option value="note">📝 Заметка</option>
-          <option value="call">📞 Звонок</option>
-          <option value="meeting">🤝 Встреча</option>
-          <option value="email">✉️ Письмо</option>
-          <option value="other">Другое</option>
-        </select>
-        <div class="text-sm text-muted">Автор: <b>${escapeHtml(state.user.name)}</b></div>
-        <div style="margin-left:auto; display:flex; gap:8px;">
-          <button class="btn btn-primary btn-sm" id="tl-plan-event" style="background:var(--wp-yellow); color:#5C4914; border:none;">📅 Добавить задачу или событие</button>
-          <button class="btn btn-primary btn-sm" id="tl-add" style="background:var(--wp-yellow); color:#5C4914; border:none;">💬 Добавить комментарий</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary btn-sm" id="tl-plan-event" style="background:var(--wp-yellow); color:#5C4914; border:none;">📅 Задача / событие</button>
+          <button class="btn btn-primary btn-sm" id="tl-add" style="background:var(--wp-yellow); color:#5C4914; border:none;">💬 Комментарий</button>
         </div>
+        <div class="text-sm text-muted" style="margin-left:auto;">Автор: <b>${escapeHtml(state.user.name)}</b></div>
       </div>
       <textarea id="tl-text" placeholder="Опишите событие или результат разговора..."></textarea>
     </div>
@@ -6757,11 +6783,10 @@ function bindEmbeddedTimeline(c) {
   });
   document.getElementById('tl-add').onclick = () => {
     const text = document.getElementById('tl-text').value.trim();
-    const kind = document.getElementById('tl-kind').value;
     if (!text) { document.getElementById('tl-text').focus(); return; }
     state.comments.unshift({
       id: uid(), clientId: c.id, author: state.user.name,
-      text, kind, date: new Date().toISOString()
+      text, kind: 'note', date: new Date().toISOString()
     });
     persist();
     bindEmbeddedTimeline(c);
@@ -8589,9 +8614,9 @@ function openTpClientModal(tpId) {
           <label class="field-row"><span>Парк / Кол-во постов</span><input id="tp-fleet" value="${escapeHtml(c.fleet||'')}" placeholder="20 машин, 5 прицепов. Scania-10..." ${ro} ${grayedBg}></label>
           <label class="field-row"><span>Специализация / Сами ремонтируют?</span><input id="tp-spec" value="${escapeHtml(c.specialization||'')}" placeholder="Сами. Тормозная система, подвеска" ${ro} ${grayedBg}></label>
           <label class="field-row"><span>Бренды з/ч</span><input id="tp-bparts" value="${escapeHtml(c.brands_parts||'')}" placeholder="Marshall, Bremhof, OEM..." ${ro} ${grayedBg}></label>
-          <label class="field-row"><span>Бренды масла</span><input id="tp-boil" value="${escapeHtml(c.brands_oil||'')}" placeholder="Shell 10w-40, Total..." ${ro} ${grayedBg}></label>
+          <label class="field-row"><span>Марки и бренды масел</span><input id="tp-boil" value="${escapeHtml(c.brands_oil||'')}" placeholder="Shell 10w-40, Total..." ${ro} ${grayedBg}></label>
           <label class="field-row"><span>Как выбирают поставщика</span><input id="tp-supplier" value="${escapeHtml(c.supplier_choice||'')}" placeholder="цена, ассортимент, наличие" ${ro} ${grayedBg}></label>
-          <label class="field-row"><span>Склад</span>
+          <label class="field-row"><span>Наличие склада</span>
             <select id="tp-warehouse" ${roSel}>${['','да','нет','небольшой'].map(x=>`<option ${(c.warehouse||'')===x?'selected':''}>${x||'—'}</option>`).join('')}</select>
           </label>
         </div>
@@ -8609,8 +8634,7 @@ function openTpClientModal(tpId) {
           <label class="field-row"><span>Условия работы</span>
             <select id="tp-terms" ${roSel}>${['','Отсрочка','ОТХ','Предоплата','Частичная предоплата','Не определено'].map(x=>`<option ${(c.work_terms||'')===x?'selected':''}>${x||'—'}</option>`).join('')}</select>
           </label>
-          <label class="field-row"><span>Дней отсрочки</span><input id="tp-defer" type="number" min="0" max="365" value="${c.deferral_days||''}" ${ro} ${grayedBg}></label>
-          <label class="field-row"><span>Время работы</span><input id="tp-hours" value="${escapeHtml(c.work_hours||'')}" placeholder="09:00 — 18:00" ${ro} ${grayedBg}></label>
+          <label class="field-row" style="grid-column:1/-1;"><span>Дней отсрочки</span><input id="tp-defer" type="number" min="0" max="365" value="${c.deferral_days||''}" ${ro} ${grayedBg}></label>
         </div>
       </div>
 
@@ -8744,7 +8768,6 @@ function openTpClientModal(tpId) {
       program: document.getElementById('tp-program').value === '—' ? '' : document.getElementById('tp-program').value,
       work_terms: document.getElementById('tp-terms').value === '—' ? '' : document.getElementById('tp-terms').value,
       deferral_days: parseInt(v('tp-defer'), 10) || 0,
-      work_hours: v('tp-hours'),
       comment: v('tp-comment'),
     });
     // Статус из label → key
@@ -8983,30 +9006,56 @@ function openTpVisitModal(visitId, defaultDate) {
 
   // === Кнопка «Запланировать следующее действие» ===
   document.getElementById('tv-plan-next').onclick = () => {
-    const what = prompt('Что нужно сделать дальше с клиентом?\n\nНапример:\n• Отправить прайс по тормозной группе\n• Повторный визит через неделю\n• Позвонить в пятницу после обеда\n• Согласовать первую отгрузку', v.next_plan || '');
-    if (!what || !what.trim()) return;
-    const dateStr = prompt('На какую дату запланировать? (ГГГГ-ММ-ДД)', tpLocalDateStr(new Date(Date.now() + 7*86400000)));
-    if (!dateStr) return;
-    // Создаём «событие» в state.events — попадёт в «Мой день» текущего ТП.
-    // Привязываем к фиктивному клиенту по имени (без linked_client_id),
-    // чтобы было видно в дашборде, если клиент уже в основной базе.
-    const linkedMc = (v.clientId && state.tpClients.find(x=>x.id===v.clientId)) ? tpMainMatch(state.tpClients.find(x=>x.id===v.clientId)) : null;
-    state.events.push({
-      id: uid(),
-      clientId: linkedMc ? linkedMc.id : ('tp_lead_' + (v.clientId || uid())),
-      kind: 'followup',
-      date: new Date(dateStr).toISOString(),
-      title: `🗓 ТП: ${what.trim()}`,
-      description: `Клиент: ${v.client || '—'}${v.address ? '\nАдрес: ' + v.address : ''}\n\n${what.trim()}`,
-      author: v.rep || tpCurrentRepName() || 'ТП',
-      completed: false,
-      from_tp_plan: true,
-    });
-    v.next_plan = what.trim();
-    v.next_event_at = dateStr;
-    persist();
-    alert('✓ Запланировано. Появится в «Мой день».');
-    closeModal(); openTpVisitModal(v.id);
+    // Откроем мини-окно поверх — формы с датой и описанием
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;';
+    const defaultDateStr = tpLocalDateStr(new Date(Date.now() + 7*86400000));
+    overlay.innerHTML = `
+      <div style="background:white; border-radius:14px; max-width:520px; width:100%; padding:20px 24px; box-shadow:0 12px 40px rgba(0,0,0,0.3);">
+        <div style="font-size:16px; font-weight:700; margin-bottom:14px;">📌 Запланировать следующее действие</div>
+        <label style="display:block; margin-bottom:10px;">
+          <span style="display:block; font-weight:600; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Что нужно сделать *</span>
+          <textarea id="pn-what" rows="3" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-family:inherit; font-size:13px;" placeholder="например: отправить прайс по тормозной группе">${escapeHtml(v.next_plan||'')}</textarea>
+        </label>
+        <label style="display:block; margin-bottom:14px;">
+          <span style="display:block; font-weight:600; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Когда</span>
+          <input type="date" id="pn-date" value="${defaultDateStr}" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px;">
+        </label>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+          <button id="pn-cancel" class="btn">Отмена</button>
+          <button id="pn-save" class="btn btn-primary">📌 Запланировать</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('pn-cancel').onclick = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.getElementById('pn-save').onclick = () => {
+      const what = document.getElementById('pn-what').value.trim();
+      const dateStr = document.getElementById('pn-date').value;
+      if (!what) { alert('Опишите что нужно сделать'); return; }
+      if (!dateStr) { alert('Выберите дату'); return; }
+      const linkedMc = (v.clientId && state.tpClients.find(x=>x.id===v.clientId)) ? tpMainMatch(state.tpClients.find(x=>x.id===v.clientId)) : null;
+      // Локальная полночь → ISO (без UTC-сдвига)
+      const [y,m,d] = dateStr.split('-').map(Number);
+      const localDate = new Date(y, m-1, d, 9, 0, 0); // на 09:00 локально
+      state.events.push({
+        id: uid(),
+        clientId: linkedMc ? linkedMc.id : ('tp_lead_' + (v.clientId || uid())),
+        kind: 'followup',
+        date: localDate.toISOString(),
+        title: `🗓 ТП: ${what}`,
+        description: `Клиент: ${v.client || '—'}${v.address ? '\nАдрес: ' + v.address : ''}\n\n${what}`,
+        author: v.rep || tpCurrentRepName() || 'ТП',
+        completed: false,
+        from_tp_plan: true,
+      });
+      v.next_plan = what;
+      v.next_event_at = dateStr;
+      persist();
+      overlay.remove();
+      closeModal(); openTpVisitModal(v.id);
+      onec_toast('✓ Запланировано на ' + fmt.date(dateStr) + '. Появится в «Мой день».', 'success', 4000);
+    };
   };
 
   if (document.getElementById('tv-done')) document.getElementById('tv-done').onclick = () => {
@@ -9021,12 +9070,38 @@ function openTpVisitModal(visitId, defaultDate) {
     }
     v.completed = true;
     v.completed_at = tpLocalDateStr();
-    // Запись в visits клиента ТП
-    if (v.clientId) {
+    // Если визит ещё не привязан к tpClient — создаём его автоматически с реквизитами визита
+    if (!v.clientId) {
+      const tpc = {
+        id: 'tp_auto_' + uid(),
+        rep: v.rep || tpCurrentRepName() || '',
+        name: v.client || '—',
+        address: v.address || '',
+        contact_name: v.lpr_name || '',
+        phone: v.lpr_phone || '',
+        type: 'СТО',
+        work_status: 'Свежий',
+        fleet: v.fleet || '',
+        specialization: v.specialization || '',
+        brands_parts: v.brands_parts || '',
+        brands_oil: v.brands_oil || '',
+        supplier_choice: v.supplier_choice || '',
+        warehouse: v.warehouse || '',
+        photos: [],
+        visits: [{ date: v.date, summary: v.result || '', next_plan: v.next_plan || '' }],
+        _auto_created_from_visit: v.id,
+      };
+      state.tpClients.push(tpc);
+      v.clientId = tpc.id;
+      onec_toast(`✓ Клиент «${tpc.name}» добавлен в Базу ТП с заполненными реквизитами.`, 'success', 5000);
+    } else {
       const c = state.tpClients.find(x => x.id === v.clientId);
       if (c) {
         if (!c.visits) c.visits = [];
         c.visits.push({ date: v.date, summary: v.result || '', next_plan: v.next_plan || '' });
+        // Обновим контакты если в карточке пусто
+        if (!c.contact_name && v.lpr_name) c.contact_name = v.lpr_name;
+        if (!c.phone && v.lpr_phone) c.phone = v.lpr_phone;
       }
     }
     state._modalDirty = false;
