@@ -972,6 +972,7 @@ const DEFAULT_USERS = [
   // Торговые представители (роль 'rep' — видят только «Полевые продажи» и свои записи)
   { username: 'terebenin', password: 'tp1234', name: 'Теребенин',                role: 'rep',     manager: null, rep_name: 'Теребенин',         active: true  },
   { username: 'bulatov',   password: 'tp2345', name: 'Булатов',                  role: 'rep',     manager: null, rep_name: 'Булатов',           active: true  },
+  { username: 'zavyalov',  password: 'tp3456', name: 'Завьялов',                 role: 'rep',     manager: null, rep_name: 'Завьялов',          active: true  },
 ];
 
 // =================== STATE ===================
@@ -1958,7 +1959,7 @@ function renderDashboard() {
           <div style="display:flex; align-items:center; gap:10px; flex:1; flex-wrap:wrap;">
             <div class="card-title">📋 Что сделать</div>
           </div>
-          <button class="btn btn-sm" id="dash-plan-event" style="background:var(--wp-yellow); color:#5C4914; font-weight:600; border:none; padding:4px 10px;">+ Запланировать</button>
+          <button class="btn btn-sm" id="dash-plan-event" style="background:var(--wp-yellow); color:#5C4914; font-weight:600; border:none; padding:4px 10px;">+ Задача / событие</button>
         </div>
         <div class="myday-tabs" role="tablist" style="padding:0 14px 8px; display:flex; flex-wrap:wrap; gap:4px;">
           <button class="myday-tab ${myDayTab==='overdue'?'active':''} ${overdueCnt?'myday-tab-danger':''}" data-myday-tab="overdue" ${!overdueCnt?'disabled':''}>⚠️ Просрочено${overdueCnt?` <span class="myday-tab-count">${overdueCnt}</span>`:''}</button>
@@ -2707,27 +2708,23 @@ function afterClients() {
           <div class="card-title">📊 Категории клиентов</div>
           <span class="text-sm text-muted">в текущей выборке: ${visible.length}</span>
         </div>
-        ${totalCat ? `<div style="padding:14px 16px; display:flex; flex-direction:column; gap:14px;">
+        ${totalCat ? `<div style="padding:10px 14px; display:flex; flex-direction:column; gap:8px;">
           ${['A','B','C'].map(k => {
             const pct = totalCat ? (catCounts[k] / totalCat * 100) : 0;
             return `<div data-cat="${k}" style="cursor:pointer;" title="Фильтровать по категории ${k}">
-              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; gap:8px;">
-                <span class="fw-600" style="font-size:13px;"><span class="chip chip-cat-${k}" style="margin-right:6px;">${k}</span>${catLabels[k].slice(4)}</span>
-                <span style="font-size:12px; color:var(--text); white-space:nowrap;"><b>${catCounts[k]}</b> · ${pct.toFixed(0)}%</span>
+              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:3px; gap:8px;">
+                <span class="fw-600" style="font-size:12px;"><span class="chip chip-cat-${k}" style="margin-right:6px;">${k}</span><span style="color:var(--text-muted);">${catLabels[k].slice(4)}</span></span>
+                <span style="font-size:11px; color:var(--text); white-space:nowrap;"><b>${catCounts[k]}</b> · ${pct.toFixed(0)}% · <span style="color:var(--text-muted);">${fmt.rub(catRev[k])}${catDebt[k] > 0 ? ' / 🔴 ' + fmt.rub(catDebt[k]) : ''}</span></span>
               </div>
-              <div style="height:8px; background:#F3F4F6; border-radius:4px; overflow:hidden; margin-bottom:4px;">
-                <div style="height:100%; width:${pct}%; background:${catColors[k]}; border-radius:4px; transition:width 0.4s;"></div>
-              </div>
-              <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
-                <span>💰 ${fmt.rub(catRev[k])}</span>
-                <span>${catDebt[k] > 0 ? '🔴 ' + fmt.rub(catDebt[k]) : ''}</span>
+              <div style="height:6px; background:#F3F4F6; border-radius:3px; overflow:hidden;">
+                <div style="height:100%; width:${pct}%; background:${catColors[k]}; border-radius:3px; transition:width 0.4s;"></div>
               </div>
             </div>`;
           }).join('')}
-          <div style="padding-top:8px; border-top:1px solid var(--border); font-size:11px; color:var(--text-muted);">
-            <b>A</b> — заказы 3+ мес за период · <b>B</b> — 1-2 мес · <b>C</b> — нет отгрузок
+          <div style="padding-top:4px; border-top:1px solid var(--border); font-size:10px; color:var(--text-muted);">
+            <b>A</b> 3+ мес заказов · <b>B</b> 1-2 мес · <b>C</b> без отгрузок
           </div>
-        </div>` : '<div class="empty-state" style="padding:20px;">Нет данных по категориям</div>'}
+        </div>` : '<div class="empty-state" style="padding:16px;">Нет данных</div>'}
       </div>
 
       <div class="card" style="border-left:4px solid ${neglected.length ? 'var(--danger)' : 'var(--success)'};">
@@ -2736,34 +2733,31 @@ function afterClients() {
           <span class="text-sm text-muted">${months} мес без активности</span>
         </div>
         ${neglected.length ? `
-          <table class="data" style="font-size:13px;">
-            <thead><tr><th>Клиент</th><th>Менеджер</th><th class="num">Последнее событие</th><th class="num">Последняя продажа</th><th class="num">Выручка</th></tr></thead>
+          <table class="data" style="font-size:12px;">
+            <thead><tr><th>Клиент</th><th>Менеджер</th><th class="num">Посл.&nbsp;событие</th><th class="num">Посл.&nbsp;продажа</th></tr></thead>
             <tbody id="neglected-tbody">
               ${(open ? neglected.slice(0, 50) : neglected.slice(0, 3)).map(c => {
                 const lastSale = (c.from1c && c.from1c.sales && c.from1c.sales.last_date) || null;
                 const lastEv = lastEventDate(c.id);
                 return `<tr data-cid="${c.id}" style="cursor:pointer;">
-                  <td class="fw-600">${escapeHtml(c.name)}</td>
-                  <td>${escapeHtml(c.manager||'—')}</td>
-                  <td class="num">${lastEv ? fmt.date(lastEv) : '<span class="text-muted">никогда</span>'}</td>
+                  <td class="fw-600" style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</td>
+                  <td style="max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(c.manager||'')}">${escapeHtml(c.manager||'—')}</td>
+                  <td class="num">${lastEv ? fmt.date(lastEv) : '<span class="text-muted">—</span>'}</td>
                   <td class="num">${lastSale ? fmt.date(lastSale) : '<span class="text-muted">—</span>'}</td>
-                  <td class="num">${(c.revenue||0) > 0 ? fmt.num(c.revenue) : '<span class="text-muted">—</span>'}</td>
                 </tr>`;
               }).join('')}
             </tbody>
           </table>
           ${neglected.length > 3 ? `
-            <div style="padding:10px 16px; text-align:center; border-top:1px solid var(--border); background:#FAFBFC;">
-              <button class="btn btn-ghost btn-sm" id="neglected-toggle">${open ? `Свернуть ↑` : `Показать все ${neglected.length} ↓`}</button>
-              ${!open ? `<div class="text-sm text-muted" style="margin-top:4px;">показано 3 из ${neglected.length}</div>` : ''}
-              ${open && neglected.length > 50 ? `<div class="text-sm text-muted" style="margin-top:4px;">показано 50 из ${neglected.length}. Используйте фильтры выше для уточнения.</div>` : ''}
+            <div style="padding:6px 12px; text-align:center; border-top:1px solid var(--border); background:#FAFBFC;">
+              <button class="btn btn-ghost btn-sm" id="neglected-toggle" style="font-size:11px;">${open ? `Свернуть ↑` : `Показать все ${neglected.length} ↓`}</button>
+              ${!open ? `<span class="text-sm text-muted" style="margin-left:6px;">показано 3 из ${neglected.length}</span>` : ''}
             </div>
           ` : ''}
         ` : `
-          <div class="empty-state" style="padding:30px;">
-            <div class="empty-state-icon" style="font-size:36px;">🎉</div>
-            <div class="fw-700" style="color:var(--success); font-size:15px;">Все клиенты в работе</div>
-            <div class="text-sm text-muted" style="margin-top:4px;">Со всеми ведётся коммуникация или есть свежие продажи за ${months} мес</div>
+          <div class="empty-state" style="padding:18px;">
+            <div class="empty-state-icon" style="font-size:24px;">🎉</div>
+            <div class="fw-700" style="color:var(--success); font-size:13px;">Все клиенты в работе</div>
           </div>
         `}
       </div>
@@ -3325,41 +3319,64 @@ function openEventModal(eventId, defaultDate=null, defaultClientId=null) {
   const isEdit = !!eventId;
   const e = eventId ? state.events.find(x => x.id === eventId) : { id: uid(), kind:'call', date: defaultDate || new Date().toISOString(), clientId: defaultClientId || '', title:'', author: state.user.name };
   const visibleClientList = visibleClients();
+  const reps = (typeof tpUniqueReps === 'function') ? tpUniqueReps() : [];
+  // Если событие — поручение ТП и юзер сейчас ТП → разрешаем править только результат
+  const isRep = state.user && state.user.role === 'rep';
+  const lockedForRep = isRep && isEdit && (e.kind === 'tp_visit' || e.assigned_to_rep);
+  const ro = lockedForRep ? 'readonly' : '';
+  const roSel = lockedForRep ? 'disabled' : '';
   const html = `
     <div class="modal-header">
-      <div class="modal-title">${isEdit?'Событие':'Новое событие'}</div>
+      <div class="modal-title">${isEdit?'Задача / Событие':'Новая задача или событие'}</div>
       <button class="modal-close" id="m-close">✕</button>
     </div>
     <div class="modal-body">
+      ${lockedForRep ? '<div class="info-banner" style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; color:#92400E;">📌 <b>Поручение от менеджера.</b> Поля изменять нельзя. Заполните результат встречи и отметьте выполненным.</div>' : ''}
       <div class="form-row">
         <label class="field"><span>Тип</span>
-          <select id="ev-kind">
-            <option value="call" ${e.kind==='call'?'selected':''}>Звонок</option>
-            <option value="meeting" ${e.kind==='meeting'?'selected':''}>Встреча</option>
-            <option value="contract" ${e.kind==='contract'?'selected':''}>Договор</option>
-            <option value="note" ${(e.kind==='note'||e.kind==='followup')?'selected':''}>Заметка</option>
+          <select id="ev-kind" ${roSel}>
+            <option value="call" ${e.kind==='call'?'selected':''}>📞 Звонок</option>
+            <option value="meeting" ${e.kind==='meeting'?'selected':''}>🤝 Встреча</option>
+            <option value="contract" ${e.kind==='contract'?'selected':''}>📝 Договор</option>
+            <option value="note" ${(e.kind==='note'||e.kind==='followup')?'selected':''}>📋 Заметка / задача</option>
+            <option value="tp_visit" ${e.kind==='tp_visit'?'selected':''}>🚛 Поручение ТП — посетить клиента</option>
           </select>
         </label>
         <label class="field"><span>Дата и время</span>
-          <input type="datetime-local" id="ev-date" value="${new Date(e.date).toISOString().slice(0,16)}">
+          <input type="datetime-local" id="ev-date" value="${new Date(e.date).toISOString().slice(0,16)}" ${ro}>
         </label>
       </div>
       <div class="form-row full">
         <label class="field"><span>Клиент</span>
-          <select id="ev-client">
+          <select id="ev-client" ${roSel}>
             <option value="">—</option>
-            ${visibleClientList.map(c => `<option value="${c.id}" ${e.clientId===c.id?'selected':''}>${escapeHtml(c.name)} (${escapeHtml(c.manager)})</option>`).join('')}
+            ${visibleClientList.map(c => `<option value="${c.id}" ${e.clientId===c.id?'selected':''}>${escapeHtml(c.name)}${c.manager?' ('+escapeHtml(c.manager)+')':''}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <!-- Назначить ТП — показывается только для kind=tp_visit -->
+      <div class="form-row full" id="ev-rep-row" style="${e.kind==='tp_visit'?'':'display:none;'}">
+        <label class="field"><span>🚛 Назначить торговому представителю</span>
+          <select id="ev-rep" ${roSel}>
+            ${reps.length ? reps.map(r => `<option value="${escapeHtml(r)}" ${e.assigned_to_rep===r?'selected':''}>${escapeHtml(r)}</option>`).join('') : '<option value="">—</option>'}
           </select>
         </label>
       </div>
       <div class="form-row full">
-        <label class="field"><span>Что сделать</span>
-          <input type="text" id="ev-title" value="${escapeHtml(e.title||'')}" placeholder="например, перезвонить по предложению">
+        <label class="field"><span>Что нужно сделать</span>
+          <input type="text" id="ev-title" value="${escapeHtml(e.title||'')}" placeholder="например, перезвонить по предложению" ${ro}>
         </label>
       </div>
+      ${lockedForRep || (isEdit && e.kind === 'tp_visit') ? `
+      <div class="form-row full">
+        <label class="field"><span>💬 Результат встречи</span>
+          <textarea id="ev-result" rows="4" placeholder="Что обсудили, какие договорённости..." style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-family:inherit;">${escapeHtml(e.result||'')}</textarea>
+        </label>
+      </div>` : ''}
     </div>
     <div class="modal-footer">
-      ${isEdit ? `<button class="btn btn-danger" id="ev-del">Удалить</button>` : ''}
+      ${isEdit && !lockedForRep ? `<button class="btn btn-danger" id="ev-del">Удалить</button>` : ''}
+      ${isEdit && !e.completed ? `<button class="btn" style="background:var(--success); color:white;" id="ev-done">✓ Отметить выполненным</button>` : ''}
       <button class="btn" id="ev-cancel">Отмена</button>
       <button class="btn btn-primary" id="ev-save">Сохранить</button>
     </div>
@@ -3367,26 +3384,54 @@ function openEventModal(eventId, defaultDate=null, defaultClientId=null) {
   openModal(html);
   document.getElementById('ev-cancel').onclick = closeModal;
   document.getElementById('m-close').onclick = closeModal;
-  if (isEdit) document.getElementById('ev-del').onclick = () => {
+  // Показать/скрыть поле «Назначить ТП» при смене kind
+  document.getElementById('ev-kind').addEventListener('change', (ev) => {
+    const row = document.getElementById('ev-rep-row');
+    row.style.display = ev.target.value === 'tp_visit' ? '' : 'none';
+  });
+  if (isEdit && !lockedForRep && document.getElementById('ev-del')) document.getElementById('ev-del').onclick = () => {
+    if (!confirm('Удалить задачу/событие?')) return;
     state.events = state.events.filter(x => x.id !== eventId);
-    persist(); closeModal(); drawCalendar(); renderNav();
+    persist(); closeModal();
+    if (state.currentView === 'calendar') drawCalendar();
+    renderNav();
+  };
+  if (document.getElementById('ev-done')) document.getElementById('ev-done').onclick = () => {
+    const resultEl = document.getElementById('ev-result');
+    if (resultEl) e.result = resultEl.value;
+    e.completed = true;
+    e.completed_at = new Date().toISOString();
+    persist(); closeModal();
+    if (state.currentView === 'calendar') drawCalendar();
+    renderView(); renderNav();
   };
   document.getElementById('ev-save').onclick = () => {
+    const kind = document.getElementById('ev-kind').value;
+    const resultEl = document.getElementById('ev-result');
+    const repVal = document.getElementById('ev-rep')?.value || '';
+    if (kind === 'tp_visit' && !repVal) { alert('Выберите торгового представителя'); return; }
     const data = {
       id: e.id,
-      kind: document.getElementById('ev-kind').value,
+      kind,
       date: new Date(document.getElementById('ev-date').value).toISOString(),
       clientId: document.getElementById('ev-client').value,
       title: document.getElementById('ev-title').value || 'Событие',
-      author: state.user.name,
-      completed: false,
+      author: e.author || state.user.name,
+      completed: e.completed || false,
+      assigned_to_rep: kind === 'tp_visit' ? repVal : (e.assigned_to_rep || null),
+      from_manager: kind === 'tp_visit' ? true : (e.from_manager || false),
     };
+    if (resultEl) data.result = resultEl.value;
+    if (e.result && !data.result) data.result = e.result;
+    if (e.completed_at) data.completed_at = e.completed_at;
     if (!data.clientId) { alert('Укажите клиента'); return; }
     if (isEdit) {
       const i = state.events.findIndex(x => x.id === eventId);
       state.events[i] = data;
     } else state.events.push(data);
-    persist(); closeModal(); drawCalendar(); renderNav();
+    persist(); closeModal();
+    if (state.currentView === 'calendar') drawCalendar();
+    renderView(); renderNav();
   };
 }
 
@@ -5593,6 +5638,9 @@ function renderAdmin() {
     return '<div class="empty-state">Раздел доступен только администратору</div>';
   }
   return `
+    <div class="info-banner" style="background:#F0F9FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#1E40AF;">
+      🔒 <b>Удаление пользователя НЕ удаляет данные.</b> Клиенты, события и комментарии остаются в базе — связь идёт через текстовое поле «Менеджер». Удаление просто закрывает вход в CRM. При импорте 1С — добавленные вручную пользователи сохраняются (синхронизация только дополняет).
+    </div>
     <div class="card mb-4">
       <div class="card-header">
         <div class="card-title">Пользователи</div>
@@ -5602,7 +5650,7 @@ function renderAdmin() {
         </div>
       </div>
       <table class="data">
-        <thead><tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Менеджер 1С</th><th>Статус</th><th style="width:160px;">Действия</th></tr></thead>
+        <thead><tr><th>Имя</th><th>Логин</th><th>Пароль</th><th>Роль</th><th>Менеджер 1С / ТП</th><th style="width:60px; text-align:center;" title="Есть ли клиенты с этим менеджером в базе">В&nbsp;базе</th><th>Статус</th><th style="width:160px;">Действия</th></tr></thead>
         <tbody id="users-tbody"></tbody>
       </table>
     </div>
@@ -5680,7 +5728,21 @@ function generatePassword(len = 10) {
 
 function drawUsersTable() {
   const t = document.getElementById('users-tbody');
-  t.innerHTML = state.users.map(u => `
+  // Подсчёт: есть ли клиенты с таким менеджером (в state.clients или state.tpClients)
+  const mgrCounts = {};
+  state.clients.forEach(c => { if (c.manager) mgrCounts[c.manager] = (mgrCounts[c.manager]||0) + 1; });
+  const repCounts = {};
+  state.tpClients.forEach(c => { if (c.rep) repCounts[c.rep] = (repCounts[c.rep]||0) + 1; });
+  t.innerHTML = state.users.map(u => {
+    const label = u.role === 'admin' ? '<span class="chip chip-yellow">Администратор</span>'
+                : u.role === 'rep' ? '<span class="chip" style="background:#DCFCE7; color:#166534;">Торговый представитель</span>'
+                : '<span class="chip chip-info">Менеджер</span>';
+    const linkName = u.role === 'rep' ? (u.rep_name || u.name) : (u.manager || '');
+    const cnt = u.role === 'rep' ? (repCounts[linkName] || 0) : (mgrCounts[linkName] || 0);
+    const inBase = cnt > 0
+      ? `<span title="${cnt} ${u.role==='rep'?'клиентов ТП':'клиентов в основной базе'}" style="color:var(--success); font-weight:700;">✓ ${cnt}</span>`
+      : (u.role === 'admin' ? '<span class="text-muted">—</span>' : '<span class="chip" style="background:#FEF3C7; color:#92400E; font-size:10px;">нет клиентов</span>');
+    return `
     <tr data-uid="${u.username}">
       <td class="fw-600">${escapeHtml(u.name)}</td>
       <td><code>${escapeHtml(u.username)}</code></td>
@@ -5688,14 +5750,15 @@ function drawUsersTable() {
         <span class="pwd-hidden" data-uid="${u.username}" data-pwd="${escapeHtml(u.password||'')}" style="font-family:monospace; font-size:13px;">••••••••</span>
         <button class="btn btn-ghost btn-sm pwd-toggle" data-uid="${u.username}" title="Показать пароль" style="padding:2px 6px; font-size:11px;">👁</button>
       </td>
-      <td>${u.role==='admin'?'<span class="chip chip-yellow">Администратор</span>':'<span class="chip chip-info">Менеджер</span>'}</td>
-      <td>${escapeHtml(u.manager||'—')}</td>
+      <td>${label}</td>
+      <td>${escapeHtml(linkName||'—')}</td>
+      <td style="text-align:center;">${inBase}</td>
       <td>${u.active?'<span class="chip chip-success">Активен</span>':'<span class="chip chip-default">Отключён</span>'}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-sm" data-edit="${u.username}">Изменить</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
   t.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openUserModal(b.dataset.edit));
   // Toggle видимости пароля
   t.querySelectorAll('.pwd-toggle').forEach(b => b.onclick = () => {
@@ -6514,8 +6577,10 @@ function renderEmbeddedTimeline(c) {
           <option value="other">Другое</option>
         </select>
         <div class="text-sm text-muted">Автор: <b>${escapeHtml(state.user.name)}</b></div>
-        <button class="btn btn-sm" id="tl-plan-event" style="margin-left:auto;">📅 Запланировать событие</button>
-        <button class="btn btn-primary btn-sm" id="tl-add">Добавить запись</button>
+        <div style="margin-left:auto; display:flex; gap:8px;">
+          <button class="btn btn-primary btn-sm" id="tl-plan-event" style="background:var(--wp-yellow); color:#5C4914; border:none;">📅 Добавить задачу или событие</button>
+          <button class="btn btn-primary btn-sm" id="tl-add" style="background:var(--wp-yellow); color:#5C4914; border:none;">💬 Добавить комментарий</button>
+        </div>
       </div>
       <textarea id="tl-text" placeholder="Опишите событие или результат разговора..."></textarea>
     </div>
@@ -7499,7 +7564,7 @@ function renderActivity() {
       <button class="btn btn-ghost btn-sm" id="af-reset">Сбросить</button>
       <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
         <span class="text-sm text-muted">Найдено: <b id="af-count">—</b></span>
-        <button class="btn btn-primary btn-sm" id="af-add-event">+ Запланировать событие</button>
+        <button class="btn btn-primary btn-sm" id="af-add-event">+ Задача или событие</button>
       </div>
     </div>
 
@@ -7568,7 +7633,7 @@ function renderActivityInline() {
       <button class="btn btn-ghost btn-sm" id="af-reset">Сбросить</button>
       <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
         <span class="text-sm text-muted">Найдено: <b id="af-count">—</b></span>
-        <button class="btn btn-primary btn-sm" id="af-add-event">+ Запланировать событие</button>
+        <button class="btn btn-primary btn-sm" id="af-add-event">+ Задача или событие</button>
       </div>
     </div>
     <table class="data">
@@ -8000,6 +8065,10 @@ function drawTpToday(wrap) {
   const myToHandover = myClients.filter(c => c.work_status === 'Работаем' && !c.passed_at);
   const myFresh = myClients.filter(c => c.work_status === 'Свежий' || !c.work_status);
 
+  // 📌 Поручения от менеджеров — события kind='tp_visit' назначенные этому ТП
+  const repName = tpIsRep() ? tpCurrentRepName() : (state.adminViewMgr && state.adminViewMgr.startsWith('rep:') ? state.adminViewMgr.slice(4) : null);
+  const mgrTasks = repName ? state.events.filter(ev => !ev.completed && ev.kind === 'tp_visit' && ev.assigned_to_rep === repName) : [];
+
   wrap.innerHTML = `
     <div class="info-banner" style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:13px; color:#92400E;">
       📍 ${escapeHtml(todayShort.charAt(0).toUpperCase() + todayShort.slice(1))} · ${tpIsRep() ? `вы вошли как <b>${escapeHtml(tpCurrentRepName())}</b>` : 'просмотр всех ТП'}
@@ -8009,8 +8078,33 @@ function drawTpToday(wrap) {
       <div class="kpi"><div class="kpi-accent" style="background:var(--wp-yellow)"></div><div class="kpi-label">📅 Визитов сегодня</div><div class="kpi-value">${todayVisits.length}</div></div>
       <div class="kpi"><div class="kpi-accent" style="background:${overdueVisits.length?'var(--danger)':'var(--text-soft)'}"></div><div class="kpi-label">⚠ Просрочено визитов</div><div class="kpi-value" style="color:${overdueVisits.length?'var(--danger)':'inherit'};">${overdueVisits.length}</div></div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--success)"></div><div class="kpi-label">📤 К передаче</div><div class="kpi-value">${myToHandover.length}</div><div class="kpi-sub">статус «Работаем»</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--info)"></div><div class="kpi-label">🟢 Свежих</div><div class="kpi-value">${myFresh.length}</div><div class="kpi-sub">требуют профиля</div></div>
+      <div class="kpi" style="${mgrTasks.length?'border:2px solid #3B82F6;':''}"><div class="kpi-accent" style="background:#3B82F6"></div><div class="kpi-label">📌 Поручений от менеджеров</div><div class="kpi-value">${mgrTasks.length}</div><div class="kpi-sub">${mgrTasks.length?'требуют визита':'нет новых'}</div></div>
     </div>
+
+    ${mgrTasks.length ? `
+      <div class="card mb-4" style="border-left:4px solid #3B82F6;">
+        <div class="card-header" style="padding-bottom:6px;">
+          <div class="card-title">📌 Поручения от менеджеров — посетить клиента</div>
+          <span class="text-sm text-muted">${mgrTasks.length}</span>
+        </div>
+        <div style="padding:0 0 8px;">
+          ${mgrTasks.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(ev => {
+            const cl = getClient(ev.clientId);
+            const dueDate = new Date(ev.date);
+            const isOverdue = dueDate < new Date(new Date().toDateString());
+            return `<div class="card-row" data-tp-mgr-task="${ev.id}" style="cursor:pointer; padding:10px 16px; display:flex; gap:10px; align-items:flex-start; ${isOverdue?'background:#FEF2F2;':''}">
+              <div style="flex:1; min-width:0;">
+                <div class="fw-600">${escapeHtml(cl ? cl.name : '—')}</div>
+                <div class="text-sm">${escapeHtml(ev.title || 'Посетить клиента')}</div>
+                <div class="text-sm text-muted">${cl && cl.address ? '📍 ' + escapeHtml(cl.address) + ' · ' : ''}👤 от ${escapeHtml(ev.author || 'менеджера')}</div>
+                ${isOverdue ? `<span class="chip chip-danger" style="margin-top:4px;">⚠ просрочено: ${fmt.date(ev.date)}</span>` : `<span class="chip" style="background:#DBEAFE; color:#1E40AF; margin-top:4px;">до ${fmt.date(ev.date)}</span>`}
+              </div>
+              ${cl && cl.phone ? `<a href="tel:${escapeHtml(cl.phone.replace(/\\s/g,''))}" onclick="event.stopPropagation();" class="btn btn-sm" title="Позвонить">📞</a>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    ` : ''}
 
     <div class="grid grid-2 mb-4">
       <!-- Сегодня + просроченные -->
@@ -8084,6 +8178,7 @@ function drawTpToday(wrap) {
   document.getElementById('tp-add-visit-today')?.addEventListener('click', () => openTpVisitModal(null, today));
   wrap.querySelectorAll('[data-tp-visit-row]').forEach(el => el.addEventListener('click', () => openTpVisitModal(el.dataset.tpVisitRow)));
   wrap.querySelectorAll('[data-tp-client-row]').forEach(el => el.addEventListener('click', () => openTpClientModal(el.dataset.tpClientRow)));
+  wrap.querySelectorAll('[data-tp-mgr-task]').forEach(el => el.addEventListener('click', () => openEventModal(el.dataset.tpMgrTask)));
   wrap.querySelectorAll('[data-tp-done-visit]').forEach(b => b.addEventListener('click', (e) => {
     e.stopPropagation();
     const v = state.tpVisits.find(x => x.id === b.dataset.tpDoneVisit);
