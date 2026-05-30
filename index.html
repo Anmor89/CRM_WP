@@ -325,7 +325,7 @@ a { color: inherit; text-decoration: none; }
 .chip-info { background: var(--info-soft); color: var(--info); }
 
 /* ========== TABLE ========== */
-.table-wrap { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+.table-wrap { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow-x: auto; }
 table.data { width: 100%; border-collapse: collapse; }
 table.data th, table.data td {
   padding: 10px 16px; text-align: left;
@@ -2604,15 +2604,15 @@ function renderClients() {
             <th>Клиент</th>
             <th style="width:32px; text-align:center;" title="Заполнены ли контакты: телефон, email или ЛПР">📞</th>
             <th style="width:36px; text-align:center;" title="Связь с 1С">1С</th>
-            <th>Город</th>
-            <th>Вид деятельности</th>
-            <th>Менеджер</th>
-            <th>Этап</th>
-            <th>Категория</th>
-            <th style="width:140px;">Плановое событие</th>
-            <th style="width:100px;">Последнее</th>
-            <th class="num" style="width:120px;" title="Выручка за текущий месяц">Выручка (мес)</th>
-            <th class="num" style="width:110px;">Долг</th>
+            <th style="width:100px;">Город</th>
+            <th style="width:130px; white-space:normal; letter-spacing:0; text-transform:none; font-size:11px;">Вид деят-сти</th>
+            <th style="width:130px;">Менеджер</th>
+            <th style="width:110px;">Этап</th>
+            <th style="width:80px;">Категория</th>
+            <th style="width:130px; white-space:normal; letter-spacing:0; text-transform:none; font-size:11px;">План</th>
+            <th style="width:80px; white-space:normal; letter-spacing:0; text-transform:none; font-size:11px;">Последн.</th>
+            <th class="num" style="width:90px; white-space:normal; letter-spacing:0; text-transform:none; font-size:11px;" title="Выручка за текущий месяц">Выручка<br>мес</th>
+            <th class="num" style="width:90px;">Долг</th>
           </tr>
         </thead>
         <tbody id="clients-tbody"></tbody>
@@ -2805,7 +2805,7 @@ function drawClientsTable() {
     let planCell;
     if (openEv) {
       const cls = es === 'overdue' ? 'ev-cell-overdue' : es === 'today' ? 'ev-cell-today' : '';
-      planCell = `<div class="${cls}"><span class="fw-600">${fmt.date(openEv.date)}</span>${es==='overdue'?' ⚠':es==='today'?' ●':''}</div><div class="text-sm text-muted" style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(openEv.title)}</div>`;
+      planCell = `<div class="${cls}"><span class="fw-600">${fmt.date(openEv.date)}</span>${es==='overdue'?' ⚠':es==='today'?' ●':''}</div><div class="text-sm text-muted" style="max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(openEv.title)}">${escapeHtml(openEv.title)}</div>`;
     } else {
       planCell = '<span class="chip chip-default">не запланировано</span>';
     }
@@ -2831,7 +2831,7 @@ function drawClientsTable() {
       }</td>
       <td>${c.city ? escapeHtml(c.city) : '<span class="text-muted">—</span>'}</td>
       <td>${c.activity ? `<span class="chip chip-activity">${escapeHtml(c.activity)}</span>` : '<span class="text-muted">—</span>'}</td>
-      <td>${escapeHtml(c.manager||'—')}</td>
+      <td title="${escapeHtml(c.manager||'')}" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:130px;">${escapeHtml(c.manager||'—')}</td>
       <td>${stageChip(clientStage(c))}</td>
       <td><span class="chip chip-cat-${clientCategory(c)}">${clientCategory(c)}</span></td>
       <td>${planCell}</td>
