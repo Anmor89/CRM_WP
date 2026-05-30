@@ -520,6 +520,8 @@ label.field textarea { min-height: 80px; resize: vertical; font-family: inherit;
 .modal {
   background: var(--surface); border-radius: 14px; width: 100%; max-width: 880px;
   box-shadow: var(--shadow-lg); overflow: hidden;
+  /* Защита от flex-shrink: иначе модал иногда открывается сжатым (особенно при перерисовке) */
+  flex: 0 0 auto; min-width: 320px;
 }
 .modal.modal-wide { max-width: 1400px; }
 
@@ -989,6 +991,7 @@ const state = {
     stage: 'all',
     eventStatus: 'all',
     contact: 'all',     // all | nocontact | hascontact
+    onec: 'all',        // all | in1c | not1c
     search: '',
   },
   dashboardStage: null,        // selected stage on the dashboard for drill-down table
@@ -1018,7 +1021,8 @@ function persist() {
   const snap = {
     clients: state.clients, comments: state.comments, events: state.events, users: state.users,
     tpClients: state.tpClients, tpVisits: state.tpVisits,
-    extraManagers: state.extraManagers, settings: state.settings
+    extraManagers: state.extraManagers, settings: state.settings,
+    _openClientId: state._openClientId, _openClientTab: state._openClientTab
   };
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(snap));
@@ -1357,6 +1361,9 @@ function initData() {
     state.extraManagers = persisted.extraManagers || [];
     state.tpClients = persisted.tpClients || bootstrapTpClients();
     state.tpVisits = persisted.tpVisits || bootstrapTpVisits();
+    // F5: восстановить открытое окно карточки
+    state._openClientId = persisted._openClientId || null;
+    state._openClientTab = persisted._openClientTab || null;
     // Миграция: добавить демо-фото первому ТП-клиенту, если у него ещё нет фото
     if (state.tpClients[0] && (!state.tpClients[0].photos || !state.tpClients[0].photos.length)) {
       state.tpClients[0].photos = [
@@ -1531,6 +1538,14 @@ function renderApp() {
   }
   renderNav();
   renderView();
+  // Восстановление открытой карточки клиента после F5
+  if (state._openClientId) {
+    const cid = state._openClientId;
+    const tab = state._openClientTab;
+    setTimeout(() => {
+      try { openClientModal(cid, tab); } catch (e) { state._openClientId = null; state._openClientTab = null; persist(); }
+    }, 50);
+  }
 }
 
 // =================== HELPERS ===================
@@ -1611,6 +1626,11 @@ function applyFilters(list) {
       const has = !!(c.phone || c.email || c.contact_name);
       if (f.contact === 'nocontact' && has) return false;
       if (f.contact === 'hascontact' && !has) return false;
+    }
+    if (f.onec && f.onec !== 'all') {
+      const in1c = !!c.from1c;
+      if (f.onec === 'in1c' && !in1c) return false;
+      if (f.onec === 'not1c' && in1c) return false;
     }
     if (f.search) {
       const s = f.search.toLowerCase();
@@ -1697,7 +1717,7 @@ function getEvents(clientId, all=false) {
         if (el.dataset.cid) {
           openClientModal(el.dataset.cid);
         } else if (el.dataset.mgr) {
-          state.filters = { manager: el.dataset.mgr, activity:'all', category:'all', stage:'all', eventStatus:'all', contact:'all', search:'' };
+          state.filters = { manager: el.dataset.mgr, activity:'all', category:'all', stage:'all', eventStatus:'all', contact:'all', onec:'all', search:'' };
           setView('funnel');
         }
         hide();
@@ -1862,7 +1882,13 @@ function renderDashboard() {
   const _todayEnd = new Date(_todayStart); _todayEnd.setDate(_todayEnd.getDate() + 1);
   const _tomorrowEnd = new Date(_todayEnd); _tomorrowEnd.setDate(_tomorrowEnd.getDate() + 1);
   const _weekEnd = new Date(_todayStart); _weekEnd.setDate(_weekEnd.getDate() + 8);
-  const openEvents = visibleEvents().filter(e => !e.completed).sort((a,b) => new Date(a.date) - new Date(b.date));
+  // Сортировка: задачи от ТП — наверх (приоритет), потом по дате
+  const openEvents = visibleEvents().filter(e => !e.completed).sort((a,b) => {
+    const aTp = a.from_tp ? 1 : 0;
+    const bTp = b.from_tp ? 1 : 0;
+    if (aTp !== bTp) return bTp - aTp;
+    return new Date(a.date) - new Date(b.date);
+  });
   const evOverdue = openEvents.filter(e => new Date(e.date) < _todayStart);
   const evToday = openEvents.filter(e => { const d = new Date(e.date); return d >= _todayStart && d < _todayEnd; });
   const evTomorrow = openEvents.filter(e => { const d = new Date(e.date); return d >= _todayEnd && d < _tomorrowEnd; });
@@ -1959,7 +1985,7 @@ function renderDashboard() {
         <div style="flex:1; overflow-y:auto; max-height:330px;">
           ${coolingDown.length ? coolingDown.map(a => {
             const lastMonth = a.prevAmt > 0 ? 'в прошлом месяце' : 'в позапрошлом месяце';
-            return `<div class="card-row" data-cid="${a.client.id}" data-open-tab="sales" style="cursor:pointer; padding:8px 14px;">
+            return `<div class="card-row" data-cid="${a.client.id}" data-open-tab="overview" style="cursor:pointer; padding:8px 14px;">
               <div style="flex:1; min-width:0;">
                 <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(a.client.name)}</div>
                 <div class="text-sm text-muted">${fmt.num(a.lastAmt)} ${lastMonth} · в этом — 0</div>
@@ -1991,7 +2017,7 @@ function renderDashboard() {
           </div>` : ''}
         <div style="flex:1; overflow-y:auto; max-height:300px;">
           ${recentPayments.length ? recentPayments.slice(0, 5).map(p => `
-            <div class="card-row" data-cid="${p.client.id}" data-open-tab="sales" style="cursor:pointer; padding:8px 16px;">
+            <div class="card-row" data-cid="${p.client.id}" data-open-tab="overview" style="cursor:pointer; padding:8px 16px;">
               <div style="flex:1; min-width:0;">
                 <div class="fw-600 text-sm" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(p.client.name)}</div>
                 <div class="text-sm text-muted">${fmt.date(p.date)}${p.manager ? ' · ' + escapeHtml(p.manager.split(' ').slice(0,2).join(' ')) : ''}</div>
@@ -2228,7 +2254,7 @@ function openDashPaymentsModal() {
         </thead>
         <tbody>
           ${list.map(p => `
-            <tr data-cid="${p.client.id}" data-open-tab="sales" style="cursor:pointer;">
+            <tr data-cid="${p.client.id}" data-open-tab="overview" style="cursor:pointer;">
               <td>${fmt.date(p.date)}</td>
               <td class="fw-600">${escapeHtml(p.client.name)}</td>
               <td class="text-sm text-muted">${escapeHtml(p.partner_actual || '—')}</td>
@@ -2414,7 +2440,7 @@ function bindFilterControls() {
   };
   bind('f-manager','manager'); bind('f-activity','activity'); bind('f-category','category'); bind('f-stage','stage');
   document.getElementById('f-reset')?.addEventListener('click', () => {
-    state.filters = { manager:'all', activity:'all', category:'all', stage:'all', eventStatus:'all', contact:'all', search: state.filters.search };
+    state.filters = { manager:'all', activity:'all', category:'all', stage:'all', eventStatus:'all', contact:'all', onec:'all', search: state.filters.search };
     renderView();
   });
 }
@@ -2541,9 +2567,15 @@ function renderClients() {
         <option value="nocontact" ${state.filters.contact==='nocontact'?'selected':''}>⚠ Без контактов</option>
         <option value="hascontact" ${state.filters.contact==='hascontact'?'selected':''}>✓ С контактами</option>
       </select>
+      <select id="f-onec" title="Фильтр по наличию связи с 1С">
+        <option value="all">Любые клиенты</option>
+        <option value="not1c" ${state.filters.onec==='not1c'?'selected':''}>⚠ Не связан с 1С</option>
+        <option value="in1c" ${state.filters.onec==='in1c'?'selected':''}>✓ В 1С</option>
+      </select>
       <button class="btn btn-ghost btn-sm" id="f-reset">Сбросить</button>
       <div style="margin-left:auto; display:flex; gap:14px; align-items:center;">
         ${noContactCount > 0 ? `<span class="text-sm" title="Клиентов без контактов (телефон / email / ЛПР)" style="color:#92400E; cursor:pointer;" id="f-nocontact-link">⚠ без контактов: <b>${noContactCount}</b></span>` : ''}
+        ${(() => { const cnt = visibleAll.filter(c => !c.from1c).length; return cnt > 0 ? `<span class="text-sm" title="Клиентов без связи с 1С" style="color:#6B21A8; cursor:pointer;" id="f-not1c-link">🔗 не в 1С: <b>${cnt}</b></span>` : ''; })()}
         <span class="text-sm text-muted">Найдено: <b id="f-count">—</b></span>
       </div>
     </div>
@@ -2571,15 +2603,16 @@ function renderClients() {
           <tr>
             <th>Клиент</th>
             <th style="width:32px; text-align:center;" title="Заполнены ли контакты: телефон, email или ЛПР">📞</th>
+            <th style="width:36px; text-align:center;" title="Связь с 1С">1С</th>
             <th>Город</th>
             <th>Вид деятельности</th>
             <th>Менеджер</th>
             <th>Этап</th>
             <th>Категория</th>
-            <th>Плановое событие</th>
-            <th>Последнее событие</th>
-            <th class="num">Выручка</th>
-            <th class="num">Долг</th>
+            <th style="width:140px;">Плановое событие</th>
+            <th style="width:100px;">Последнее</th>
+            <th class="num" style="width:120px;" title="Выручка за текущий месяц">Выручка (мес)</th>
+            <th class="num" style="width:110px;">Долг</th>
           </tr>
         </thead>
         <tbody id="clients-tbody"></tbody>
@@ -2628,10 +2661,18 @@ function afterClients() {
   if (esEl) esEl.addEventListener('change', () => { state.filters.eventStatus = esEl.value; drawClientsTable(); });
   const ctEl = document.getElementById('f-contact');
   if (ctEl) ctEl.addEventListener('change', () => { state.filters.contact = ctEl.value; drawClientsTable(); });
+  const oeEl = document.getElementById('f-onec');
+  if (oeEl) oeEl.addEventListener('change', () => { state.filters.onec = oeEl.value; drawClientsTable(); });
   // Клик по счётчику «без контактов» — быстро включить этот фильтр
   const ncLink = document.getElementById('f-nocontact-link');
   if (ncLink) ncLink.addEventListener('click', () => {
     state.filters.contact = 'nocontact';
+    renderView();
+  });
+  // Клик по счётчику «не в 1С»
+  const nolinkLink = document.getElementById('f-not1c-link');
+  if (nolinkLink) nolinkLink.addEventListener('click', () => {
+    state.filters.onec = 'not1c';
     renderView();
   });
   drawClientsTable();
@@ -2748,9 +2789,10 @@ function drawClientsTable() {
   // Вкладка «От ТП» — только клиенты, переданные торговыми представителями
   if (state._clientsTab === 'fromtp') list = list.filter(c => c.from_tp);
   document.getElementById('f-count').textContent = list.length;
+  const _curMonth = new Date().toISOString().slice(0, 7);
   const tbody = document.getElementById('clients-tbody');
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state">Клиенты не найдены</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state">Клиенты не найдены</div></td></tr>`;
     return;
   }
   const sorted = [...list].sort((a,b) => (b.revenue||0) - (a.revenue||0));
@@ -2783,6 +2825,10 @@ function drawClientsTable() {
         ? '<span title="Контакты заполнены" style="color:var(--success); font-size:14px;">✓</span>'
         : '<span title="Не заполнены телефон / email / ЛПР" style="display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; background:#FEF3C7; color:#92400E; border-radius:50%; font-size:11px; font-weight:700;">⚠</span>'
       }</td>
+      <td style="text-align:center;">${c.from1c
+        ? '<span title="Связан с 1С" style="color:var(--success); font-size:14px;">✓</span>'
+        : '<span title="Не связан с 1С — клиент создан вручную или ИНН не совпал" style="display:inline-flex; align-items:center; justify-content:center; padding:1px 6px; background:#F3E8FF; color:#6B21A8; border-radius:10px; font-size:10px; font-weight:700;">не в 1С</span>'
+      }</td>
       <td>${c.city ? escapeHtml(c.city) : '<span class="text-muted">—</span>'}</td>
       <td>${c.activity ? `<span class="chip chip-activity">${escapeHtml(c.activity)}</span>` : '<span class="text-muted">—</span>'}</td>
       <td>${escapeHtml(c.manager||'—')}</td>
@@ -2790,12 +2836,12 @@ function drawClientsTable() {
       <td><span class="chip chip-cat-${clientCategory(c)}">${clientCategory(c)}</span></td>
       <td>${planCell}</td>
       <td>${last ? fmt.date(last) : '<span class="text-muted">—</span>'}</td>
-      <td class="num">${c.revenue ? fmt.rub(c.revenue) : '<span class="text-muted">—</span>'}</td>
+      <td class="num">${(() => { const m = (c.from1c && c.from1c.sales && c.from1c.sales.by_month && c.from1c.sales.by_month[_curMonth]) || 0; return m ? fmt.rub(m) : '<span class="text-muted">—</span>'; })()}</td>
       <td class="num" style="${c.overdue?'color:var(--danger);font-weight:600;':''}">${c.debt ? fmt.rub(c.debt) : '<span class="text-muted">—</span>'}</td>
     </tr>
   `;}).join('');
   if (sorted.length > 400) {
-    tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="11" class="muted text-sm" style="text-align:center;padding:14px;">Показано 400 из ${sorted.length}. Используйте фильтры для уточнения.</td></tr>`);
+    tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="12" class="muted text-sm" style="text-align:center;padding:14px;">Показано 400 из ${sorted.length}. Используйте фильтры для уточнения.</td></tr>`);
   }
   tbody.querySelectorAll('tr[data-cid]').forEach(tr => tr.addEventListener('click', () => openClientModal(tr.dataset.cid)));
 }
@@ -5098,17 +5144,23 @@ function onec_crmManagers() {
 
 // Merge: сохраняет CRM-only поля, обновляет 1С-слой
 function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
-  const stats = { added: 0, updated: 0, archived: 0, total_incoming: newClients.length };
+  const stats = { added: 0, updated: 0, archived: 0, linked_by_inn: 0, total_incoming: newClients.length };
   const incomingByName = new Map(newClients.map(c => [c.name.toLowerCase(), c]));
+  // Индекс входящих по ИНН — для связки ручных клиентов с 1С
+  const normInn = (s) => (s||'').toString().replace(/\D/g, '');
+  const incomingByInn = new Map();
+  newClients.forEach(c => { const inn = normInn(c.from1c && c.from1c.inn); if (inn) incomingByInn.set(inn, c); });
 
   if (mode === 'replace') {
-    // Удаляем только клиентов из 1С (включая старых-филиалов после объединения).
-    // Сохраняем: вручную созданных в CRM (без from1c) И всех архивных (чтобы не воскресли при импорте).
+    // Удаляем только клиентов из 1С. Сохраняем: ручных (без from1c) И всех архивных.
     state.clients = state.clients.filter(c => !c.from1c || c.archived);
   }
   // Архивных не обновляем и не дублируем при импорте — они "заморожены"
   const archivedNames = new Set(state.clients.filter(c => c.archived).map(c => (c.name||'').toLowerCase()));
   const localByName = new Map(state.clients.filter(c => !c.archived).map(c => [(c.name||'').toLowerCase(), c]));
+  // Индекс локальных по ИНН — для авто-связки ручных клиентов с 1С
+  const localByInn = new Map();
+  state.clients.filter(c => !c.archived && c.inn).forEach(c => { const inn = normInn(c.inn); if (inn) localByInn.set(inn, c); });
 
   // Выбирает «основной» договор для отображения в плоских полях карточки/раздела «Договоры»
   function pickPrimaryContract(contracts) {
@@ -5123,11 +5175,18 @@ function onec_mergeClients(newClients, mode /* 'replace' | 'merge' */) {
   // Обновить существующих или добавить новых
   newClients.forEach(nc => {
     const key = nc.name.toLowerCase();
-    // Если клиент в архиве — не трогаем его и не добавляем заново.
-    // Чтобы получить свежие данные 1С — нужно восстановить из Архива в Настройках.
     if (archivedNames.has(key)) return;
-    const local = localByName.get(key);
+    // Связка: сначала по имени, потом по ИНН (для ручных клиентов созданных менеджерами)
+    let local = localByName.get(key);
     const from1c = nc.from1c;
+    if (!local && from1c.inn) {
+      const innKey = normInn(from1c.inn);
+      const byInn = innKey && localByInn.get(innKey);
+      if (byInn && !byInn.from1c) {
+        local = byInn;
+        stats.linked_by_inn++;
+      }
+    }
     const primary = pickPrimaryContract(from1c.contracts);
     if (local) {
       // Слияние: from1c полностью обновляется, плоские поля — выборочно
@@ -5458,11 +5517,21 @@ function onec_showPreview(newClients, matched, errors, fileReport, skipReport) {
         </details>
         ` : ''}
 
-        ${testClientsCount > 0 ? `
-        <div style="background:#FEF3C7; border-left:3px solid var(--wp-yellow); padding:12px 14px; border-radius:6px; margin-bottom:16px; font-size:13px;">
-          <b>В CRM есть ${testClientsCount} тестовых клиентов</b> (без привязки к 1С). При импорте они <b>будут удалены</b> (выбран режим «полная замена»).
-        </div>
-        ` : ''}
+        ${testClientsCount > 0 ? (() => {
+          const _normInn = (s) => (s||'').toString().replace(/\D/g,'');
+          const incomingInns = new Set(newClients.map(c => _normInn(c.from1c && c.from1c.inn)).filter(Boolean));
+          const manual = state.clients.filter(c => !c.from1c);
+          const willLink = manual.filter(c => c.inn && incomingInns.has(_normInn(c.inn))).length;
+          const noInn = manual.filter(c => !c.inn).length;
+          const stillManual = manual.length - willLink;
+          return `
+          <div style="background:#DCFCE7; border-left:3px solid var(--success); padding:12px 14px; border-radius:6px; margin-bottom:16px; font-size:13px;">
+            <b>✓ Защита от стирания.</b> В CRM <b>${testClientsCount}</b> ${testClientsCount===1?'клиент':'клиентов'}, созданных вручную (без 1С). Они <b>не будут удалены</b>.
+            ${willLink ? `<br>🔗 Из них <b>${willLink}</b> ${willLink===1?'будет связан':'будут связаны'} с 1С автоматически по ИНН.` : ''}
+            ${stillManual ? `<br>⚠ <b>${stillManual}</b> ${stillManual===1?'останется':'останутся'} без связи с 1С${noInn?` (у ${noInn} не указан ИНН)`:''} — отметятся индикатором в таблице «Клиенты».` : ''}
+          </div>
+          `;
+        })() : ''}
 
         <div style="background:#F0F9FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px 14px; margin-bottom:20px; font-size:12px; color:#1E40AF;">
           ℹ <b>Что защищено от перезаписи:</b> комментарии и события (timeline), длинное описание клиента, телефоны / email / WhatsApp / Telegram, контактное лицо, загруженные файлы, ручные override-этапы.
@@ -5819,6 +5888,16 @@ function openClientModal(clientId, initialTab = null) {
     </div>
   `, 'modal-wide');
   let activeTab = initialTab || 'overview';
+  // Подсветить нужную вкладку, если открыли не на «Карточке»
+  if (activeTab !== 'overview') {
+    document.querySelectorAll('.client-tab').forEach(x => x.classList.remove('active'));
+    const t = [...document.querySelectorAll('.client-tab')].find(x => x.dataset.tab === activeTab);
+    if (t) t.classList.add('active');
+  }
+  // Сохраняем для восстановления при F5
+  state._openClientId = clientId;
+  state._openClientTab = activeTab;
+  persist();
   function renderTab() {
     const body = document.getElementById('cm-body');
     if (activeTab === 'overview') {
@@ -5864,6 +5943,8 @@ function openClientModal(clientId, initialTab = null) {
     document.querySelectorAll('.client-tab').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     activeTab = b.dataset.tab;
+    state._openClientTab = activeTab;
+    persist();
     state._modalDirty = false;
     renderTab();
   });
@@ -7614,6 +7695,8 @@ function closeModal() {
   document.getElementById('modal-layer').classList.add('hidden');
   document.body.style.overflow = '';
   state._modalDirty = false;
+  // Очистить флаг открытого клиента — чтобы не восстанавливался при F5
+  if (state._openClientId) { state._openClientId = null; state._openClientTab = null; persist(); }
 }
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
